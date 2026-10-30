@@ -8,5 +8,11 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+aes-gcm = "0.10.3"
+argon2 = "0.5.3"
+keyring = "4.2.0"
+getrandom = "0.2"
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
+zeroize = "1.9.1"
