@@ -7,31 +7,21 @@
 
 ## Active Task
 
-### 📌 Task [04.1]: Tauri v2 typed IPC commands & real-time sync `Channel` bridge (`apps/desktop/src-tauri`)
+### 📌 Task [04.2]: Unified Inbox UI with 60fps Virtual Scrolling (`100k+` messages) & instant hybrid search (`apps/desktop`)
 
-- **Description:** Implement the typed Tauri v2 IPC command handlers (`cmd_list_accounts`, `cmd_add_account`, `cmd_search_messages`, `cmd_triage_action`, `cmd_get_message_body`, `cmd_fetch_attachment`) and the non-blocking `Channel<SyncProgressEvent>` streaming bridge connecting `crates/vault`, `crates/storage`, `crates/mail-engine`, and `crates/triage-ai` to the desktop frontend.
-- **Systems Involved:** `apps/desktop/src-tauri`, `crates/vault`, `crates/storage`, `crates/mail-engine`, `crates/triage-ai`
+- **Description:** Build the Svelte 5 virtualized Unified Inbox and hybrid search bar using the typed IPC commands and sync channel completed in [04.1].
+- **Systems Involved:** `apps/desktop`, existing `apps/desktop/src-tauri` IPC contracts
 - **Action Type:**
   - [ ] Read-only / Documentation
   - [x] Source code changes
-- **Status:** RUNNING
+- **Status:** READY FOR PLANNING
   *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
-- [x] Implement typed IPC commands (`cmd_list_accounts`, `cmd_add_account`, `cmd_search_messages`, `cmd_triage_action`, `cmd_get_message_body`, `cmd_fetch_attachment`) matching the contracts in `.agent/NOTES.md`.
-- [x] Ensure secrets in `cmd_add_account` are stored directly in `vault` (`SecretStore`) and never returned to the UI.
-- [x] Implement `SyncProgressEvent` streaming bridge (`SyncEventSink` / `TriageEventHook`) for non-blocking UI updates.
-- [x] Unit and integration tests verifying account management, hybrid search IPC, triage mutations, lazy attachment retrieval, and secret isolation.
-
-### Validation ([04.1])
-- Rust workspace check, tests, formatting and Clippy (`-D warnings`): passed.
-- Frontend check (zero errors/warnings), unit tests and SPA build: passed.
-- Svelte runes invariant, tracked-file secret/PII scan and `git diff --check`: passed.
-- Native IPC mock invocation, typed channel, vault rollback/redaction, encrypted outbox restart,
-  transactional ingestion, MOVE identity rebasing and lazy BODY.PEEK regression tests: passed.
-- Linux build prerequisites were extracted into a temporary user-owned sysroot; no system-wide
-  installation or machine-specific repository configuration was added. Existing socket-based
-  tests ran with loopback binding permitted. No live email providers were contacted.
+- [ ] Virtualize the unified message list for `100k+` messages with bounded DOM size and a measured 60fps scrolling target.
+- [ ] Connect lexical, semantic and hybrid search to the established `SearchQueryDto` / `MessageRowDto` IPC payloads; preserve the storage query latency target of `<15ms`.
+- [ ] Consume `Channel<SyncProgressEvent>` updates and refresh authoritative data while preserving list selection and scroll position.
+- [ ] Use strict TypeScript and Svelte 5 Runes, with frontend behavior tests and the full repository Definition of Done.
 
 ---
 
@@ -49,12 +39,23 @@
 | [03.1] | Tier 1 Deterministic Triage: Regex/Heuristic Extractors for 2FA/OTP, FEBRABAN Boletos, Pix, NF-e, Tracking & Classification (`crates/triage-ai`) | `0644f9e` | 2026-10-30 |
 | [03.2] | Tier 2 Local CPU Embeddings (`fastembed-rs` / `ort`) background indexer with on-demand model cache in `$XDG_DATA_HOME/triage-mail/models` (`crates/triage-ai`) | `6ae5e3d` | 2026-10-30 |
 | [03.3] | Tier 3 Optional LLM Summarizer client (Local Ollama `127.0.0.1:11434` & BYOK providers) (`crates/triage-ai`) | `dee6a05` | 2026-10-30 |
+| [04.1] | Tauri v2 Typed IPC, Secret-Isolated Account Management, Durable Triage Outbox & Real-time Sync Channel Bridge | `ca79844` | 2026-10-30 |
+
+
+### Validation ([04.1])
+- Rust workspace check, tests (141 passed), formatting and Clippy (`-D warnings`): passed.
+- Frontend check (zero errors/warnings), unit tests (2 passed) and SPA build: passed.
+- Svelte runes invariant, tracked-file secret/PII scan and `git diff --check`: passed.
+- Native IPC mock invocation, typed channel, vault rollback/redaction, encrypted outbox restart,
+  transactional ingestion, MOVE identity rebasing and lazy BODY.PEEK regression tests: passed.
+- Linux build prerequisites were extracted into a temporary user-owned sysroot; no system-wide
+  installation or machine-specific repository configuration was added. Existing socket-based
+  tests ran with loopback binding permitted. No live email providers were contacted.
 
 ---
 
 ## Backlog (Upcoming, in priority order)
 
-- [ ] **[04.2]** Unified Inbox UI with 60fps Virtual Scrolling (`100k+` messages) & instant hybrid search bar (`<15ms`) — `apps/desktop`
 - [ ] **[04.3]** Sandboxed Email Viewer (`DOMPurify` + `<iframe sandbox="">` + normalized base dark-mode CSS + remote pixel blocker) & on-demand `BODY.PEEK` attachment downloader — `apps/desktop`
 - [ ] **[04.4]** Keyboard-driven Command Palette (Mark read/unread, Archive, Trash, Local Tags, One-Click Unsubscribe, IMAP flag sync) & Triage Badges UI — `apps/desktop`
 
