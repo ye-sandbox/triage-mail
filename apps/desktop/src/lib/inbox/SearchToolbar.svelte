@@ -1,0 +1,75 @@
+<script lang="ts">
+	import Icon from './Icon.svelte';
+	import type { SearchMode } from './types';
+	let {
+		query = $bindable(''),
+		mode = $bindable<SearchMode>('Lexical'),
+		toggleSidebar,
+		refresh,
+		disabled = false
+	}: {
+		query?: string;
+		mode?: SearchMode;
+		toggleSidebar: () => void;
+		refresh: () => void;
+		disabled?: boolean;
+	} = $props();
+	let searchInput: HTMLInputElement;
+	function shortcut(event: KeyboardEvent) {
+		if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+			event.preventDefault();
+			searchInput?.focus();
+		}
+	}
+</script>
+
+<svelte:window onkeydown={shortcut} />
+<header
+	class="flex min-h-18 flex-wrap items-center gap-4 border-b border-[var(--separator)] bg-[var(--toolbar)] px-6 py-4"
+>
+	<button
+		type="button"
+		class="icon-button max-md:hidden"
+		aria-label="Toggle sidebar"
+		title="Toggle sidebar"
+		onclick={toggleSidebar}><Icon name="sidebar" /></button
+	>
+	<div class="mr-auto">
+		<h1 class="text-lg font-semibold tracking-tight">All Mail</h1>
+		<p class="text-xs text-[var(--secondary)]">Unified inbox</p>
+	</div>
+	<div
+		class="flex min-w-48 flex-1 items-center gap-2 rounded-lg border border-[var(--separator)] bg-[var(--field)] px-3 py-2 sm:max-w-96"
+		role="search"
+	>
+		<span class="text-[var(--secondary)]"><Icon name="search" size={16} /></span>
+		<input
+			bind:this={searchInput}
+			bind:value={query}
+			type="search"
+			aria-label="Search all mail"
+			placeholder="Search all mail"
+			class="min-w-0 flex-1 bg-transparent text-sm outline-none"
+		/>
+	</div>
+	<label class="flex items-center gap-2 text-xs text-[var(--secondary)]"
+		>Match
+		<select
+			bind:value={mode}
+			aria-label="Search matching"
+			class="rounded-md border border-[var(--separator)] bg-[var(--field)] px-2 py-2 text-sm text-[var(--text)]"
+		>
+			<option value="Lexical">Words</option><option value="Semantic">Meaning</option><option
+				value="Hybrid">Words + meaning</option
+			>
+		</select>
+	</label>
+	<button
+		type="button"
+		class="icon-button"
+		aria-label="Refresh mail"
+		title="Refresh mail"
+		onclick={refresh}
+		{disabled}><Icon name="refresh" size={18} /></button
+	>
+</header>
