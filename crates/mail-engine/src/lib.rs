@@ -9,11 +9,20 @@
 //! INVARIANT: Self-signed TLS certificates are permitted strictly when connecting to loopback
 //! (`127.0.0.1` or `::1`) for local Proton Mail Bridge, never for remote IMAP hosts.
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use vault::VaultError;
 
+pub mod auth;
+pub mod connector;
 pub mod mime_parser;
+pub mod protocol;
+pub mod provider;
+pub mod sync;
+pub mod tls;
+
+pub use connector::DefaultImapConnector;
 
 /// Errors returned by IMAP transport, authentication, and MIME extraction.
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -130,9 +139,10 @@ pub trait SyncEventSink: Send + Sync {
 }
 
 /// Agnostic IMAP transport contract isolating upstream IMAP crate types (`async-imap` / `imap-next`).
+#[async_trait]
 pub trait ImapConnector: Send + Sync {
     /// Checks folder status (`UIDVALIDITY`, `UIDNEXT`, `HIGHESTMODSEQ`) and fetches incremental messages.
-    fn sync_incremental(
+    async fn sync_incremental(
         &self,
         endpoint: &ImapEndpointConfig,
         folder: &str,
@@ -142,7 +152,7 @@ pub trait ImapConnector: Send + Sync {
     ) -> Result<Vec<ParsedInboundMessage>, EngineError>;
 
     /// Fetches a single attachment part on demand via `IMAP BODY.PEEK[section]`.
-    fn fetch_attachment_bytes(
+    async fn fetch_attachment_bytes(
         &self,
         endpoint: &ImapEndpointConfig,
         folder: &str,
