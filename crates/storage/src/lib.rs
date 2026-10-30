@@ -11,6 +11,17 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use vault::VaultError;
 
+pub mod connection;
+pub mod migrations;
+pub mod models;
+pub mod repository;
+pub mod search;
+pub mod vec_ext;
+
+pub use connection::DatabaseKey;
+pub use models::{AccountRecord, AttachmentRecord, MessageRecord};
+pub use repository::SqliteMailStore;
+
 /// Errors returned by SQLCipher storage, migrations, and hybrid search operations.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum StorageError {
