@@ -7,10 +7,10 @@
 
 ## Active Task
 
-### 📌 Task [02.3]: Real-time IMAP `IDLE` Manager, Adaptive Background Polling Worker & RFC 8058 One-Click Unsubscribe HTTP POST Executor (`crates/mail-engine`)
+### 📌 Task [03.1]: Tier 1 Deterministic Triage: Regex/Heuristic Extractors for 2FA/OTP, FEBRABAN Boletos, Pix EMV/Keys, NF-e Metadata, Tracking Codes, RFC 8058 Unsubscribe & Category Classification (`crates/triage-ai`)
 
-- **Description:** Implement the background `IDLE` manager with adaptive 14-minute heartbeats (`DONE` -> `IDLE`) to keep NAT connections alive, graceful fallback to adaptive polling when `IDLE` is unsupported or dropped by firewalls, and the asynchronous RFC 8058 One-Click Unsubscribe HTTP POST client (`List-Unsubscribe-Post: List-Unsubscribe=One-Click`).
-- **Systems Involved:** `crates/mail-engine`
+- **Description:** Implement the deterministic Tier 1 Rust regex/heuristic extraction and classification pipeline for incoming emails: 2FA/OTP verification codes, FEBRABAN Boletos (47/48-digit *linha digitável* with modulo-10/11 checksum validation, exact BRL value, and due date calculation from the FEBRABAN base factor), Pix EMV Copy-and-Paste payloads (`000201...` with CRC16 validation) and Pix keys, Brazilian NF-e 44-digit access keys and invoice metadata, postal/courier tracking codes (Correios/international S10), RFC 8058 One-Click Unsubscribe badge surfacing, and deterministic category classification (`Urgent`, `Finance`, `Updates`, `Newsletters`, `Promotions`).
+- **Systems Involved:** `crates/triage-ai`
 - **Action Type:**
   - [ ] Read-only / Documentation
   - [x] Source code changes
@@ -18,10 +18,11 @@
   *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
-- [ ] Implement `IdleManager` running in background `tokio` tasks with 14-minute renewal window and `SyncEventSink` notification loop.
-- [ ] Implement adaptive exponential backoff polling for servers lacking `IDLE` support or on persistent disconnects.
-- [ ] Implement RFC 8058 One-Click Unsubscribe HTTP POST executor (`reqwest` with `List-Unsubscribe=One-Click` form body) with strict domain validation.
-- [ ] Unit and mock tests verifying `IDLE` keep-alive transitions, adaptive polling intervals, and RFC 8058 HTTP POST execution using RFC 2606 synthetic URIs.
+- [ ] Implement `DeterministicTriage` extractor for 2FA/OTP codes with context keyword weighting and false-positive guards (ignoring years, postal codes, and hex colors).
+- [ ] Implement FEBRABAN Boleto extractor (47-digit bank boletos & 48-digit concessionária bills) extracting exact BRL amount (`centavos`) and due date (including post-2025 factor reset handling).
+- [ ] Implement Pix EMV (`BR.GOV.BCB.PIX` / `000201` payload + CRC-16/CCITT-FALSE verification), NF-e 44-digit access key, and Correios/S10 tracking code extractors.
+- [ ] Implement deterministic category classification and `TriageEventHook` notification contract.
+- [ ] Comprehensive unit and integration tests using synthetic RFC 2606 fixtures covering all extractors and edge cases.
 
 ---
 
@@ -35,12 +36,12 @@
 | [01.2] | SQLite WAL + Full-DB SQLCipher Schema, Migrations, Configurable FTS5 & sqlite-vec KNN (`crates/storage`) | `ecb7cad` | 2026-10-30 |
 | [02.1] | Zero-Copy RFC 5322 / MIME Parser with Threading Headers, RFC 8058 & Lazy Attachment Metadata (`crates/mail-engine`) | `c808414` | 2026-10-30 |
 | [02.2] | Agnostic `ImapConnector` with Provider Quirk Normalization (`pimalaya`), Multi-Auth & Incremental `UIDVALIDITY`/`CONDSTORE` Sync (`crates/mail-engine`) | `8290883` | 2026-10-30 |
+| [02.3] | Real-time IMAP `IDLE` Manager, Adaptive Background Polling Worker & RFC 8058 One-Click Unsubscribe HTTP POST Executor (`crates/mail-engine`) | `f828829` | 2026-10-30 |
 
 ---
 
 ## Backlog (Upcoming, in priority order)
 
-- [ ] **[03.1]** Tier 1 Deterministic Triage: Regex/heuristic extractors for 2FA/OTP, FEBRABAN Boletos (exact BRL amount & due date), Pix EMV/keys, NF-e metadata, Tracking codes, `List-Unsubscribe` (RFC 8058), and category classification — `crates/triage-ai`
 - [ ] **[03.2]** Tier 2 Local CPU Embeddings (`fastembed-rs` / `ort`) background indexer with on-demand model cache in `$XDG_DATA_HOME/triage-mail/models` — `crates/triage-ai`
 - [ ] **[03.3]** Tier 3 Optional LLM Summarizer client (Local Ollama `127.0.0.1:11434` & BYOK providers) — `crates/triage-ai`
 - [ ] **[04.1]** Tauri v2 typed IPC commands & real-time sync `Channel` bridge — `apps/desktop/src-tauri`
