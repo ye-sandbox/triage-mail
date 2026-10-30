@@ -7,9 +7,9 @@
 
 ## Active Task
 
-### 📌 Task [02.2]: Agnostic `ImapConnector` with Provider Quirk Normalization (`pimalaya`), Multi-Auth & Incremental `UIDVALIDITY`/`CONDSTORE` Sync (`crates/mail-engine`)
+### 📌 Task [02.3]: Real-time IMAP `IDLE` Manager, Adaptive Background Polling Worker & RFC 8058 One-Click Unsubscribe HTTP POST Executor (`crates/mail-engine`)
 
-- **Description:** Implement the agnostic IMAP client transport implementing `ImapConnector` with provider quirk normalization inspired by `pimalaya/email-lib` (handling Gmail label/XOAUTH2 differences, Outlook CONDSTORE fallbacks, Proton Mail Bridge loopback TLS pinning), transparent multi-authentication (App Passwords, OAuth2 Public PKCE via `127.0.0.1` loopback listener, BYO OAuth credentials from `vault`), and incremental sync (`UIDVALIDITY`, `UIDNEXT`, `HIGHESTMODSEQ` / delta flag comparison).
+- **Description:** Implement the background `IDLE` manager with adaptive 14-minute heartbeats (`DONE` -> `IDLE`) to keep NAT connections alive, graceful fallback to adaptive polling when `IDLE` is unsupported or dropped by firewalls, and the asynchronous RFC 8058 One-Click Unsubscribe HTTP POST client (`List-Unsubscribe-Post: List-Unsubscribe=One-Click`).
 - **Systems Involved:** `crates/mail-engine`
 - **Action Type:**
   - [ ] Read-only / Documentation
@@ -18,11 +18,10 @@
   *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
-- [ ] Implement `ImapConnector` transport over TLS 1.3 (`tokio-rustls`) with strict loopback validation for Proton Mail Bridge self-signed certificates.
-- [ ] Provider quirk normalization handling Gmail, Outlook, and generic RFC 3501/9051 servers (graceful fallback when `CONDSTORE` is absent).
-- [ ] Multi-auth support: App Passwords, OAuth2 Public PKCE (`127.0.0.1` loopback redirect listener), and user-provided BYO OAuth credentials retrieved from `vault`.
-- [ ] Incremental folder sync algorithm detecting `UIDVALIDITY` resets, fetching new messages via `UID`, and reconciling flag deltas (`MODSEQ` or `FLAGS`).
-- [ ] Integration and mock unit tests verifying handshake, authentication, and incremental sync state transitions with synthetic RFC 2606 addresses.
+- [ ] Implement `IdleManager` running in background `tokio` tasks with 14-minute renewal window and `SyncEventSink` notification loop.
+- [ ] Implement adaptive exponential backoff polling for servers lacking `IDLE` support or on persistent disconnects.
+- [ ] Implement RFC 8058 One-Click Unsubscribe HTTP POST executor (`reqwest` with `List-Unsubscribe=One-Click` form body) with strict domain validation.
+- [ ] Unit and mock tests verifying `IDLE` keep-alive transitions, adaptive polling intervals, and RFC 8058 HTTP POST execution using RFC 2606 synthetic URIs.
 
 ---
 
@@ -35,13 +34,12 @@
 | [01.1] | OS Keyring Integration & Argon2id/AES-GCM Fallback Vault Cipher (`crates/vault`) | `0259096` | 2026-10-29 |
 | [01.2] | SQLite WAL + Full-DB SQLCipher Schema, Migrations, Configurable FTS5 & sqlite-vec KNN (`crates/storage`) | `ecb7cad` | 2026-10-30 |
 | [02.1] | Zero-Copy RFC 5322 / MIME Parser with Threading Headers, RFC 8058 & Lazy Attachment Metadata (`crates/mail-engine`) | `c808414` | 2026-10-30 |
+| [02.2] | Agnostic `ImapConnector` with Provider Quirk Normalization (`pimalaya`), Multi-Auth & Incremental `UIDVALIDITY`/`CONDSTORE` Sync (`crates/mail-engine`) | `8290883` | 2026-10-30 |
 
 ---
 
 ## Backlog (Upcoming, in priority order)
 
-- [ ] **[02.3]** Real-time IMAP `IDLE` manager, adaptive background polling worker & RFC 8058 One-Click Unsubscribe HTTP POST executor — `crates/mail-engine`
-- [ ] **[02.3]** Real-time IMAP `IDLE` manager, adaptive background polling worker & RFC 8058 One-Click Unsubscribe HTTP POST executor — `crates/mail-engine`
 - [ ] **[03.1]** Tier 1 Deterministic Triage: Regex/heuristic extractors for 2FA/OTP, FEBRABAN Boletos (exact BRL amount & due date), Pix EMV/keys, NF-e metadata, Tracking codes, `List-Unsubscribe` (RFC 8058), and category classification — `crates/triage-ai`
 - [ ] **[03.2]** Tier 2 Local CPU Embeddings (`fastembed-rs` / `ort`) background indexer with on-demand model cache in `$XDG_DATA_HOME/triage-mail/models` — `crates/triage-ai`
 - [ ] **[03.3]** Tier 3 Optional LLM Summarizer client (Local Ollama `127.0.0.1:11434` & BYOK providers) — `crates/triage-ai`
