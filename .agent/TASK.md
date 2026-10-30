@@ -7,9 +7,9 @@
 
 ## Active Task
 
-### 📌 Task [03.2]: Tier 2 Local CPU Embeddings (`fastembed-rs` / `ort`) background indexer with on-demand model cache in `$XDG_DATA_HOME/triage-mail/models` (`crates/triage-ai`)
+### 📌 Task [03.3]: Tier 3 Optional LLM Summarizer client (Local Ollama `127.0.0.1:11434` & BYOK providers) (`crates/triage-ai`)
 
-- **Description:** Implement the Tier 2 local CPU ONNX embedding provider (`all-MiniLM-L6-v2` / `bge-small`) producing scalar-quantized `int8` vectors for SQLite `sqlite-vec` storage. Ensure model weights are downloaded lazily on demand to `$XDG_DATA_HOME/triage-mail/models` (never bundled in binary). Implement background batch embedding generation and `EmbeddingProvider` trait.
+- **Description:** Implement the Tier 3 optional generative LLM summarizer (`LlmSummarizer` trait) supporting local Ollama (`http://127.0.0.1:11434`) and explicit user-configured BYOK OpenAI-compatible HTTP endpoints. Enforce strict opt-in execution (zero unsolicited background calls), SSRF/endpoint validation, timeout controls, and PII-safe error reporting.
 - **Systems Involved:** `crates/triage-ai`
 - **Action Type:**
   - [ ] Read-only / Documentation
@@ -18,10 +18,10 @@
   *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
-- [ ] Implement `EmbeddingProvider` for local CPU ONNX embeddings with `int8` scalar quantization output.
-- [ ] Model download and cache management rooted strictly at `$XDG_DATA_HOME/triage-mail/models`.
-- [ ] Offline fallback and graceful error handling when network is absent or models not cached.
-- [ ] Unit and integration tests with synthetic fixtures validating embedding dimensions and quantization.
+- [ ] Implement `LlmSummarizer` for local Ollama (`http://127.0.0.1:11434`) and explicit BYOK OpenAI-compatible HTTP endpoints.
+- [ ] Enforce explicit opt-in policy and endpoint safety validation (reject insecure non-loopback HTTP).
+- [ ] Timeout handling, payload truncation bounds, and redacted secret handling (`Debug`/`Display`).
+- [ ] Unit and integration tests with local mock HTTP servers validating Ollama and BYOK summarization.
 
 ---
 
@@ -37,12 +37,12 @@
 | [02.2] | Agnostic `ImapConnector` with Provider Quirk Normalization (`pimalaya`), Multi-Auth & Incremental `UIDVALIDITY`/`CONDSTORE` Sync (`crates/mail-engine`) | `8290883` | 2026-10-30 |
 | [02.3] | Real-time IMAP `IDLE` Manager, Adaptive Background Polling Worker & RFC 8058 One-Click Unsubscribe HTTP POST Executor (`crates/mail-engine`) | `f828829` | 2026-10-30 |
 | [03.1] | Tier 1 Deterministic Triage: Regex/Heuristic Extractors for 2FA/OTP, FEBRABAN Boletos, Pix, NF-e, Tracking & Classification (`crates/triage-ai`) | `0644f9e` | 2026-10-30 |
+| [03.2] | Tier 2 Local CPU Embeddings (`fastembed-rs` / `ort`) background indexer with on-demand model cache in `$XDG_DATA_HOME/triage-mail/models` (`crates/triage-ai`) | `6ae5e3d` | 2026-10-30 |
 
 ---
 
 ## Backlog (Upcoming, in priority order)
 
-- [ ] **[03.3]** Tier 3 Optional LLM Summarizer client (Local Ollama `127.0.0.1:11434` & BYOK providers) — `crates/triage-ai`
 - [ ] **[04.1]** Tauri v2 typed IPC commands & real-time sync `Channel` bridge — `apps/desktop/src-tauri`
 - [ ] **[04.2]** Unified Inbox UI with 60fps Virtual Scrolling (`100k+` messages) & instant hybrid search bar (`<15ms`) — `apps/desktop`
 - [ ] **[04.3]** Sandboxed Email Viewer (`DOMPurify` + `<iframe sandbox="">` + normalized base dark-mode CSS + remote pixel blocker) & on-demand `BODY.PEEK` attachment downloader — `apps/desktop`
