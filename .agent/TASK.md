@@ -7,22 +7,21 @@
 
 ## Active Task
 
-### 📌 Task [00.1]: Workspace Scaffold & Core Crate Boundaries (`Cargo.toml` + `apps/desktop`)
+### 📌 Task [01.1]: OS Keyring Integration & Argon2id/AES-GCM Fallback Vault Cipher (`crates/vault`)
 
-- **Description:** Initialize the Rust Cargo Workspace (`crates/mail-engine`, `crates/storage`, `crates/vault`, `crates/triage-ai`), SvelteKit 5 + Tauri v2 desktop application structure (`apps/desktop`), GNU AGPLv3 `LICENSE`, and baseline domain traits/contracts with passing unit tests.
-- **Systems Involved:** `workspace`, `crates/vault`, `crates/storage`, `crates/mail-engine`, `crates/triage-ai`, `apps/desktop`
+- **Description:** Implement the `SecretStore` and `MasterCipher` traits in `crates/vault` with OS Keyring support (`keyring` crate) and an encrypted local fallback vault powered by Argon2id key derivation (`argon2`) + AES-256-GCM (`aes-gcm`) for headless/Linux environments without an active D-Bus Secret Service, plus comprehensive unit tests.
+- **Systems Involved:** `crates/vault`
 - **Action Type:**
-  - [x] Read-only / Documentation
+  - [ ] Read-only / Documentation
   - [x] Source code changes
-- **Status:** RUNNING
+- **Status:** READY FOR PLANNING
   *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
-- [ ] Root `Cargo.toml` workspace configured with `crates/vault`, `crates/storage`, `crates/mail-engine`, `crates/triage-ai`, and `apps/desktop/src-tauri`.
-- [ ] Core domain traits and error types scaffolded in each crate (decoupled from Tauri runtime).
-- [ ] `apps/desktop` configured with SvelteKit 5 (Runes, static adapter for Tauri v2, strict TypeScript, Vitest) and `src-tauri` entrypoint.
-- [ ] GNU AGPLv3 `LICENSE` added to repository root.
-- [ ] `.env.example`, `.gitignore`, `README.md`, and `README.pt-br.md` synchronized with exact architecture (Mermaid), configuration table, and validation commands (`readme-standard`).
+- [ ] `MasterCipher` implemented using Argon2id KDF + AES-256-GCM authenticated encryption with random nonces and zero `unsafe` code (`#![forbid(unsafe_code)]`).
+- [ ] `SecretStore` implemented with OS Keyring provider (`keyring`) and encrypted file/memory fallback vault so credentials and SQLCipher database keys work seamlessly in both desktop and headless environments.
+- [ ] Serialization helpers for `AccountAuthMaterial` (App Password, OAuth2 Public PKCE, BYO OAuth `client_id`/`client_secret`, Proton Bridge) with zero secret leakage in `Debug` or error outputs.
+- [ ] Unit tests verifying round-trip encryption, tamper detection (authentication tag failure), and `AccountAuthMaterial` storage using synthetic RFC 2606 test fixtures.
 
 ---
 
@@ -30,13 +29,13 @@
 
 | Task | Title | Commit(s) | Date |
 |---|---|---|---|
-| [00.0] | Initial ADD greenfield governance setup (`AGENTS.md`, `NOTES.md`, `decisions.md`) | `pending` | 2026-10-29 |
+| [00.0] | Initial ADD greenfield governance setup (`AGENTS.md`, `NOTES.md`, `decisions.md`) | `00b19e9` | 2026-10-29 |
+| [00.1] | Workspace Scaffold & Core Crate Boundaries (`Cargo.toml` + `apps/desktop`) | `8ccaea0` | 2026-10-29 |
 
 ---
 
 ## Backlog (Upcoming, in priority order)
 
-- [ ] **[01.1]** OS Keyring integration & Argon2id/AES-GCM fallback vault cipher — `crates/vault`
 - [ ] **[01.2]** SQLite WAL + Full-DB SQLCipher schema, migrations, configurable FTS5 index (default `unicode61 remove_diacritics 2`), `sqlite-vec` (`int8` quantized KNN + pre-filtering) & IMAP `UIDVALIDITY`/`MODSEQ` sync state — `crates/storage`
 - [ ] **[02.1]** RFC 5322 / MIME parser (`mail-parser`) with threading headers, `List-Unsubscribe-Post` (RFC 8058), & lazy attachment metadata — `crates/mail-engine`
 - [ ] **[02.2]** Agnostic `ImapConnector` with transparent multi-auth (App Passwords, OAuth2 Public PKCE, user-supplied BYO OAuth `client_id`/`client_secret`, Proton Bridge) & incremental `UIDVALIDITY`/`CONDSTORE` sync — `crates/mail-engine`
