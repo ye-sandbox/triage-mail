@@ -7,21 +7,22 @@
 
 ## Active Task
 
-### 📌 Task [01.2]: SQLite WAL + Full-DB SQLCipher Schema, Migrations, Configurable FTS5 & sqlite-vec KNN (`crates/storage`)
+### 📌 Task [02.1]: Zero-Copy RFC 5322 / MIME Parser with Threading Headers, RFC 8058 & Lazy Attachment Part Metadata (`crates/mail-engine`)
 
-- **Description:** Implement the encrypted SQLite repository with SQLCipher, WAL mode, pragmas (`temp_store = MEMORY`), dynamic schema migrations, configurable lexical FTS5 (default `unicode61 remove_diacritics 2`), `sqlite-vec` (`int8` quantized KNN vector index with pre-filtering), and persistent IMAP folder `UIDVALIDITY`/`MODSEQ` sync state tracking.
-- **Systems Involved:** `crates/storage`
+- **Description:** Implement zero-copy email header and body parsing using Stalwart Labs' `mail-parser`. Extract threading headers (`Message-ID`, `In-Reply-To`, `References`), RFC 8058 One-Click unsubscribe metadata (`List-Unsubscribe`, `List-Unsubscribe-Post`), sender/recipient envelopes, plain-text/HTML bodies, and lazy attachment part metadata (MIME type, filename, size, `BODY.PEEK` section ID) without eagerly downloading binary payloads into memory.
+- **Systems Involved:** `crates/mail-engine`
 - **Action Type:**
   - [ ] Read-only / Documentation
   - [x] Source code changes
-- **Status:** RUNNING
+- **Status:** READY FOR PLANNING
+  *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
-- [ ] Full-database SQLCipher encryption initialized with key material derived from `crates/vault`.
-- [ ] SQLite WAL mode and foreign key constraints enabled with migrations for accounts, folders, messages, attachments, tags, and sync state.
-- [ ] Configurable lexical `FTS5` virtual table with BM25 ranking (default `unicode61 remove_diacritics 2`, optional `trigram`).
-- [ ] Isolated `#[allow(unsafe_code)]` block in `crates/storage` strictly for `sqlite-vec` C-extension registration (`sqlite3_auto_extension`) while retaining `#![deny(unsafe_code)]` for the crate.
-- [ ] Unit tests verifying encrypted DB round-trip, FTS5 lexical search, vector cosine/KNN similarity, and migration execution.
+- [ ] Stalwart `mail-parser` integrated into `crates/mail-engine` with `#![forbid(unsafe_code)]`.
+- [ ] Zero-copy extraction of threading headers: RFC 5322 `Message-ID`, `In-Reply-To`, and multi-ID `References`.
+- [ ] Deterministic detection and extraction of RFC 8058 `List-Unsubscribe` URLs (mailto / https) and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`.
+- [ ] Lazy attachment part metadata extraction (`part_id`, `filename`, `content_type`, `size_bytes`, `content_id`, `is_inline`) without downloading binary bodies.
+- [ ] Comprehensive unit tests using synthetic RFC 2606 fixtures (`user@example.com`, `billing@example.org`) verifying header parsing, threading tree reconstruction, and multipart MIME extraction.
 
 ---
 
@@ -32,12 +33,12 @@
 | [00.0] | Initial ADD greenfield governance setup (`AGENTS.md`, `NOTES.md`, `decisions.md`) | `00b19e9` | 2026-10-29 |
 | [00.1] | Workspace Scaffold & Core Crate Boundaries (`Cargo.toml` + `apps/desktop`) | `8ccaea0` | 2026-10-29 |
 | [01.1] | OS Keyring Integration & Argon2id/AES-GCM Fallback Vault Cipher (`crates/vault`) | `0259096` | 2026-10-29 |
+| [01.2] | SQLite WAL + Full-DB SQLCipher Schema, Migrations, Configurable FTS5 & sqlite-vec KNN (`crates/storage`) | `ecb7cad` | 2026-10-30 |
 
 ---
 
 ## Backlog (Upcoming, in priority order)
 
-- [ ] **[01.2]** SQLite WAL + Full-DB SQLCipher schema, migrations, configurable FTS5 index (default `unicode61 remove_diacritics 2`), `sqlite-vec` (`int8` quantized KNN + pre-filtering) & IMAP `UIDVALIDITY`/`MODSEQ` sync state — `crates/storage`
 - [ ] **[02.1]** Zero-copy RFC 5322 / MIME parser (Stalwart `mail-parser`) with threading headers (`Message-ID`, `In-Reply-To`, `References`), `List-Unsubscribe-Post` (RFC 8058), & lazy attachment part metadata — `crates/mail-engine`
 - [ ] **[02.2]** Agnostic `ImapConnector` with provider quirk normalization (`pimalaya/email-lib` patterns), transparent multi-auth (App Passwords, OAuth2 Public PKCE, user-supplied BYO OAuth `client_id`/`client_secret`, Proton Bridge) & incremental `UIDVALIDITY`/`CONDSTORE` sync — `crates/mail-engine`
 - [ ] **[02.3]** Real-time IMAP `IDLE` manager, adaptive background polling worker & RFC 8058 One-Click Unsubscribe HTTP POST executor — `crates/mail-engine`
