@@ -42,6 +42,7 @@
 | [03.3] | Tier 3 Optional LLM Summarizer client (Local Ollama `127.0.0.1:11434` & BYOK providers) (`crates/triage-ai`) | `dee6a05` | 2026-10-30 |
 | [04.1] | Tauri v2 Typed IPC, Secret-Isolated Account Management, Durable Triage Outbox & Real-time Sync Channel Bridge | `ca79844` | 2026-10-30 |
 | [04.2] | Apple HIG-Informed Unified Inbox, Virtualized Message List, Typed Search & Sync Refresh | `16df93b` | 2026-10-30 |
+| [04.2.1] | Accessible Apple-Style Inbox Motion | `6820c4b` | 2026-10-30 |
 
 
 ### Validation ([04.1])
@@ -73,6 +74,23 @@
 - Recorded the Vite peer-snapshot/type mismatch and browser-resolution workaround in `k-007`.
 - No CLI flags, environment variables or documented validation commands changed.
 
+### Validation ([04.2.1])
+- User approved the motion implementation plan on 2026-10-30.
+- Rust workspace check, tests (141 passed), formatting and Clippy (`-D warnings`): passed.
+- Frontend check (zero errors/warnings), tests (11 passed), Prettier and SPA build: passed.
+- Svelte runes invariant, secret/PII scan and `git diff --check`: passed.
+- Component regressions cover rapid sidebar toggles/inert navigation, immediate overview
+  replacement with a single subtree and keyboard focus restored after compact back navigation.
+- Browser QA verified 220ms compact forward/back animations, immediate hidden sidebar semantics,
+  and reduced-motion rules. A temporary fixture activated the actual compiled reduced-motion
+  media rules and observed sidebar transition `0s`, overview animation `none` and activity
+  animation `none`. This emulated CSS preference rules without changing the user's OS settings.
+- With motion enabled, the 100,000-message browser fixture retained at most 20 mounted rows;
+  180 animation frames measured median 16.7ms and p95 16.8ms (approximately 60fps).
+  This is fixture/browser evidence, not a native WebKit or all-hardware guarantee.
+- Removed the temporary fixture route. No dependencies, IPC contracts, schemas, CLI flags,
+  environment variables or documented validation commands changed. No live providers contacted.
+
 ---
 
 ## Backlog (Upcoming, in priority order)
@@ -80,6 +98,7 @@
 - [ ] **[04.4]** Keyboard-driven Command Palette (Mark read/unread, Archive, Trash, Local Tags, One-Click Unsubscribe, IMAP flag sync) & Triage Badges UI — `apps/desktop`
 
 ---
+
 
 ## Release / Cycle Wrap-up (Not the next task)
 
