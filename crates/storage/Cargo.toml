@@ -1,0 +1,16 @@
+[package]
+name = "storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+vault = { workspace = true }
