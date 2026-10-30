@@ -1,0 +1,185 @@
+// INVARIANT: Incremental folder sync must gracefully handle UIDVALIDITY resets,
+// fetch only lightweight headers and text bodies (never raw binary attachments eagerly),
+// and branch dynamically between RFC 7162 CONDSTORE and fallback flag reconciliation.
+
+use tokio::io::{AsyncRead, AsyncWrite};
+
+use crate::mime_parser::StalwartMimeParser;
+use crate::protocol::{ImapSession, UidFlags};
+use crate::provider::ServerCapabilities;
+use crate::{EngineError, MimeExtractor, ParsedInboundMessage, SyncEventSink, SyncProgressEvent};
+
+/// Outcome of an incremental folder synchronization pass.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncrementalSyncResult {
+    pub folder: String,
+    pub uidvalidity: u32,
+    pub uidvalidity_reset: bool,
+    pub new_last_uid: u32,
+    pub highest_modseq: Option<u64>,
+    pub new_messages: Vec<ParsedInboundMessage>,
+    pub flag_deltas: Vec<UidFlags>,
+}
+
+/// Parameters specifying which folder and watermarks to synchronize incrementally.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IncrementalSyncQuery<'a> {
+    pub account_id: &'a str,
+    pub folder: &'a str,
+    pub local_uidvalidity: u32,
+    pub local_last_uid: u32,
+    pub local_last_modseq: Option<u64>,
+}
+
+/// Executes incremental synchronization over an active IMAP session.
+pub async fn execute_incremental_sync<S: AsyncRead + AsyncWrite + Unpin + Send>(
+    session: &mut ImapSession<S>,
+    query: IncrementalSyncQuery<'_>,
+    capabilities: &ServerCapabilities,
+    sink: &dyn SyncEventSink,
+) -> Result<IncrementalSyncResult, EngineError> {
+    let folder_status = session.select_folder(query.folder).await?;
+
+    // 1. Detect UIDVALIDITY reset (RFC 3501 Section 2.3.1.1)
+    if query.local_uidvalidity > 0 && folder_status.uidvalidity != query.local_uidvalidity {
+        return Ok(IncrementalSyncResult {
+            folder: query.folder.to_string(),
+            uidvalidity: folder_status.uidvalidity,
+            uidvalidity_reset: true,
+            new_last_uid: 0,
+            highest_modseq: folder_status.highest_modseq,
+            new_messages: Vec::new(),
+            flag_deltas: Vec::new(),
+        });
+    }
+
+    let parser = StalwartMimeParser;
+    let mut parsed_messages = Vec::new();
+    let mut max_uid = query.local_last_uid;
+
+    // 2. Fetch new messages (Lightweight Invariant: headers + body text only)
+    let has_new_messages = if folder_status.uidnext > 0 {
+        folder_status.uidnext > query.local_last_uid.saturating_add(1) || query.local_last_uid == 0
+    } else {
+        folder_status.exists > 0
+    };
+
+    if has_new_messages {
+        let raw_messages = session.fetch_new_messages(query.local_last_uid).await?;
+
+        for raw in raw_messages {
+            if raw.uid > max_uid {
+                max_uid = raw.uid;
+            }
+
+            let mut combined_rfc822 =
+                Vec::with_capacity(raw.header_bytes.len() + raw.text_bytes.len() + 4);
+            if !raw.header_bytes.is_empty() {
+                combined_rfc822.extend_from_slice(&raw.header_bytes);
+                if !raw.header_bytes.ends_with(b"\r\n\r\n") {
+                    combined_rfc822.extend_from_slice(b"\r\n");
+                }
+            }
+            if !raw.text_bytes.is_empty() {
+                combined_rfc822.extend_from_slice(&raw.text_bytes);
+            } else if !raw.raw_payload.is_empty() && combined_rfc822.is_empty() {
+                combined_rfc822.extend_from_slice(&raw.raw_payload);
+            }
+
+            if let Ok(mut parsed) = parser.parse_lightweight(&combined_rfc822) {
+                parsed.uid = raw.uid;
+                parsed.modseq = raw.modseq;
+                parsed_messages.push(parsed);
+            }
+        }
+    }
+
+    // 3. Flag / deletion reconciliation: CONDSTORE vs Fallback
+    let flag_deltas = if capabilities.supports_condstore() {
+        if let Some(modseq) = query.local_last_modseq {
+            if modseq > 0 {
+                session.fetch_flags_changed_since(modseq).await?
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        }
+    } else {
+        // Fallback for Outlook or generic servers without CONDSTORE
+        session.fetch_all_uid_flags().await?
+    };
+
+    // 4. Notify decoupled observers
+    let progress = SyncProgressEvent {
+        account_id: query.account_id.to_string(),
+        folder: query.folder.to_string(),
+        synced_count: parsed_messages.len(),
+        uidvalidity: folder_status.uidvalidity,
+        highest_modseq: folder_status.highest_modseq,
+    };
+    let _ = sink.on_sync_progress(&progress);
+
+    Ok(IncrementalSyncResult {
+        folder: query.folder.to_string(),
+        uidvalidity: folder_status.uidvalidity,
+        uidvalidity_reset: false,
+        new_last_uid: max_uid,
+        highest_modseq: folder_status.highest_modseq,
+        new_messages: parsed_messages,
+        flag_deltas,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::io::{duplex, AsyncReadExt, AsyncWriteExt};
+
+    struct TestSink {
+        notified_count: AtomicUsize,
+    }
+
+    impl SyncEventSink for TestSink {
+        fn on_sync_progress(&self, event: &SyncProgressEvent) -> Result<(), EngineError> {
+            self.notified_count
+                .fetch_add(event.synced_count, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn detects_uidvalidity_reset_and_flags_resync() {
+        let (client_stream, mut server_stream) = duplex(4096);
+        let mut session = ImapSession::new(client_stream);
+        let sink = TestSink {
+            notified_count: AtomicUsize::new(0),
+        };
+
+        tokio::spawn(async move {
+            let mut buf = [0u8; 1024];
+            let _ = server_stream.read(&mut buf).await.unwrap();
+
+            // Return new UIDVALIDITY 9999 when local expects 1000
+            let resp = "* 5 EXISTS\r\n* OK [UIDVALIDITY 9999] Reset!\r\n* OK [UIDNEXT 10]\r\nA0001 OK SELECT completed\r\n";
+            server_stream.write_all(resp.as_bytes()).await.unwrap();
+        });
+
+        let caps = ServerCapabilities::default();
+        let query = IncrementalSyncQuery {
+            account_id: "acct-01",
+            folder: "INBOX",
+            local_uidvalidity: 1000,
+            local_last_uid: 50,
+            local_last_modseq: None,
+        };
+        let result = execute_incremental_sync(&mut session, query, &caps, &sink)
+            .await
+            .unwrap();
+
+        assert!(result.uidvalidity_reset);
+        assert_eq!(result.uidvalidity, 9999);
+        assert_eq!(result.new_messages.len(), 0);
+    }
+}
