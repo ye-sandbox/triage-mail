@@ -208,3 +208,54 @@ describe('inbox toolbar', () => {
 		target.remove();
 	});
 });
+
+describe('inbox motion interactions', () => {
+	it('keeps sidebar controls immediate and hidden navigation inert during rapid toggles', async () => {
+		const { inbox } = setup();
+		const target = document.createElement('div');
+		document.body.append(target);
+		const component = mount(InboxView, { target, props: { inbox, connected: true } });
+		flushSync();
+		const toggle = target.querySelector<HTMLButtonElement>('[aria-label="Toggle sidebar"]')!;
+		const sidebar = target.querySelector<HTMLElement>('.inbox-sidebar')!;
+		toggle.click();
+		flushSync();
+		expect(toggle.getAttribute('aria-expanded')).toBe('false');
+		expect(sidebar.inert).toBe(true);
+		expect(sidebar.getAttribute('aria-hidden')).toBe('true');
+		toggle.click();
+		flushSync();
+		expect(toggle.getAttribute('aria-expanded')).toBe('true');
+		expect(sidebar.inert).toBe(false);
+		await unmount(component);
+		inbox.dispose();
+		target.remove();
+	});
+	it('replaces overview content immediately and restores keyboard focus on back navigation', async () => {
+		const { inbox } = setup();
+		inbox.rows = [row(0), row(1)];
+		const target = document.createElement('div');
+		document.body.append(target);
+		const component = mount(InboxView, { target, props: { inbox, connected: true } });
+		flushSync();
+		inbox.selectedId = 'message-0';
+		flushSync();
+		inbox.selectedId = 'message-1';
+		flushSync();
+		expect(target.querySelectorAll('.overview-content')).toHaveLength(1);
+		expect(target.querySelector('h2')?.textContent).toContain('Subject 1');
+		const back = Array.from(target.querySelectorAll('button')).find((button) =>
+			button.textContent?.includes('‹ All Mail')
+		)!;
+		back.click();
+		flushSync();
+		await tick();
+		expect(inbox.selectedId).toBe(null);
+		await vi.waitFor(() =>
+			expect(document.activeElement).toBe(target.querySelector('[role=listbox]'))
+		);
+		await unmount(component);
+		inbox.dispose();
+		target.remove();
+	});
+});
