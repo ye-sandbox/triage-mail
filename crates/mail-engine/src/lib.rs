@@ -16,13 +16,23 @@ use vault::VaultError;
 
 pub mod auth;
 pub mod connector;
+pub mod idle;
 pub mod mime_parser;
 pub mod protocol;
 pub mod provider;
 pub mod sync;
 pub mod tls;
+pub mod unsubscribe;
 
 pub use connector::DefaultImapConnector;
+pub use idle::{
+    AdaptivePollConfig, AdaptivePollSchedule, IdleConfig, IdleCycleOutcome, IdleManager,
+    DEFAULT_IDLE_HEARTBEAT_SECS,
+};
+pub use unsubscribe::{
+    validate_rfc8058_descriptor, validate_rfc8058_uri, Rfc8058ClientConfig,
+    Rfc8058UnsubscribeClient, UnsubscribeOutcome, RFC8058_CONTENT_TYPE, RFC8058_POST_BODY,
+};
 
 /// Errors returned by IMAP transport, authentication, and MIME extraction.
 #[derive(Debug, Error, PartialEq, Eq)]

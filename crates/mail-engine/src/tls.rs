@@ -65,12 +65,17 @@ impl ServerCertVerifier for LoopbackCertVerifier {
 pub fn create_tls_connector(endpoint: &ImapEndpointConfig) -> Result<TlsConnector, EngineError> {
     endpoint.validate_tls_policy()?;
 
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let builder = ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(|e| EngineError::ImapProtocol(format!("TLS protocol config error: {e}")))?;
+
     let client_config = if endpoint.allow_loopback_self_signed_tls {
         if !endpoint.is_loopback_host() {
             return Err(EngineError::InsecureTlsRejected(endpoint.host.clone()));
         }
 
-        ClientConfig::builder()
+        builder
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(LoopbackCertVerifier))
             .with_no_client_auth()
@@ -78,7 +83,7 @@ pub fn create_tls_connector(endpoint: &ImapEndpointConfig) -> Result<TlsConnecto
         let mut root_store = RootCertStore::empty();
         root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
-        ClientConfig::builder()
+        builder
             .with_root_certificates(root_store)
             .with_no_client_auth()
     };

@@ -12,6 +12,7 @@ async-trait = "0.1.92"
 base64 = "0.23.1"
 mail-parser = { version = "1.0.0", features = ["full_encoding", "serde"] }
 rand = "0.10.3"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
 rustls-pki-types = "1.15.1"
 serde = { workspace = true }
