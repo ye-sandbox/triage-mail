@@ -7,10 +7,10 @@
 
 ## Active Task
 
-### 📌 Task [01.1]: OS Keyring Integration & Argon2id/AES-GCM Fallback Vault Cipher (`crates/vault`)
+### 📌 Task [01.2]: SQLite WAL + Full-DB SQLCipher Schema, Migrations, Configurable FTS5 & sqlite-vec KNN (`crates/storage`)
 
-- **Description:** Implement the `SecretStore` and `MasterCipher` traits in `crates/vault` with OS Keyring support (`keyring` crate) and an encrypted local fallback vault powered by Argon2id key derivation (`argon2`) + AES-256-GCM (`aes-gcm`) for headless/Linux environments without an active D-Bus Secret Service, plus comprehensive unit tests.
-- **Systems Involved:** `crates/vault`
+- **Description:** Implement the encrypted SQLite repository with SQLCipher, WAL mode, pragmas (`temp_store = MEMORY`), dynamic schema migrations, configurable lexical FTS5 (default `unicode61 remove_diacritics 2`), `sqlite-vec` (`int8` quantized KNN vector index with pre-filtering), and persistent IMAP folder `UIDVALIDITY`/`MODSEQ` sync state tracking.
+- **Systems Involved:** `crates/storage`
 - **Action Type:**
   - [ ] Read-only / Documentation
   - [x] Source code changes
@@ -18,10 +18,11 @@
   *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
-- [ ] `MasterCipher` implemented using Argon2id KDF + AES-256-GCM authenticated encryption with random nonces and zero `unsafe` code (`#![forbid(unsafe_code)]`).
-- [ ] `SecretStore` implemented with OS Keyring provider (`keyring`) and encrypted file/memory fallback vault so credentials and SQLCipher database keys work seamlessly in both desktop and headless environments.
-- [ ] Serialization helpers for `AccountAuthMaterial` (App Password, OAuth2 Public PKCE, BYO OAuth `client_id`/`client_secret`, Proton Bridge) with zero secret leakage in `Debug` or error outputs.
-- [ ] Unit tests verifying round-trip encryption, tamper detection (authentication tag failure), and `AccountAuthMaterial` storage using synthetic RFC 2606 test fixtures.
+- [ ] Full-database SQLCipher encryption initialized with key material derived from `crates/vault`.
+- [ ] SQLite WAL mode and foreign key constraints enabled with migrations for accounts, folders, messages, attachments, tags, and sync state.
+- [ ] Configurable lexical `FTS5` virtual table with BM25 ranking (default `unicode61 remove_diacritics 2`, optional `trigram`).
+- [ ] Isolated `#[allow(unsafe_code)]` block in `crates/storage` strictly for `sqlite-vec` C-extension registration (`sqlite3_auto_extension`) while retaining `#![deny(unsafe_code)]` for the crate.
+- [ ] Unit tests verifying encrypted DB round-trip, FTS5 lexical search, vector cosine/KNN similarity, and migration execution.
 
 ---
 
@@ -31,6 +32,7 @@
 |---|---|---|---|
 | [00.0] | Initial ADD greenfield governance setup (`AGENTS.md`, `NOTES.md`, `decisions.md`) | `00b19e9` | 2026-10-29 |
 | [00.1] | Workspace Scaffold & Core Crate Boundaries (`Cargo.toml` + `apps/desktop`) | `8ccaea0` | 2026-10-29 |
+| [01.1] | OS Keyring Integration & Argon2id/AES-GCM Fallback Vault Cipher (`crates/vault`) | Pending | 2026-10-29 |
 
 ---
 

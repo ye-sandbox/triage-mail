@@ -6,8 +6,20 @@
 //! All credentials (App Passwords, OAuth2 tokens, user-supplied BYO OAuth `client_id`/`client_secret`)
 //! reside strictly inside the secret store and are referenced by opaque identifiers.
 
+pub mod auth;
+pub mod auto_store;
+pub mod cipher;
+pub mod fallback_store;
+pub mod keyring_store;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+pub use auth::AccountAuthMaterial;
+pub use auto_store::AutoSecretStore;
+pub use cipher::Argon2AesGcmCipher;
+pub use fallback_store::EncryptedFallbackStore;
+pub use keyring_store::KeyringStore;
 
 /// Errors returned by secret storage and master cipher operations.
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -20,6 +32,10 @@ pub enum VaultError {
     CryptoError(String),
     #[error("invalid secret key identifier")]
     InvalidKey,
+    #[error("serialization error: {0}")]
+    Serialization(String),
+    #[error("i/o error: {0}")]
+    Io(String),
 }
 
 /// Opaque identifier referencing a secret stored in the vault.
@@ -43,28 +59,6 @@ impl VaultKey {
     pub fn as_str(&self) -> &str {
         &self.0
     }
-}
-
-/// Transparent multi-mode authentication material stored in the vault.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AccountAuthMaterial {
-    /// Standard IMAP password or provider-specific App Password.
-    AppPassword { secret: String },
-    /// Public OAuth2 PKCE tokens (`client_id` only, no secret required).
-    OAuth2PublicPkce {
-        client_id: String,
-        access_token: String,
-        refresh_token: Option<String>,
-    },
-    /// User-supplied Bring-Your-Own OAuth2 credentials (`client_id` + `client_secret`).
-    OAuth2ByoCredentials {
-        client_id: String,
-        client_secret: String,
-        access_token: String,
-        refresh_token: Option<String>,
-    },
-    /// Local Proton Mail Bridge loopback password (`127.0.0.1`).
-    ProtonBridgeLocal { bridge_password: String },
 }
 
 /// Agnostic secret storage contract implemented by OS Keyring and Argon2id fallback vault.
