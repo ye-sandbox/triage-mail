@@ -89,3 +89,18 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   OAuth account registration accepts the existing vault auth material, including acquired tokens;
   a provider-specific authorization UI remains separate. Embeddings use the existing provider
   implementation and cached model configuration; IPC never downloads models or calls an LLM.
+
+## Unified Inbox UI ([04.2])
+
+- `src/lib/inbox/InboxController` owns paged rows, selection and sync refresh state behind an
+  injectable `InboxTransport`. It uses the existing snake_case DTOs without backend changes.
+- IPC pages contain 200 summaries; the visible list renders fixed 88px rows plus five rows
+  of overscan per edge. Counts describe loaded summaries (`+` while more pages may exist),
+  because the established IPC response does not expose a total count.
+- Search changes reset selection/scroll and invalidate older requests. Sync refreshes replace
+  authoritative loaded pages, retain surviving selection and anchor the first visible message.
+  Subscription teardown silences late callbacks; ingestion remains owned by the native runtime.
+- Search is debounced by 200ms. Words/Meaning/Words + meaning map to Lexical/Semantic/Hybrid.
+  Missing embeddings produce a fixed local-model message; the UI never downloads a model.
+- `InboxView` provides the adaptive sidebar/list/overview shell with system light/dark appearance.
+  Message bodies and attachment downloads remain [04.3]; triage actions remain [04.4].

@@ -1,0 +1,79 @@
+@import 'tailwindcss';
+
+:root {
+	color-scheme: light dark;
+	--background: #f7f7f9;
+	--sidebar: #eeeef0;
+	--surface: #ffffff;
+	--reader: #fafafb;
+	--toolbar: #f8f8fa;
+	--field: #efeff1;
+	--text: #242426;
+	--secondary: #68686f;
+	--separator: #dedee3;
+	--accent: #0067d9;
+	--selection: #0067d9;
+	--selection-soft: #dfebf9;
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	font-synthesis: none;
+	background: var(--background);
+	color: var(--text);
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--background: #1d1d1f;
+		--sidebar: #252527;
+		--surface: #202022;
+		--reader: #1c1c1e;
+		--toolbar: #29292c;
+		--field: #353538;
+		--text: #f1f1f3;
+		--secondary: #aaaab2;
+		--separator: #3c3c40;
+		--accent: #78b6ff;
+		--selection: #175ca8;
+		--selection-soft: #303d50;
+	}
+}
+@layer components {
+	.icon-button {
+		@apply flex size-8 shrink-0 items-center justify-center rounded-md text-[var(--secondary)] hover:bg-[var(--field)] disabled:opacity-40;
+	}
+	.keycap {
+		@apply flex size-5 items-center justify-center rounded border border-[var(--separator)] bg-[var(--surface)] font-sans;
+	}
+	.message-row:hover {
+		background: var(--selection-soft);
+	}
+	.message-row.selected {
+		background: var(--selection);
+		color: white;
+	}
+	.message-row.selected > span {
+		background: white;
+	}
+}
+:focus-visible {
+	outline: 3px solid var(--accent);
+	outline-offset: 3px;
+}
+input[type='search']:focus-visible {
+	outline-offset: 5px;
+}
+button,
+select,
+a {
+	-webkit-tap-highlight-color: transparent;
+}
+@media (prefers-contrast: more) {
+	:root {
+		--separator: #85858b;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		scroll-behavior: auto !important;
+	}
+}
