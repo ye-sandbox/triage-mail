@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use crate::{FtsTokenizerMode, StorageError};
 
 /// Current database schema version.
-pub const CURRENT_SCHEMA_VERSION: u32 = 3;
+pub const CURRENT_SCHEMA_VERSION: u32 = 4;
 
 /// Executes database schema migrations idempotently.
 pub struct SchemaMigrator {
@@ -60,6 +60,11 @@ impl SchemaMigrator {
             applied_count += 1;
         }
 
+        if current_version < 4 {
+            self.apply_v4(&tx)?;
+            applied_count += 1;
+        }
+
         tx.commit()
             .map_err(|e| StorageError::Migration(format!("failed to commit migration tx: {e}")))?;
 
@@ -84,6 +89,30 @@ impl SchemaMigrator {
         .map_err(|e| StorageError::Migration(format!("failed to record migration v{version}: {e}")))?;
 
         Ok(())
+    }
+
+    fn apply_v4(&self, tx: &rusqlite::Transaction<'_>) -> Result<(), StorageError> {
+        // INVARIANT: Connection metadata and the durable outbox contain no credentials.
+        // Existing account/message schemas and public repository traits remain unchanged.
+        tx.execute_batch(
+            "
+            CREATE TABLE account_connections (
+                account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+                config_json TEXT NOT NULL
+            );
+            CREATE TABLE pending_mutations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+                payload_json TEXT NOT NULL
+            );
+            CREATE TABLE message_folder_overrides (
+                message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+                folder TEXT NOT NULL
+            );
+        ",
+        )
+        .map_err(|e| StorageError::Migration(e.to_string()))?;
+        self.record_migration(tx, 4, "004_desktop_connections_and_outbox")
     }
 
     fn apply_v1(&self, tx: &rusqlite::Transaction<'_>) -> Result<(), StorageError> {
@@ -247,7 +276,7 @@ mod tests {
 
         let migrator = SchemaMigrator::new(FtsTokenizerMode::Unicode61RemoveDiacritics);
         let applied_first = migrator.migrate(&mut conn).expect("first migration");
-        assert_eq!(applied_first, 3);
+        assert_eq!(applied_first, 4);
 
         let applied_second = migrator.migrate(&mut conn).expect("second migration");
         assert_eq!(applied_second, 0, "subsequent migration must be a no-op");

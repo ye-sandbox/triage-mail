@@ -18,6 +18,7 @@ pub mod auth;
 pub mod connector;
 pub mod idle;
 pub mod mime_parser;
+pub mod mutations;
 pub mod protocol;
 pub mod provider;
 pub mod sync;

@@ -56,6 +56,7 @@ pub async fn execute_incremental_sync<S: AsyncRead + AsyncWrite + Unpin + Send>(
     let parser = StalwartMimeParser;
     let mut parsed_messages = Vec::new();
     let mut max_uid = query.local_last_uid;
+    let mut fetched_flags = Vec::new();
 
     // 2. Fetch new messages (Lightweight Invariant: headers + body text only)
     let has_new_messages = if folder_status.uidnext > 0 {
@@ -68,6 +69,10 @@ pub async fn execute_incremental_sync<S: AsyncRead + AsyncWrite + Unpin + Send>(
         let raw_messages = session.fetch_new_messages(query.local_last_uid).await?;
 
         for raw in raw_messages {
+            fetched_flags.push(UidFlags {
+                uid: raw.uid,
+                flags: raw.flags.clone(),
+            });
             if raw.uid > max_uid {
                 max_uid = raw.uid;
             }
@@ -95,7 +100,7 @@ pub async fn execute_incremental_sync<S: AsyncRead + AsyncWrite + Unpin + Send>(
     }
 
     // 3. Flag / deletion reconciliation: CONDSTORE vs Fallback
-    let flag_deltas = if capabilities.supports_condstore() {
+    let mut flag_deltas = if capabilities.supports_condstore() {
         if let Some(modseq) = query.local_last_modseq {
             if modseq > 0 {
                 session.fetch_flags_changed_since(modseq).await?
@@ -109,6 +114,9 @@ pub async fn execute_incremental_sync<S: AsyncRead + AsyncWrite + Unpin + Send>(
         // Fallback for Outlook or generic servers without CONDSTORE
         session.fetch_all_uid_flags().await?
     };
+
+    fetched_flags.append(&mut flag_deltas);
+    let flag_deltas = fetched_flags;
 
     // 4. Notify decoupled observers
     let progress = SyncProgressEvent {

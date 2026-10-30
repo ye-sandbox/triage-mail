@@ -11,7 +11,20 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [lints]
 workspace = true
 
+[features]
+default = ["native-runtime"]
+native-runtime = ["dep:tauri", "dep:tauri-build"]
+
+[build-dependencies]
+tauri-build = { version = "2", optional = true }
+
 [dependencies]
+async-trait = "0.1.92"
+getrandom = "0.2"
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["aws_lc_rs", "logging", "tls12"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+zeroize = "1.9.1"
+tauri = { version = "2", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -19,3 +32,7 @@ vault = { workspace = true }
 storage = { workspace = true }
 mail-engine = { workspace = true }
 triage-ai = { workspace = true }
+
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }
+tempfile = "3"

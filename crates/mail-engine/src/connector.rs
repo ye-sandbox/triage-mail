@@ -39,13 +39,30 @@ impl DefaultImapConnector {
         endpoint: &ImapEndpointConfig,
         auth: &AccountAuthMaterial,
     ) -> Result<(ImapSession<TlsStream<TcpStream>>, ServerCapabilities), EngineError> {
+        self.connect_and_authenticate_as(endpoint, &endpoint.account_id, auth)
+            .await
+    }
+
+    /// Authenticates with a login independent of the opaque account identifier.
+    pub async fn connect_and_authenticate_as(
+        &self,
+        endpoint: &ImapEndpointConfig,
+        username: &str,
+        auth: &AccountAuthMaterial,
+    ) -> Result<(ImapSession<TlsStream<TcpStream>>, ServerCapabilities), EngineError> {
+        // INVARIANT: Account IDs select vault entries; only the explicit username is sent as login.
+        if username.is_empty() || username.chars().any(char::is_control) {
+            return Err(EngineError::ImapProtocol("invalid IMAP username".into()));
+        }
         endpoint.validate_tls_policy()?;
 
         let connector = create_tls_connector(endpoint)?;
         let addr = format!("{}:{}", endpoint.host, endpoint.port);
-        let tcp_stream = TcpStream::connect(&addr).await.map_err(|e| {
-            EngineError::ImapProtocol(format!("TCP connect to `{addr}` failed: {e}"))
-        })?;
+        let tcp_stream = TcpStream::connect((endpoint.host.as_str(), endpoint.port))
+            .await
+            .map_err(|e| {
+                EngineError::ImapProtocol(format!("TCP connect to `{addr}` failed: {e}"))
+            })?;
 
         let server_name = ServerName::try_from(endpoint.host.as_str())
             .map_err(|e| {
@@ -69,20 +86,16 @@ impl DefaultImapConnector {
         // Authenticate based on configured credential mode
         match auth {
             AccountAuthMaterial::AppPassword { secret } => {
-                session.login(&endpoint.account_id, secret).await?;
+                session.login(username, secret).await?;
             }
             AccountAuthMaterial::OAuth2PublicPkce { access_token, .. } => {
-                session
-                    .authenticate_xoauth2(&endpoint.account_id, access_token)
-                    .await?;
+                session.authenticate_xoauth2(username, access_token).await?;
             }
             AccountAuthMaterial::OAuth2ByoCredentials { access_token, .. } => {
-                session
-                    .authenticate_xoauth2(&endpoint.account_id, access_token)
-                    .await?;
+                session.authenticate_xoauth2(username, access_token).await?;
             }
             AccountAuthMaterial::ProtonBridgeLocal { bridge_password } => {
-                session.login(&endpoint.account_id, bridge_password).await?;
+                session.login(username, bridge_password).await?;
             }
         }
 

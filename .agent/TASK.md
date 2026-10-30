@@ -14,14 +14,24 @@
 - **Action Type:**
   - [ ] Read-only / Documentation
   - [x] Source code changes
-- **Status:** READY FOR PLANNING
+- **Status:** RUNNING
   *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
-- [ ] Implement typed IPC commands (`cmd_list_accounts`, `cmd_add_account`, `cmd_search_messages`, `cmd_triage_action`, `cmd_get_message_body`, `cmd_fetch_attachment`) matching the contracts in `.agent/NOTES.md`.
-- [ ] Ensure secrets in `cmd_add_account` are stored directly in `vault` (`SecretStore`) and never returned to the UI.
-- [ ] Implement `SyncProgressEvent` streaming bridge (`SyncEventSink` / `TriageEventHook`) for non-blocking UI updates.
-- [ ] Unit and integration tests verifying account management, hybrid search IPC, triage mutations, lazy attachment retrieval, and secret isolation.
+- [x] Implement typed IPC commands (`cmd_list_accounts`, `cmd_add_account`, `cmd_search_messages`, `cmd_triage_action`, `cmd_get_message_body`, `cmd_fetch_attachment`) matching the contracts in `.agent/NOTES.md`.
+- [x] Ensure secrets in `cmd_add_account` are stored directly in `vault` (`SecretStore`) and never returned to the UI.
+- [x] Implement `SyncProgressEvent` streaming bridge (`SyncEventSink` / `TriageEventHook`) for non-blocking UI updates.
+- [x] Unit and integration tests verifying account management, hybrid search IPC, triage mutations, lazy attachment retrieval, and secret isolation.
+
+### Validation ([04.1])
+- Rust workspace check, tests, formatting and Clippy (`-D warnings`): passed.
+- Frontend check (zero errors/warnings), unit tests and SPA build: passed.
+- Svelte runes invariant, tracked-file secret/PII scan and `git diff --check`: passed.
+- Native IPC mock invocation, typed channel, vault rollback/redaction, encrypted outbox restart,
+  transactional ingestion, MOVE identity rebasing and lazy BODY.PEEK regression tests: passed.
+- Linux build prerequisites were extracted into a temporary user-owned sysroot; no system-wide
+  installation or machine-specific repository configuration was added. Existing socket-based
+  tests ran with loopback binding permitted. No live email providers were contacted.
 
 ---
 

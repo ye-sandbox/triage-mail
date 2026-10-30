@@ -53,3 +53,39 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 | Debt | Rationale | Revisit When |
 |---|---|---|
 | Outbound SMTP / Email Composer omitted | MVP v0.1 is strictly "Triage-First" (Inbound reading, search, and triage) | Post-v0.1 (`v0.2+`) after inbound sync and hybrid search reach stability |
+
+## Desktop IPC Implementation Details ([04.1])
+
+- The six established commands retain snake_case DTO fields and externally tagged Rust enums.
+  Tauri invoke argument names use its default camelCase (`messageId` for message detail).
+  `cmd_add_account` takes separate `config: AccountConfigDto` and input-only `credentials`
+  (`AccountAuthMaterial` wire representation), and returns only an opaque account ID string.
+  An empty input ID requests a generated opaque ID; nonempty IDs cannot contain email addresses.
+  `cmd_list_accounts` returns safe `AccountConfigDto` metadata without consulting credential values.
+- `MessageRowDto` aliases `storage::MessageRowSummary`. `MessageDetailDto` preserves the scaffold's
+  `id`, `subject`, `sender`, and `triage_result`, and adds contracted `headers` (raw header string)
+  and `triage_badges`. `AttachmentBytesDto` is `{ bytes: Vec<u8> }`.
+- `cmd_subscribe_sync(onProgress: Channel<SyncProgressEvent>)` registers one subscription per local
+  webview. Replacement/disconnection does not stop mail ingestion. Lag emits `ResyncRequired` so
+  consumers refetch authoritative data. Other states are `Syncing`, `Idle`, `Retrying`,
+  `MutationPending`, and `MutationFailed`. Alerts are `Vec<TriageBadge>` with bounded previews.
+- SQLCipher migration v4 adds `account_connections`, `pending_mutations`, and
+  `message_folder_overrides` without altering existing tables. Endpoint JSON is serialized only
+  from the secret-free configuration DTO. Remote mutation payloads contain message identity and
+  action only; local updates and outbox writes commit together. Pending read actions survive
+  background flag reconciliation. Remote commands check UIDVALIDITY before using a queued UID.
+- Runtime initialization provisions the SQLCipher key through `SecretStore`; a missing key for
+  an existing database fails closed. `cmd_unlock_vault(passphrase)` explicitly enables the
+  Argon2id/AES-GCM fallback when the OS keyring is unavailable. Passphrases and incoming auth
+  buffers are zeroized and never appear in responses, events, errors, or configuration JSON.
+- Headless `mail_engine::mutations` exports UIDVALIDITY-checked STORE/MOVE and lazy attachment
+  helpers with pure Rust request/outcome types. Desktop DTOs adapt to these helpers; existing
+  `ImapConnector`, `SyncEventSink`, `TriageEventHook`, and repository trait signatures are unchanged.
+- Workers use incremental sync, IDLE with heartbeat renewal, and adaptive polling fallback.
+  Network operations never hold the local SQLite mutation lock. Native transport is injectable
+  for offline service tests; the default `native-runtime` feature runs the actual Tauri app.
+- Archive/trash discover server special-use folders and require IMAP MOVE; unsupported servers
+  retain their queued action and emit `MutationFailed`. There is no unsafe blanket-expunge fallback.
+  OAuth account registration accepts the existing vault auth material, including acquired tokens;
+  a provider-specific authorization UI remains separate. Embeddings use the existing provider
+  implementation and cached model configuration; IPC never downloads models or calls an LLM.
