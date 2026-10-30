@@ -1,0 +1,48 @@
+# ==============================================================================
+# SECURITY & ZERO-KNOWLEDGE GUARDRAILS (NEVER COMMIT)
+# ==============================================================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*client_secret*.json
+*credentials*.json
+
+# Local encrypted/unencrypted SQLite & SQLCipher databases
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Rust / Cargo build artifacts
+/target/
+**/target/
+
+# Node / SvelteKit / Tauri build artifacts
+node_modules/
+**/node_modules/
+.svelte-kit/
+**/.svelte-kit/
+dist/
+build/
+*.tsbuildinfo
+
+# ONNX / FastEmbed local model cache
+.fastembed_cache/
+models/
+
+# OS / IDE / Agent scratch
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.agent/scratch/
+.agent/.cache/
+.gemini/
+.claude/
+.maestri/
+*.log
