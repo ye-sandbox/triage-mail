@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use vault::VaultError;
 
+pub mod mime_parser;
+
 /// Errors returned by IMAP transport, authentication, and MIME extraction.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum EngineError {
@@ -73,6 +75,8 @@ pub struct AttachmentMeta {
     pub filename: String,
     pub mime_type: String,
     pub size_bytes: u64,
+    pub content_id: Option<String>,
+    pub is_inline: bool,
 }
 
 /// RFC 2369 / RFC 8058 Unsubscribe header metadata extracted from a message.
@@ -80,8 +84,11 @@ pub struct AttachmentMeta {
 pub struct UnsubscribeDescriptor {
     pub https_uri: Option<String>,
     pub mailto_uri: Option<String>,
-    /// True when `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058) is present.
+    /// True when `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058) is present
+    /// and a valid HTTPS URI is present in `List-Unsubscribe`.
     pub supports_rfc8058_one_click: bool,
+    pub raw_list_unsubscribe: Option<String>,
+    pub raw_list_unsubscribe_post: Option<String>,
 }
 
 /// Lightweight parsed message representation produced during inbound sync.
@@ -91,13 +98,20 @@ pub struct ParsedInboundMessage {
     pub modseq: Option<u64>,
     pub message_id_header: Option<String>,
     pub in_reply_to: Option<String>,
+    pub references: Vec<String>,
+    pub references_header: Option<String>,
     pub subject: String,
     pub sender: String,
+    pub recipients: Vec<String>,
+    pub date_epoch_ms: Option<i64>,
     pub text_plain: Option<String>,
     pub html_raw: Option<String>,
+    pub raw_headers: Option<String>,
     pub unsubscribe: Option<UnsubscribeDescriptor>,
     pub attachments: Vec<AttachmentMeta>,
 }
+
+pub use mime_parser::{build_thread_tree, StalwartMimeParser, ThreadNode};
 
 /// Event emitted by background sync or `IDLE` workers to decoupled consumers (GUI or CLI).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
