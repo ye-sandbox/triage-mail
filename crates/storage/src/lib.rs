@@ -12,6 +12,7 @@ use thiserror::Error;
 use vault::VaultError;
 
 pub mod connection;
+pub mod desktop;
 pub mod migrations;
 pub mod models;
 pub mod repository;

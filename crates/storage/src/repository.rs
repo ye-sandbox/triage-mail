@@ -16,7 +16,7 @@ use crate::{
 
 /// Encrypted SQLite repository with SQLCipher, WAL mode, FTS5, and sqlite-vec KNN search.
 pub struct SqliteMailStore {
-    conn: Mutex<Connection>,
+    pub(crate) conn: Mutex<Connection>,
     tokenizer_mode: FtsTokenizerMode,
 }
 
@@ -98,6 +98,18 @@ impl SqliteMailStore {
             .transaction()
             .map_err(|e| StorageError::Query(format!("failed to start tx: {e}")))?;
 
+        Self::insert_message_in_transaction(&tx, message)?;
+
+        tx.commit()
+            .map_err(|e| StorageError::Query(format!("failed to commit message tx: {e}")))?;
+
+        Ok(())
+    }
+
+    pub(crate) fn insert_message_in_transaction(
+        tx: &rusqlite::Transaction<'_>,
+        message: &MessageRecord,
+    ) -> Result<(), StorageError> {
         tx.execute(
             "INSERT INTO messages (
                 id, account_id, folder, uid, message_id_header, in_reply_to, references_header,
@@ -111,7 +123,9 @@ impl SqliteMailStore {
                 sender = excluded.sender,
                 recipients = excluded.recipients,
                 received_at_epoch_ms = excluded.received_at_epoch_ms,
-                is_read = excluded.is_read,
+                is_read = CASE WHEN EXISTS (
+                    SELECT 1 FROM pending_mutations p WHERE p.message_id = messages.id
+                ) THEN messages.is_read ELSE excluded.is_read END,
                 has_attachments = excluded.has_attachments,
                 category_badge = excluded.category_badge,
                 raw_headers = excluded.raw_headers,
@@ -183,9 +197,6 @@ impl SqliteMailStore {
             )
             .map_err(|e| StorageError::Query(format!("failed to insert tag: {e}")))?;
         }
-
-        tx.commit()
-            .map_err(|e| StorageError::Query(format!("failed to commit message tx: {e}")))?;
 
         Ok(())
     }

@@ -46,3 +46,6 @@ Thumbs.db
 .claude/
 .maestri/
 *.log
+
+# Tauri-generated capability schemas
+/apps/desktop/src-tauri/gen/
