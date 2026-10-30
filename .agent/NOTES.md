@@ -104,3 +104,14 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   Missing embeddings produce a fixed local-model message; the UI never downloads a model.
 - `InboxView` provides the adaptive sidebar/list/overview shell with system light/dark appearance.
   Message bodies and attachment downloads remain [04.3]; triage actions remain [04.4].
+
+## Inbox Motion ([04.2.1])
+
+- Motion uses shared CSS timing/easing tokens (120ms feedback, 220ms view changes) with no
+  animation dependencies. Sidebar collapse makes its retained contents inert immediately;
+  the toolbar exposes `aria-expanded`. Compact back navigation restores list keyboard focus.
+- Overview replacement uses one keyed content subtree with entrance-only motion; outgoing
+  message content never remains mounted during transitions. Virtual row insertion/removal and
+  scroll offsets remain immediate; only row background/color feedback transitions.
+- All motion is CSS-owned. `prefers-reduced-motion: reduce` disables spatial, repetitive and
+  feedback animation/transition rules, including when the preference changes mid-animation.

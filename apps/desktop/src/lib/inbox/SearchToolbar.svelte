@@ -6,12 +6,16 @@
 		mode = $bindable<SearchMode>('Lexical'),
 		toggleSidebar,
 		refresh,
+		sidebarOpen = true,
+		busy = false,
 		disabled = false
 	}: {
 		query?: string;
 		mode?: SearchMode;
 		toggleSidebar: () => void;
 		refresh: () => void;
+		sidebarOpen?: boolean;
+		busy?: boolean;
 		disabled?: boolean;
 	} = $props();
 	let searchInput: HTMLInputElement;
@@ -31,6 +35,7 @@
 		type="button"
 		class="icon-button max-md:hidden"
 		aria-label="Toggle sidebar"
+		aria-expanded={sidebarOpen}
 		title="Toggle sidebar"
 		onclick={toggleSidebar}><Icon name="sidebar" /></button
 	>
@@ -39,7 +44,7 @@
 		<p class="text-xs text-[var(--secondary)]">Unified inbox</p>
 	</div>
 	<div
-		class="flex min-w-48 flex-1 items-center gap-2 rounded-lg border border-[var(--separator)] bg-[var(--field)] px-3 py-2 sm:max-w-96"
+		class="search-field flex min-w-48 flex-1 items-center gap-2 rounded-lg border border-[var(--separator)] bg-[var(--field)] px-3 py-2 sm:max-w-96"
 		role="search"
 	>
 		<span class="text-[var(--secondary)]"><Icon name="search" size={16} /></span>
@@ -70,6 +75,9 @@
 		aria-label="Refresh mail"
 		title="Refresh mail"
 		onclick={refresh}
-		{disabled}><Icon name="refresh" size={18} /></button
+		{disabled}
+		><span class="refresh-symbol flex" class:is-spinning={busy}
+			><Icon name="refresh" size={18} /></span
+		></button
 	>
 </header>

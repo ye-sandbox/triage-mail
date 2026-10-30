@@ -34,6 +34,10 @@ Enable `resolve.conditions: ['browser']` only in Vitest's test mode, so componen
 Svelte's DOM renderer. Omit the override in production to retain Vite's default browser
 conditions. jsdom does not implement layout or ResizeObserver: stub only that API in unit tests
 and verify real layout/scrolling separately in a browser.
+Svelte assigns `inert` as a DOM property; jsdom may not reflect it to an HTML attribute.
+Assert the property in component tests and verify hidden navigation in a real browser.
+For focus restored after `tick()`, await the observable focus result rather than assuming
+a single test microtask flush has also completed the event handler.
 
 ## What NEVER to Do
 

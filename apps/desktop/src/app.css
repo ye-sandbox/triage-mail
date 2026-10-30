@@ -77,3 +77,111 @@ a {
 		scroll-behavior: auto !important;
 	}
 }
+
+/* INVARIANT: Motion communicates state; it never delays input or moves virtual rows. */
+:root {
+	--motion-fast: 120ms;
+	--motion-view: 220ms;
+	--motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.inbox-sidebar {
+	width: 14rem;
+	opacity: 1;
+	overflow: hidden;
+	transition:
+		width var(--motion-view) var(--motion-ease),
+		opacity var(--motion-fast) ease;
+}
+.inbox-sidebar.collapsed {
+	width: 0;
+	opacity: 0;
+}
+.icon-button {
+	transition:
+		background-color var(--motion-fast) ease,
+		color var(--motion-fast) ease,
+		opacity var(--motion-fast) ease,
+		transform var(--motion-fast) var(--motion-ease);
+}
+.icon-button:active:not(:disabled) {
+	transform: scale(0.94);
+}
+.message-row {
+	transition:
+		background-color var(--motion-fast) ease,
+		color var(--motion-fast) ease;
+}
+.search-field {
+	transition:
+		border-color var(--motion-fast) ease,
+		box-shadow var(--motion-fast) ease;
+}
+.search-field:focus-within {
+	border-color: var(--accent);
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.overview-content[data-message='true'] {
+	animation: overview-reveal var(--motion-fast) ease-out;
+}
+.refresh-symbol.is-spinning {
+	animation: activity-turn 900ms linear infinite;
+}
+@keyframes overview-reveal {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes activity-turn {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@keyframes compact-forward {
+	from {
+		opacity: 0;
+		transform: translateX(8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+@keyframes compact-back {
+	from {
+		opacity: 0;
+		transform: translateX(-8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+@media (max-width: 767px) {
+	.inbox-panes[data-detail='true'] .inbox-detail {
+		animation: compact-forward var(--motion-view) var(--motion-ease);
+	}
+	.inbox-panes[data-detail='false'] .inbox-list {
+		animation: compact-back var(--motion-view) var(--motion-ease);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	/* INVARIANT: CSS owns every animation so preference changes apply even mid-transition. */
+	.inbox-sidebar,
+	.icon-button,
+	.message-row,
+	.search-field {
+		transition: none;
+	}
+	.icon-button:active:not(:disabled) {
+		transform: none;
+	}
+	.overview-content[data-message='true'],
+	.refresh-symbol.is-spinning,
+	.inbox-panes[data-detail='true'] .inbox-detail,
+	.inbox-panes[data-detail='false'] .inbox-list {
+		animation: none;
+	}
+}
