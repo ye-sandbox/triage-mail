@@ -7,9 +7,9 @@
 
 ## Active Task
 
-### 📌 Task [04.2]: Unified Inbox UI with 60fps Virtual Scrolling (`100k+` messages) & instant hybrid search (`apps/desktop`)
+### 📌 Task [04.3]: Sandboxed Email Viewer & On-Demand Attachment Downloader (`apps/desktop`)
 
-- **Description:** Build the Svelte 5 virtualized Unified Inbox and hybrid search bar using the typed IPC commands and sync channel completed in [04.1].
+- **Description:** Replace the selection overview with a secure message reader using the existing body and attachment IPC contracts.
 - **Systems Involved:** `apps/desktop`, existing `apps/desktop/src-tauri` IPC contracts
 - **Action Type:**
   - [ ] Read-only / Documentation
@@ -18,10 +18,11 @@
   *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
-- [ ] Virtualize the unified message list for `100k+` messages with bounded DOM size and a measured 60fps scrolling target.
-- [ ] Connect lexical, semantic and hybrid search to the established `SearchQueryDto` / `MessageRowDto` IPC payloads; preserve the storage query latency target of `<15ms`.
-- [ ] Consume `Channel<SyncProgressEvent>` updates and refresh authoritative data while preserving list selection and scroll position.
-- [ ] Use strict TypeScript and Svelte 5 Runes, with frontend behavior tests and the full repository Definition of Done.
+- [ ] Fetch selected message details with stale-request protection and accessible loading/error states.
+- [ ] Sanitize HTML using DOMPurify and render in an isolated `<iframe sandbox="">`, with strict CSP, normalized dark-mode CSS and remote tracking pixels blocked by default.
+- [ ] Download attachments only after an explicit user action through the established `BODY.PEEK` IPC command.
+- [ ] Preserve the Apple HIG direction, keyboard access, adaptive layout and strict Svelte 5 Runes.
+- [ ] Complete the full repository Definition of Done, atomic commit and task log.
 
 ---
 
@@ -40,6 +41,7 @@
 | [03.2] | Tier 2 Local CPU Embeddings (`fastembed-rs` / `ort`) background indexer with on-demand model cache in `$XDG_DATA_HOME/triage-mail/models` (`crates/triage-ai`) | `6ae5e3d` | 2026-10-30 |
 | [03.3] | Tier 3 Optional LLM Summarizer client (Local Ollama `127.0.0.1:11434` & BYOK providers) (`crates/triage-ai`) | `dee6a05` | 2026-10-30 |
 | [04.1] | Tauri v2 Typed IPC, Secret-Isolated Account Management, Durable Triage Outbox & Real-time Sync Channel Bridge | `ca79844` | 2026-10-30 |
+| [04.2] | Apple HIG-Informed Unified Inbox, Virtualized Message List, Typed Search & Sync Refresh | `16df93b` | 2026-10-30 |
 
 
 ### Validation ([04.1])
@@ -52,11 +54,29 @@
   installation or machine-specific repository configuration was added. Existing socket-based
   tests ran with loopback binding permitted. No live email providers were contacted.
 
+### Validation ([04.2])
+- Rust workspace check, tests (141 passed), formatting and Clippy (`-D warnings`): passed.
+- Frontend check (zero errors/warnings), unit/component tests (9 passed), Prettier and SPA build: passed.
+- Svelte runes invariant, tracked/new-file secret/PII scan and `git diff --check`: passed.
+- Tests cover stale search responses, wire-mode forwarding, debouncing, pagination overlap,
+  deferred sync refresh, selection retention, fixed error redaction, bounded DOM and scroll anchoring.
+- Browser QA exercised the actual adaptive inbox shell with 100,000 synthetic message summaries.
+  A temporary fixture advanced scrollTop by 40,000px per animation frame for 180 frames.
+  At a reported 1200×750 CSS viewport, 179 intervals measured median 16.7ms and p95 16.8ms
+  (approximately 60fps), with at most 18 mounted message rows. This is browser-fixture evidence,
+  not a native WebKit or all-hardware guarantee. The temporary fixture route was removed.
+- Desktop selection and compact list/detail/back navigation were verified in the browser.
+  The production route handles a non-Tauri browser without issuing native IPC calls.
+- Existing storage tests retain the `<15ms` hybrid-search target; no IPC/schema/core changes.
+- Loopback-only Rust mocks ran with socket binding permitted. Dependencies were installed from
+  cached packages; no live mail provider, model download or AI endpoint was contacted.
+- Recorded the Vite peer-snapshot/type mismatch and browser-resolution workaround in `k-007`.
+- No CLI flags, environment variables or documented validation commands changed.
+
 ---
 
 ## Backlog (Upcoming, in priority order)
 
-- [ ] **[04.3]** Sandboxed Email Viewer (`DOMPurify` + `<iframe sandbox="">` + normalized base dark-mode CSS + remote pixel blocker) & on-demand `BODY.PEEK` attachment downloader — `apps/desktop`
 - [ ] **[04.4]** Keyboard-driven Command Palette (Mark read/unread, Archive, Trash, Local Tags, One-Click Unsubscribe, IMAP flag sync) & Triage Badges UI — `apps/desktop`
 
 ---
