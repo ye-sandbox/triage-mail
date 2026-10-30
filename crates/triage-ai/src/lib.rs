@@ -10,6 +10,7 @@
 pub mod boleto;
 pub mod classifier;
 pub mod embeddings;
+pub mod llm;
 pub mod nfe;
 pub mod otp;
 pub mod pix;
@@ -24,6 +25,11 @@ pub use embeddings::{
     validate_model_name, BackgroundEmbeddingIndexer, EmbeddingDocument, IndexedEmbedding,
     LocalCpuEmbeddingProvider, ModelCacheManager, ModelFetcher, DEFAULT_EMBEDDING_DIMENSION,
     MODEL_ALL_MINILM_L6_V2, MODEL_BGE_SMALL_EN_V1_5, REQUIRED_MODEL_FILES,
+};
+pub use llm::{
+    build_user_prompt, truncate_utf8_chars, validate_llm_endpoint, HttpLlmSummarizer,
+    LlmClientConfig, LlmProviderConfig, RedactedApiKey, DEFAULT_LLM_TIMEOUT_SECS,
+    DEFAULT_MAX_INPUT_CHARS, DEFAULT_OLLAMA_ENDPOINT, DEFAULT_SUMMARY_SYSTEM_PROMPT,
 };
 pub use nfe::extract_nfe_keys;
 pub use otp::extract_otp;
