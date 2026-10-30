@@ -37,8 +37,8 @@
 ## Backlog (Upcoming, in priority order)
 
 - [ ] **[01.2]** SQLite WAL + Full-DB SQLCipher schema, migrations, configurable FTS5 index (default `unicode61 remove_diacritics 2`), `sqlite-vec` (`int8` quantized KNN + pre-filtering) & IMAP `UIDVALIDITY`/`MODSEQ` sync state — `crates/storage`
-- [ ] **[02.1]** RFC 5322 / MIME parser (`mail-parser`) with threading headers, `List-Unsubscribe-Post` (RFC 8058), & lazy attachment metadata — `crates/mail-engine`
-- [ ] **[02.2]** Agnostic `ImapConnector` with transparent multi-auth (App Passwords, OAuth2 Public PKCE, user-supplied BYO OAuth `client_id`/`client_secret`, Proton Bridge) & incremental `UIDVALIDITY`/`CONDSTORE` sync — `crates/mail-engine`
+- [ ] **[02.1]** Zero-copy RFC 5322 / MIME parser (Stalwart `mail-parser`) with threading headers (`Message-ID`, `In-Reply-To`, `References`), `List-Unsubscribe-Post` (RFC 8058), & lazy attachment part metadata — `crates/mail-engine`
+- [ ] **[02.2]** Agnostic `ImapConnector` with provider quirk normalization (`pimalaya/email-lib` patterns), transparent multi-auth (App Passwords, OAuth2 Public PKCE, user-supplied BYO OAuth `client_id`/`client_secret`, Proton Bridge) & incremental `UIDVALIDITY`/`CONDSTORE` sync — `crates/mail-engine`
 - [ ] **[02.3]** Real-time IMAP `IDLE` manager, adaptive background polling worker & RFC 8058 One-Click Unsubscribe HTTP POST executor — `crates/mail-engine`
 - [ ] **[03.1]** Tier 1 Deterministic Triage: Regex/heuristic extractors for 2FA/OTP, FEBRABAN Boletos (exact BRL amount & due date), Pix EMV/keys, NF-e metadata, Tracking codes, `List-Unsubscribe` (RFC 8058), and category classification — `crates/triage-ai`
 - [ ] **[03.2]** Tier 2 Local CPU Embeddings (`fastembed-rs` / `ort`) background indexer with on-demand model cache in `$XDG_DATA_HOME/triage-mail/models` — `crates/triage-ai`
