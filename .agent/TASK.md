@@ -7,9 +7,9 @@
 
 ## Active Task
 
-### 📌 Task [03.1]: Tier 1 Deterministic Triage: Regex/Heuristic Extractors for 2FA/OTP, FEBRABAN Boletos, Pix EMV/Keys, NF-e Metadata, Tracking Codes, RFC 8058 Unsubscribe & Category Classification (`crates/triage-ai`)
+### 📌 Task [03.2]: Tier 2 Local CPU Embeddings (`fastembed-rs` / `ort`) background indexer with on-demand model cache in `$XDG_DATA_HOME/triage-mail/models` (`crates/triage-ai`)
 
-- **Description:** Implement the deterministic Tier 1 Rust regex/heuristic extraction and classification pipeline for incoming emails: 2FA/OTP verification codes, FEBRABAN Boletos (47/48-digit *linha digitável* with modulo-10/11 checksum validation, exact BRL value, and due date calculation from the FEBRABAN base factor), Pix EMV Copy-and-Paste payloads (`000201...` with CRC16 validation) and Pix keys, Brazilian NF-e 44-digit access keys and invoice metadata, postal/courier tracking codes (Correios/international S10), RFC 8058 One-Click Unsubscribe badge surfacing, and deterministic category classification (`Urgent`, `Finance`, `Updates`, `Newsletters`, `Promotions`).
+- **Description:** Implement the Tier 2 local CPU ONNX embedding provider (`all-MiniLM-L6-v2` / `bge-small`) producing scalar-quantized `int8` vectors for SQLite `sqlite-vec` storage. Ensure model weights are downloaded lazily on demand to `$XDG_DATA_HOME/triage-mail/models` (never bundled in binary). Implement background batch embedding generation and `EmbeddingProvider` trait.
 - **Systems Involved:** `crates/triage-ai`
 - **Action Type:**
   - [ ] Read-only / Documentation
@@ -18,11 +18,10 @@
   *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
-- [ ] Implement `DeterministicTriage` extractor for 2FA/OTP codes with context keyword weighting and false-positive guards (ignoring years, postal codes, and hex colors).
-- [ ] Implement FEBRABAN Boleto extractor (47-digit bank boletos & 48-digit concessionária bills) extracting exact BRL amount (`centavos`) and due date (including post-2025 factor reset handling).
-- [ ] Implement Pix EMV (`BR.GOV.BCB.PIX` / `000201` payload + CRC-16/CCITT-FALSE verification), NF-e 44-digit access key, and Correios/S10 tracking code extractors.
-- [ ] Implement deterministic category classification and `TriageEventHook` notification contract.
-- [ ] Comprehensive unit and integration tests using synthetic RFC 2606 fixtures covering all extractors and edge cases.
+- [ ] Implement `EmbeddingProvider` for local CPU ONNX embeddings with `int8` scalar quantization output.
+- [ ] Model download and cache management rooted strictly at `$XDG_DATA_HOME/triage-mail/models`.
+- [ ] Offline fallback and graceful error handling when network is absent or models not cached.
+- [ ] Unit and integration tests with synthetic fixtures validating embedding dimensions and quantization.
 
 ---
 
@@ -37,12 +36,12 @@
 | [02.1] | Zero-Copy RFC 5322 / MIME Parser with Threading Headers, RFC 8058 & Lazy Attachment Metadata (`crates/mail-engine`) | `c808414` | 2026-10-30 |
 | [02.2] | Agnostic `ImapConnector` with Provider Quirk Normalization (`pimalaya`), Multi-Auth & Incremental `UIDVALIDITY`/`CONDSTORE` Sync (`crates/mail-engine`) | `8290883` | 2026-10-30 |
 | [02.3] | Real-time IMAP `IDLE` Manager, Adaptive Background Polling Worker & RFC 8058 One-Click Unsubscribe HTTP POST Executor (`crates/mail-engine`) | `f828829` | 2026-10-30 |
+| [03.1] | Tier 1 Deterministic Triage: Regex/Heuristic Extractors for 2FA/OTP, FEBRABAN Boletos, Pix, NF-e, Tracking & Classification (`crates/triage-ai`) | `0644f9e` | 2026-10-30 |
 
 ---
 
 ## Backlog (Upcoming, in priority order)
 
-- [ ] **[03.2]** Tier 2 Local CPU Embeddings (`fastembed-rs` / `ort`) background indexer with on-demand model cache in `$XDG_DATA_HOME/triage-mail/models` — `crates/triage-ai`
 - [ ] **[03.3]** Tier 3 Optional LLM Summarizer client (Local Ollama `127.0.0.1:11434` & BYOK providers) — `crates/triage-ai`
 - [ ] **[04.1]** Tauri v2 typed IPC commands & real-time sync `Channel` bridge — `apps/desktop/src-tauri`
 - [ ] **[04.2]** Unified Inbox UI with 60fps Virtual Scrolling (`100k+` messages) & instant hybrid search bar (`<15ms`) — `apps/desktop`
