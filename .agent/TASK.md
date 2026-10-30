@@ -7,9 +7,9 @@
 
 ## Active Task
 
-### 📌 Task [02.1]: Zero-Copy RFC 5322 / MIME Parser with Threading Headers, RFC 8058 & Lazy Attachment Part Metadata (`crates/mail-engine`)
+### 📌 Task [02.2]: Agnostic `ImapConnector` with Provider Quirk Normalization (`pimalaya`), Multi-Auth & Incremental `UIDVALIDITY`/`CONDSTORE` Sync (`crates/mail-engine`)
 
-- **Description:** Implement zero-copy email header and body parsing using Stalwart Labs' `mail-parser`. Extract threading headers (`Message-ID`, `In-Reply-To`, `References`), RFC 8058 One-Click unsubscribe metadata (`List-Unsubscribe`, `List-Unsubscribe-Post`), sender/recipient envelopes, plain-text/HTML bodies, and lazy attachment part metadata (MIME type, filename, size, `BODY.PEEK` section ID) without eagerly downloading binary payloads into memory.
+- **Description:** Implement the agnostic IMAP client transport implementing `ImapConnector` with provider quirk normalization inspired by `pimalaya/email-lib` (handling Gmail label/XOAUTH2 differences, Outlook CONDSTORE fallbacks, Proton Mail Bridge loopback TLS pinning), transparent multi-authentication (App Passwords, OAuth2 Public PKCE via `127.0.0.1` loopback listener, BYO OAuth credentials from `vault`), and incremental sync (`UIDVALIDITY`, `UIDNEXT`, `HIGHESTMODSEQ` / delta flag comparison).
 - **Systems Involved:** `crates/mail-engine`
 - **Action Type:**
   - [ ] Read-only / Documentation
@@ -18,11 +18,11 @@
   *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
-- [ ] Stalwart `mail-parser` integrated into `crates/mail-engine` with `#![forbid(unsafe_code)]`.
-- [ ] Zero-copy extraction of threading headers: RFC 5322 `Message-ID`, `In-Reply-To`, and multi-ID `References`.
-- [ ] Deterministic detection and extraction of RFC 8058 `List-Unsubscribe` URLs (mailto / https) and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`.
-- [ ] Lazy attachment part metadata extraction (`part_id`, `filename`, `content_type`, `size_bytes`, `content_id`, `is_inline`) without downloading binary bodies.
-- [ ] Comprehensive unit tests using synthetic RFC 2606 fixtures (`user@example.com`, `billing@example.org`) verifying header parsing, threading tree reconstruction, and multipart MIME extraction.
+- [ ] Implement `ImapConnector` transport over TLS 1.3 (`tokio-rustls`) with strict loopback validation for Proton Mail Bridge self-signed certificates.
+- [ ] Provider quirk normalization handling Gmail, Outlook, and generic RFC 3501/9051 servers (graceful fallback when `CONDSTORE` is absent).
+- [ ] Multi-auth support: App Passwords, OAuth2 Public PKCE (`127.0.0.1` loopback redirect listener), and user-provided BYO OAuth credentials retrieved from `vault`.
+- [ ] Incremental folder sync algorithm detecting `UIDVALIDITY` resets, fetching new messages via `UID`, and reconciling flag deltas (`MODSEQ` or `FLAGS`).
+- [ ] Integration and mock unit tests verifying handshake, authentication, and incremental sync state transitions with synthetic RFC 2606 addresses.
 
 ---
 
@@ -34,13 +34,13 @@
 | [00.1] | Workspace Scaffold & Core Crate Boundaries (`Cargo.toml` + `apps/desktop`) | `8ccaea0` | 2026-10-29 |
 | [01.1] | OS Keyring Integration & Argon2id/AES-GCM Fallback Vault Cipher (`crates/vault`) | `0259096` | 2026-10-29 |
 | [01.2] | SQLite WAL + Full-DB SQLCipher Schema, Migrations, Configurable FTS5 & sqlite-vec KNN (`crates/storage`) | `ecb7cad` | 2026-10-30 |
+| [02.1] | Zero-Copy RFC 5322 / MIME Parser with Threading Headers, RFC 8058 & Lazy Attachment Metadata (`crates/mail-engine`) | `c808414` | 2026-10-30 |
 
 ---
 
 ## Backlog (Upcoming, in priority order)
 
-- [ ] **[02.1]** Zero-copy RFC 5322 / MIME parser (Stalwart `mail-parser`) with threading headers (`Message-ID`, `In-Reply-To`, `References`), `List-Unsubscribe-Post` (RFC 8058), & lazy attachment part metadata — `crates/mail-engine`
-- [ ] **[02.2]** Agnostic `ImapConnector` with provider quirk normalization (`pimalaya/email-lib` patterns), transparent multi-auth (App Passwords, OAuth2 Public PKCE, user-supplied BYO OAuth `client_id`/`client_secret`, Proton Bridge) & incremental `UIDVALIDITY`/`CONDSTORE` sync — `crates/mail-engine`
+- [ ] **[02.3]** Real-time IMAP `IDLE` manager, adaptive background polling worker & RFC 8058 One-Click Unsubscribe HTTP POST executor — `crates/mail-engine`
 - [ ] **[02.3]** Real-time IMAP `IDLE` manager, adaptive background polling worker & RFC 8058 One-Click Unsubscribe HTTP POST executor — `crates/mail-engine`
 - [ ] **[03.1]** Tier 1 Deterministic Triage: Regex/heuristic extractors for 2FA/OTP, FEBRABAN Boletos (exact BRL amount & due date), Pix EMV/keys, NF-e metadata, Tracking codes, `List-Unsubscribe` (RFC 8058), and category classification — `crates/triage-ai`
 - [ ] **[03.2]** Tier 2 Local CPU Embeddings (`fastembed-rs` / `ort`) background indexer with on-demand model cache in `$XDG_DATA_HOME/triage-mail/models` — `crates/triage-ai`
