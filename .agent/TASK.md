@@ -7,10 +7,10 @@
 
 ## Active Task
 
-### 📌 Task [03.3]: Tier 3 Optional LLM Summarizer client (Local Ollama `127.0.0.1:11434` & BYOK providers) (`crates/triage-ai`)
+### 📌 Task [04.1]: Tauri v2 typed IPC commands & real-time sync `Channel` bridge (`apps/desktop/src-tauri`)
 
-- **Description:** Implement the Tier 3 optional generative LLM summarizer (`LlmSummarizer` trait) supporting local Ollama (`http://127.0.0.1:11434`) and explicit user-configured BYOK OpenAI-compatible HTTP endpoints. Enforce strict opt-in execution (zero unsolicited background calls), SSRF/endpoint validation, timeout controls, and PII-safe error reporting.
-- **Systems Involved:** `crates/triage-ai`
+- **Description:** Implement the typed Tauri v2 IPC command handlers (`cmd_list_accounts`, `cmd_add_account`, `cmd_search_messages`, `cmd_triage_action`, `cmd_get_message_body`, `cmd_fetch_attachment`) and the non-blocking `Channel<SyncProgressEvent>` streaming bridge connecting `crates/vault`, `crates/storage`, `crates/mail-engine`, and `crates/triage-ai` to the desktop frontend.
+- **Systems Involved:** `apps/desktop/src-tauri`, `crates/vault`, `crates/storage`, `crates/mail-engine`, `crates/triage-ai`
 - **Action Type:**
   - [ ] Read-only / Documentation
   - [x] Source code changes
@@ -18,10 +18,10 @@
   *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
-- [ ] Implement `LlmSummarizer` for local Ollama (`http://127.0.0.1:11434`) and explicit BYOK OpenAI-compatible HTTP endpoints.
-- [ ] Enforce explicit opt-in policy and endpoint safety validation (reject insecure non-loopback HTTP).
-- [ ] Timeout handling, payload truncation bounds, and redacted secret handling (`Debug`/`Display`).
-- [ ] Unit and integration tests with local mock HTTP servers validating Ollama and BYOK summarization.
+- [ ] Implement typed IPC commands (`cmd_list_accounts`, `cmd_add_account`, `cmd_search_messages`, `cmd_triage_action`, `cmd_get_message_body`, `cmd_fetch_attachment`) matching the contracts in `.agent/NOTES.md`.
+- [ ] Ensure secrets in `cmd_add_account` are stored directly in `vault` (`SecretStore`) and never returned to the UI.
+- [ ] Implement `SyncProgressEvent` streaming bridge (`SyncEventSink` / `TriageEventHook`) for non-blocking UI updates.
+- [ ] Unit and integration tests verifying account management, hybrid search IPC, triage mutations, lazy attachment retrieval, and secret isolation.
 
 ---
 
@@ -38,12 +38,12 @@
 | [02.3] | Real-time IMAP `IDLE` Manager, Adaptive Background Polling Worker & RFC 8058 One-Click Unsubscribe HTTP POST Executor (`crates/mail-engine`) | `f828829` | 2026-10-30 |
 | [03.1] | Tier 1 Deterministic Triage: Regex/Heuristic Extractors for 2FA/OTP, FEBRABAN Boletos, Pix, NF-e, Tracking & Classification (`crates/triage-ai`) | `0644f9e` | 2026-10-30 |
 | [03.2] | Tier 2 Local CPU Embeddings (`fastembed-rs` / `ort`) background indexer with on-demand model cache in `$XDG_DATA_HOME/triage-mail/models` (`crates/triage-ai`) | `6ae5e3d` | 2026-10-30 |
+| [03.3] | Tier 3 Optional LLM Summarizer client (Local Ollama `127.0.0.1:11434` & BYOK providers) (`crates/triage-ai`) | `dee6a05` | 2026-10-30 |
 
 ---
 
 ## Backlog (Upcoming, in priority order)
 
-- [ ] **[04.1]** Tauri v2 typed IPC commands & real-time sync `Channel` bridge — `apps/desktop/src-tauri`
 - [ ] **[04.2]** Unified Inbox UI with 60fps Virtual Scrolling (`100k+` messages) & instant hybrid search bar (`<15ms`) — `apps/desktop`
 - [ ] **[04.3]** Sandboxed Email Viewer (`DOMPurify` + `<iframe sandbox="">` + normalized base dark-mode CSS + remote pixel blocker) & on-demand `BODY.PEEK` attachment downloader — `apps/desktop`
 - [ ] **[04.4]** Keyboard-driven Command Palette (Mark read/unread, Archive, Trash, Local Tags, One-Click Unsubscribe, IMAP flag sync) & Triage Badges UI — `apps/desktop`
