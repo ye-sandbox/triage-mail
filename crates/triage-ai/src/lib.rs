@@ -7,10 +7,23 @@
 //!   cached on demand in the user's local data directory (`$XDG_DATA_HOME/triage-mail/models`).
 //! - Tier 3 (Optional Generative LLM): Local Ollama (`http://127.0.0.1:11434`) or explicit BYOK.
 
+pub mod boleto;
+pub mod classifier;
+pub mod nfe;
+pub mod otp;
+pub mod pix;
+pub mod tracking;
+
 use std::path::PathBuf;
 
+pub use boleto::{extract_boletos, modulo10, modulo11_barcode, BoletoDetails};
+pub use classifier::classify_message;
+pub use nfe::extract_nfe_keys;
+pub use otp::extract_otp;
+pub use pix::{compute_crc16_ccitt_false, extract_pix_payload};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+pub use tracking::{extract_tracking_codes, TrackingDetails};
 
 /// Errors returned by deterministic extractors, ONNX embedding providers, or optional LLM clients.
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -90,6 +103,73 @@ pub trait DeterministicTriage: Send + Sync {
     ) -> DeterministicTriageResult;
 }
 
+/// Default Tier 1 deterministic triage pipeline implementation.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct DefaultDeterministicTriage;
+
+impl DefaultDeterministicTriage {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl DeterministicTriage for DefaultDeterministicTriage {
+    fn analyze(
+        &self,
+        subject: &str,
+        sender: &str,
+        body_text: &str,
+        has_rfc8058_one_click: bool,
+    ) -> DeterministicTriageResult {
+        let mut badges = Vec::new();
+
+        // 1. Surface RFC 8058 / Unsubscribe badge
+        if has_rfc8058_one_click {
+            badges.push(TriageBadge::UnsubscribeAvailable {
+                supports_one_click: true,
+            });
+        }
+
+        // 2. Extract 2FA / OTP
+        if let Some(code) = extract_otp(subject, body_text) {
+            badges.push(TriageBadge::OtpCode { code });
+        }
+
+        // 3. Extract FEBRABAN Boletos
+        let combined_text = format!("{subject}\n{body_text}");
+        for boleto in extract_boletos(&combined_text) {
+            badges.push(TriageBadge::FebrabanBoleto {
+                digitable_line: boleto.digitable_line,
+                amount_cents: boleto.amount_cents,
+                due_date_iso: boleto.due_date_iso,
+            });
+        }
+
+        // 4. Extract Pix payloads / keys
+        if let Some(payload) = extract_pix_payload(&combined_text) {
+            badges.push(TriageBadge::PixPayload { payload });
+        }
+
+        // 5. Extract NF-e access keys
+        for access_key in extract_nfe_keys(&combined_text) {
+            badges.push(TriageBadge::NfeInvoice { access_key });
+        }
+
+        // 6. Extract Tracking codes
+        for tracking in extract_tracking_codes(&combined_text) {
+            badges.push(TriageBadge::TrackingCode {
+                carrier: tracking.carrier,
+                code: tracking.code,
+            });
+        }
+
+        // 7. Deterministic category classification
+        let category = classify_message(subject, sender, body_text, &badges, has_rfc8058_one_click);
+
+        DeterministicTriageResult { category, badges }
+    }
+}
+
 /// Tier 2 local CPU ONNX embedding provider contract (`int8` quantized vector output for `sqlite-vec`).
 pub trait EmbeddingProvider: Send + Sync {
     /// Generates a scalar-quantized `int8` embedding vector for semantic indexing or query matching.
@@ -112,6 +192,20 @@ pub trait TriageEventHook: Send + Sync {
     ) -> Result<(), TriageError>;
 }
 
+/// Default no-op post-triage observer implementation.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct DefaultTriageEventHook;
+
+impl TriageEventHook for DefaultTriageEventHook {
+    fn on_message_triaged(
+        &self,
+        _message_id: &str,
+        _result: &DeterministicTriageResult,
+    ) -> Result<(), TriageError> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,5 +218,32 @@ mod tests {
         );
         assert_eq!(cfg.model_name, "all-MiniLM-L6-v2");
         assert_eq!(cfg.cache_dir, PathBuf::from("/tmp/triage-mail-test/models"));
+    }
+
+    #[test]
+    fn default_triage_pipeline_extracts_badges_and_classifies_security() {
+        let triage = DefaultDeterministicTriage::new();
+        let result = triage.analyze(
+            "Código de verificação para login",
+            "security@example.com",
+            "Olá! Use o código de verificação: 582914 para autenticar seu dispositivo.",
+            false,
+        );
+
+        assert_eq!(result.category, TriageCategory::Security);
+        assert_eq!(
+            result.badges,
+            vec![TriageBadge::OtpCode {
+                code: "582914".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn default_triage_event_hook_executes_successfully() {
+        let hook = DefaultTriageEventHook;
+        let triage = DefaultDeterministicTriage::new();
+        let result = triage.analyze("Hello", "friend@example.org", "Meeting tomorrow", false);
+        assert!(hook.on_message_triaged("msg-123", &result).is_ok());
     }
 }
