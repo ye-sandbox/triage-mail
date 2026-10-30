@@ -14,8 +14,7 @@
 - **Action Type:**
   - [ ] Read-only / Documentation
   - [x] Source code changes
-- **Status:** READY FOR PLANNING
-  *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
+- **Status:** RUNNING
 
 ### Acceptance Criteria
 - [ ] Full-database SQLCipher encryption initialized with key material derived from `crates/vault`.

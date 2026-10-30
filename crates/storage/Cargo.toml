@@ -11,6 +11,11 @@ unsafe_code = "deny"
 all = { level = "deny", priority = -1 }
 
 [dependencies]
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl", "vtab"] }
 serde = { workspace = true }
+sqlite-vec = "0.1.9"
 thiserror = { workspace = true }
 vault = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
