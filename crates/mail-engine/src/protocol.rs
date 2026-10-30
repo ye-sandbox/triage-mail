@@ -32,6 +32,30 @@ pub struct UidFlags {
     pub flags: Vec<String>,
 }
 
+/// Real-time untagged notification received while a session is in RFC 2177 `IDLE` state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IdleNotification {
+    /// Mailbox message count changed (`* <n> EXISTS`).
+    Exists(u32),
+    /// A message sequence number was expunged (`* <n> EXPUNGE`).
+    Expunge(u32),
+    /// Flags changed for a sequence number (`* <n> FETCH ...`).
+    FlagsChanged(u32),
+    /// Other untagged server line received during `IDLE`.
+    Untagged(String),
+}
+
+/// Outcome of waiting on an active `IDLE` stream up to the heartbeat renewal deadline.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IdleWaitOutcome {
+    /// Server pushed an untagged mailbox change notification.
+    ServerEvent(IdleNotification),
+    /// The 14-minute heartbeat timer elapsed without server events; caller should send `DONE` -> `IDLE`.
+    HeartbeatTimeout,
+    /// Server sent `* BYE` terminating the connection.
+    ServerDisconnect(String),
+}
+
 /// Raw message parts fetched from the IMAP server.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RawFetchedMessage {
@@ -486,6 +510,99 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
 
         Ok(bytes)
     }
+
+    /// Enters RFC 2177 `IDLE` mode and returns the active command tag once `+` continuation is received.
+    pub async fn enter_idle(&mut self) -> Result<String, EngineError> {
+        let tag = self.next_tag();
+        let wire_command = format!("{} IDLE\r\n", tag);
+
+        self.stream
+            .write_all(wire_command.as_bytes())
+            .await
+            .map_err(|e| EngineError::ImapProtocol(format!("failed sending IDLE command: {e}")))?;
+        self.stream
+            .flush()
+            .await
+            .map_err(|e| EngineError::ImapProtocol(format!("failed flushing IDLE command: {e}")))?;
+
+        loop {
+            let line = self.read_crlf_line().await?;
+            if line.starts_with('+') {
+                return Ok(tag);
+            }
+            if line.starts_with(&tag) {
+                return Err(EngineError::ImapProtocol(format!(
+                    "server rejected IDLE command: {line}"
+                )));
+            }
+        }
+    }
+
+    /// Waits for an untagged server notification during `IDLE` or returns `HeartbeatTimeout`
+    /// when `heartbeat_timeout` elapses (default 14 minutes per `k-002` NAT/Outlook invariant).
+    pub async fn wait_idle_event_or_timeout(
+        &mut self,
+        heartbeat_timeout: std::time::Duration,
+    ) -> Result<IdleWaitOutcome, EngineError> {
+        match tokio::time::timeout(heartbeat_timeout, self.read_crlf_line()).await {
+            Err(_elapsed) => Ok(IdleWaitOutcome::HeartbeatTimeout),
+            Ok(Err(e)) => Err(e),
+            Ok(Ok(line)) => Ok(parse_idle_untagged_line(&line)),
+        }
+    }
+
+    /// Sends `DONE\r\n` to terminate RFC 2177 `IDLE` mode and waits for the tagged `OK` completion.
+    pub async fn exit_idle(&mut self, idle_tag: &str) -> Result<(), EngineError> {
+        self.stream
+            .write_all(b"DONE\r\n")
+            .await
+            .map_err(|e| EngineError::ImapProtocol(format!("failed sending DONE command: {e}")))?;
+        self.stream
+            .flush()
+            .await
+            .map_err(|e| EngineError::ImapProtocol(format!("failed flushing DONE command: {e}")))?;
+
+        loop {
+            let line = self.read_crlf_line().await?;
+            if line.starts_with(idle_tag) {
+                let parts: Vec<&str> = line.splitn(3, ' ').collect();
+                if parts.len() >= 2 && parts[1] == "OK" {
+                    return Ok(());
+                }
+                return Err(EngineError::ImapProtocol(format!(
+                    "IDLE termination returned non-OK status: {line}"
+                )));
+            }
+        }
+    }
+}
+
+/// Parses an untagged server line emitted while in `IDLE` mode.
+pub fn parse_idle_untagged_line(line: &str) -> IdleWaitOutcome {
+    let trimmed = line.trim();
+    if trimmed.starts_with("* BYE") || trimmed.starts_with("* bye") {
+        return IdleWaitOutcome::ServerDisconnect(trimmed.to_string());
+    }
+
+    if let Some(rest) = trimmed.strip_prefix("* ") {
+        let mut parts = rest.split_whitespace();
+        if let (Some(first), Some(second)) = (parts.next(), parts.next()) {
+            if let Ok(seq) = first.parse::<u32>() {
+                match second.to_ascii_uppercase().as_str() {
+                    "EXISTS" => return IdleWaitOutcome::ServerEvent(IdleNotification::Exists(seq)),
+                    "EXPUNGE" => {
+                        return IdleWaitOutcome::ServerEvent(IdleNotification::Expunge(seq))
+                    }
+                    "FETCH" => {
+                        return IdleWaitOutcome::ServerEvent(IdleNotification::FlagsChanged(seq))
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    IdleWaitOutcome::ServerEvent(IdleNotification::Untagged(trimmed.to_string()))
 }
 
 /// Helper extracting trailing literal length `{<size>}` if line ends with a literal marker.
