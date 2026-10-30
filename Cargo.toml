@@ -1,0 +1,31 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/vault",
+    "crates/storage",
+    "crates/mail-engine",
+    "crates/triage-ai",
+    "apps/desktop/src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+authors = ["triage-mail contributors"]
+repository = "https://github.com/ye-sandbox/triage-mail"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+vault = { path = "crates/vault" }
+storage = { path = "crates/storage" }
+mail-engine = { path = "crates/mail-engine" }
+triage-ai = { path = "crates/triage-ai" }

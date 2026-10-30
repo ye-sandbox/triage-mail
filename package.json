@@ -1,0 +1,11 @@
+{
+  "name": "triage-mail-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "check": "pnpm --filter desktop check",
+    "test": "pnpm --filter desktop test",
+    "build": "pnpm --filter desktop build"
+  }
+}
