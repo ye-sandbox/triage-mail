@@ -9,6 +9,7 @@
 
 pub mod boleto;
 pub mod classifier;
+pub mod embeddings;
 pub mod nfe;
 pub mod otp;
 pub mod pix;
@@ -18,6 +19,12 @@ use std::path::PathBuf;
 
 pub use boleto::{extract_boletos, modulo10, modulo11_barcode, BoletoDetails};
 pub use classifier::classify_message;
+pub use embeddings::{
+    cosine_similarity_int8, l2_normalize, quantize_f32_to_int8, resolve_xdg_data_dir,
+    validate_model_name, BackgroundEmbeddingIndexer, EmbeddingDocument, IndexedEmbedding,
+    LocalCpuEmbeddingProvider, ModelCacheManager, ModelFetcher, DEFAULT_EMBEDDING_DIMENSION,
+    MODEL_ALL_MINILM_L6_V2, MODEL_BGE_SMALL_EN_V1_5, REQUIRED_MODEL_FILES,
+};
 pub use nfe::extract_nfe_keys;
 pub use otp::extract_otp;
 pub use pix::{compute_crc16_ccitt_false, extract_pix_payload};
