@@ -1,0 +1,673 @@
+# migration_ms=1310.735744,bytes_before=216391680,bytes_after=262643712,indexed=100000
+# cipher=4.5.7 community, sqlite=3.45.3, vec=v0.1.9
+# cache_profile,2048,vector-topk,0,116.355798,201,VmRSS:	   81472 kB
+# cache_profile,2048,vector-topk,1,117.296220,201,VmRSS:	   81472 kB
+# cache_profile,2048,vector-topk,2,113.671212,201,VmRSS:	   81472 kB
+# cache_profile,2048,vector-topk,3,107.059518,201,VmRSS:	   81472 kB
+# cache_profile,2048,vector-topk,4,107.917264,201,VmRSS:	   81472 kB
+# cache_profile,2048,vector-topk,5,118.754405,201,VmRSS:	   81472 kB
+# cache_profile,2048,vector-topk,6,119.360099,201,VmRSS:	   81472 kB
+# cache_profile,2048,vector-topk,7,116.143095,201,VmRSS:	   81472 kB
+# cache_profile,2048,fts-rank,0,34.560937,200,VmRSS:	   81664 kB
+# cache_profile,2048,fts-rank,1,31.424743,200,VmRSS:	   81664 kB
+# cache_profile,2048,fts-rank,2,30.721248,200,VmRSS:	   81664 kB
+# cache_profile,2048,fts-rank,3,31.289285,200,VmRSS:	   81664 kB
+# cache_profile,2048,fts-rank,4,30.948618,200,VmRSS:	   81664 kB
+# cache_profile,2048,fts-rank,5,30.880082,200,VmRSS:	   81664 kB
+# cache_profile,2048,fts-rank,6,30.425300,200,VmRSS:	   81664 kB
+# cache_profile,2048,fts-rank,7,30.149152,200,VmRSS:	   81664 kB
+# cache_profile,2048,summary-hydration,0,0.543317,200,VmRSS:	   81664 kB
+# cache_profile,2048,summary-hydration,1,0.017464,200,VmRSS:	   81664 kB
+# cache_profile,2048,summary-hydration,2,0.014699,200,VmRSS:	   81664 kB
+# cache_profile,2048,summary-hydration,3,0.014629,200,VmRSS:	   81664 kB
+# cache_profile,2048,summary-hydration,4,0.014608,200,VmRSS:	   81664 kB
+# cache_profile,2048,summary-hydration,5,0.014578,200,VmRSS:	   81664 kB
+# cache_profile,2048,summary-hydration,6,0.019278,200,VmRSS:	   81664 kB
+# cache_profile,2048,summary-hydration,7,0.015861,200,VmRSS:	   81664 kB
+# cache_profile,16384,vector-topk,0,109.459669,201,VmRSS:	   81664 kB
+# cache_profile,16384,vector-topk,1,105.476076,201,VmRSS:	   81664 kB
+# cache_profile,16384,vector-topk,2,107.355854,201,VmRSS:	   81664 kB
+# cache_profile,16384,vector-topk,3,107.737660,201,VmRSS:	   81664 kB
+# cache_profile,16384,vector-topk,4,108.493174,201,VmRSS:	   81664 kB
+# cache_profile,16384,vector-topk,5,109.435649,201,VmRSS:	   81664 kB
+# cache_profile,16384,vector-topk,6,107.447686,201,VmRSS:	   81664 kB
+# cache_profile,16384,vector-topk,7,107.335027,201,VmRSS:	   81664 kB
+# cache_profile,16384,fts-rank,0,33.563107,200,VmRSS:	   81664 kB
+# cache_profile,16384,fts-rank,1,29.969087,200,VmRSS:	   81664 kB
+# cache_profile,16384,fts-rank,2,30.138220,200,VmRSS:	   81664 kB
+# cache_profile,16384,fts-rank,3,29.875856,200,VmRSS:	   81664 kB
+# cache_profile,16384,fts-rank,4,29.945622,200,VmRSS:	   81664 kB
+# cache_profile,16384,fts-rank,5,29.921177,200,VmRSS:	   81664 kB
+# cache_profile,16384,fts-rank,6,30.258716,200,VmRSS:	   81664 kB
+# cache_profile,16384,fts-rank,7,30.632794,200,VmRSS:	   81664 kB
+# cache_profile,16384,summary-hydration,0,0.581481,200,VmRSS:	   81664 kB
+# cache_profile,16384,summary-hydration,1,0.023425,200,VmRSS:	   81664 kB
+# cache_profile,16384,summary-hydration,2,0.015460,200,VmRSS:	   81664 kB
+# cache_profile,16384,summary-hydration,3,0.014709,200,VmRSS:	   81664 kB
+# cache_profile,16384,summary-hydration,4,0.014428,200,VmRSS:	   81664 kB
+# cache_profile,16384,summary-hydration,5,0.014398,200,VmRSS:	   81664 kB
+# cache_profile,16384,summary-hydration,6,0.014328,200,VmRSS:	   81664 kB
+# cache_profile,16384,summary-hydration,7,0.014267,200,VmRSS:	   81664 kB
+# cache_profile,65536,vector-topk,0,110.895714,201,VmRSS:	   81664 kB
+# cache_profile,65536,vector-topk,1,40.470295,201,VmRSS:	   81664 kB
+# cache_profile,65536,vector-topk,2,40.516665,201,VmRSS:	   81664 kB
+# cache_profile,65536,vector-topk,3,41.420918,201,VmRSS:	   81664 kB
+# cache_profile,65536,vector-topk,4,41.222364,201,VmRSS:	   81664 kB
+# cache_profile,65536,vector-topk,5,42.523120,201,VmRSS:	   81664 kB
+# cache_profile,65536,vector-topk,6,44.191515,201,VmRSS:	   81664 kB
+# cache_profile,65536,vector-topk,7,42.234248,201,VmRSS:	   81664 kB
+# cache_profile,65536,fts-rank,0,34.911647,200,VmRSS:	   81664 kB
+# cache_profile,65536,fts-rank,1,30.487216,200,VmRSS:	   81664 kB
+# cache_profile,65536,fts-rank,2,30.531401,200,VmRSS:	   81664 kB
+# cache_profile,65536,fts-rank,3,33.055625,200,VmRSS:	   81664 kB
+# cache_profile,65536,fts-rank,4,32.497426,200,VmRSS:	   81664 kB
+# cache_profile,65536,fts-rank,5,31.214414,200,VmRSS:	   81664 kB
+# cache_profile,65536,fts-rank,6,30.449758,200,VmRSS:	   81664 kB
+# cache_profile,65536,fts-rank,7,31.494746,200,VmRSS:	   81664 kB
+# cache_profile,65536,summary-hydration,0,0.561032,200,VmRSS:	   81664 kB
+# cache_profile,65536,summary-hydration,1,0.026802,200,VmRSS:	   81664 kB
+# cache_profile,65536,summary-hydration,2,0.015460,200,VmRSS:	   81664 kB
+# cache_profile,65536,summary-hydration,3,0.014889,200,VmRSS:	   81664 kB
+# cache_profile,65536,summary-hydration,4,0.014869,200,VmRSS:	   81664 kB
+# cache_profile,65536,summary-hydration,5,0.014658,200,VmRSS:	   81664 kB
+# cache_profile,65536,summary-hydration,6,0.014699,200,VmRSS:	   81664 kB
+# cache_profile,65536,summary-hydration,7,0.014649,200,VmRSS:	   81664 kB
+# rows=100000, dimensions=384, database_bytes=262643712
+case,cache,sample,ms,results
+Lexical-rare,reopened,0,6.296654,200
+Lexical-rare,reopened,1,6.183381,200
+Lexical-rare,reopened,2,6.224862,200
+Lexical-rare,reopened,3,5.710611,200
+Lexical-rare,reopened,4,5.951380,200
+Lexical-rare,warm,0,0.847849,200
+Lexical-rare,warm,1,0.805888,200
+Lexical-rare,warm,2,0.895032,200
+Lexical-rare,warm,3,0.853962,200
+Lexical-rare,warm,4,0.877116,200
+Lexical-rare,warm,5,0.797070,200
+Lexical-rare,warm,6,0.847829,200
+Lexical-rare,warm,7,0.831999,200
+Lexical-rare,warm,8,0.828422,200
+Lexical-rare,warm,9,0.820296,200
+Lexical-rare,warm,10,0.850886,200
+Lexical-rare,warm,11,0.816309,200
+Lexical-rare,warm,12,0.784828,200
+Lexical-rare,warm,13,0.789757,200
+Lexical-rare,warm,14,0.820897,200
+Lexical-rare,warm,15,0.827430,200
+Lexical-rare,warm,16,0.863110,200
+Lexical-rare,warm,17,0.793193,200
+Lexical-rare,warm,18,0.789757,200
+Lexical-rare,warm,19,0.837890,200
+Lexical-rare,warm,20,1.186284,200
+Lexical-rare,warm,21,1.094328,200
+Lexical-rare,warm,22,0.821528,200
+Lexical-rare,warm,23,0.879311,200
+Lexical-rare,warm,24,0.819615,200
+Lexical-rare,warm,25,0.831678,200
+Lexical-rare,warm,26,0.772904,200
+Lexical-rare,warm,27,0.752754,200
+Lexical-rare,warm,28,0.798002,200
+Lexical-rare,warm,29,0.823022,200
+Lexical-common,reopened,0,43.700049,200
+Lexical-common,reopened,1,39.673012,200
+Lexical-common,reopened,2,42.127045,200
+Lexical-common,reopened,3,40.019477,200
+Lexical-common,reopened,4,45.750019,200
+Lexical-common,warm,0,32.755810,200
+Lexical-common,warm,1,33.235315,200
+Lexical-common,warm,2,33.819216,200
+Lexical-common,warm,3,34.853391,200
+Lexical-common,warm,4,32.022789,200
+Lexical-common,warm,5,32.617845,200
+Lexical-common,warm,6,40.867804,200
+Lexical-common,warm,7,38.127447,200
+Lexical-common,warm,8,32.128397,200
+Lexical-common,warm,9,31.068236,200
+Lexical-common,warm,10,33.685086,200
+Lexical-common,warm,11,32.213219,200
+Lexical-common,warm,12,31.944567,200
+Lexical-common,warm,13,31.273401,200
+Lexical-common,warm,14,31.542237,200
+Lexical-common,warm,15,31.257184,200
+Lexical-common,warm,16,31.618226,200
+Lexical-common,warm,17,31.929843,200
+Lexical-common,warm,18,32.578869,200
+Lexical-common,warm,19,31.681394,200
+Lexical-common,warm,20,30.952195,200
+Lexical-common,warm,21,32.177820,200
+Lexical-common,warm,22,31.161528,200
+Lexical-common,warm,23,31.314970,200
+Lexical-common,warm,24,31.911788,200
+Lexical-common,warm,25,32.326034,200
+Lexical-common,warm,26,31.443971,200
+Lexical-common,warm,27,31.558585,200
+Lexical-common,warm,28,31.329513,200
+Lexical-common,warm,29,31.068577,200
+Lexical-filtered,reopened,0,34.451013,200
+Lexical-filtered,reopened,1,35.289132,200
+Lexical-filtered,reopened,2,35.191163,200
+Lexical-filtered,reopened,3,34.193843,200
+Lexical-filtered,reopened,4,34.101371,200
+Lexical-filtered,warm,0,27.162811,200
+Lexical-filtered,warm,1,25.868634,200
+Lexical-filtered,warm,2,25.572111,200
+Lexical-filtered,warm,3,25.853570,200
+Lexical-filtered,warm,4,25.724732,200
+Lexical-filtered,warm,5,26.203486,200
+Lexical-filtered,warm,6,25.644807,200
+Lexical-filtered,warm,7,25.779000,200
+Lexical-filtered,warm,8,25.799689,200
+Lexical-filtered,warm,9,27.792425,200
+Lexical-filtered,warm,10,30.885091,200
+Lexical-filtered,warm,11,27.985864,200
+Lexical-filtered,warm,12,28.128161,200
+Lexical-filtered,warm,13,29.600404,200
+Lexical-filtered,warm,14,27.202522,200
+Lexical-filtered,warm,15,26.328080,200
+Lexical-filtered,warm,16,26.397684,200
+Lexical-filtered,warm,17,25.442794,200
+Lexical-filtered,warm,18,25.784731,200
+Lexical-filtered,warm,19,26.169207,200
+Lexical-filtered,warm,20,26.043455,200
+Lexical-filtered,warm,21,26.006947,200
+Lexical-filtered,warm,22,26.396707,200
+Lexical-filtered,warm,23,25.851104,200
+Lexical-filtered,warm,24,25.784316,200
+Lexical-filtered,warm,25,26.535540,200
+Lexical-filtered,warm,26,26.214798,200
+Lexical-filtered,warm,27,27.474257,200
+Lexical-filtered,warm,28,29.547429,200
+Lexical-filtered,warm,29,26.603787,200
+Lexical-page2,reopened,0,36.269110,200
+Lexical-page2,reopened,1,36.551210,200
+Lexical-page2,reopened,2,36.605309,200
+Lexical-page2,reopened,3,36.697589,200
+Lexical-page2,reopened,4,36.397650,200
+Lexical-page2,warm,0,30.938708,200
+Lexical-page2,warm,1,30.996562,200
+Lexical-page2,warm,2,31.151799,200
+Lexical-page2,warm,3,31.207511,200
+Lexical-page2,warm,4,31.345160,200
+Lexical-page2,warm,5,31.356050,200
+Lexical-page2,warm,6,30.915394,200
+Lexical-page2,warm,7,33.611429,200
+Lexical-page2,warm,8,31.405280,200
+Lexical-page2,warm,9,31.418357,200
+Lexical-page2,warm,10,33.530897,200
+Lexical-page2,warm,11,32.994925,200
+Lexical-page2,warm,12,32.607727,200
+Lexical-page2,warm,13,30.904671,200
+Lexical-page2,warm,14,36.202521,200
+Lexical-page2,warm,15,32.126016,200
+Lexical-page2,warm,16,33.115907,200
+Lexical-page2,warm,17,31.335737,200
+Lexical-page2,warm,18,30.938732,200
+Lexical-page2,warm,19,30.963107,200
+Lexical-page2,warm,20,31.072470,200
+Lexical-page2,warm,21,30.830316,200
+Lexical-page2,warm,22,31.184729,200
+Lexical-page2,warm,23,31.001530,200
+Lexical-page2,warm,24,31.323939,200
+Lexical-page2,warm,25,31.152084,200
+Lexical-page2,warm,26,30.954669,200
+Lexical-page2,warm,27,31.480885,200
+Lexical-page2,warm,28,30.589558,200
+Lexical-page2,warm,29,30.600040,200
+Semantic-rare,reopened,0,112.310302,200
+Semantic-rare,reopened,1,113.562989,200
+Semantic-rare,reopened,2,111.708226,200
+Semantic-rare,reopened,3,114.360137,200
+Semantic-rare,reopened,4,111.411749,200
+Semantic-rare,warm,0,41.905933,200
+Semantic-rare,warm,1,42.637697,200
+Semantic-rare,warm,2,41.985638,200
+Semantic-rare,warm,3,41.419600,200
+Semantic-rare,warm,4,41.591737,200
+Semantic-rare,warm,5,42.437939,200
+Semantic-rare,warm,6,41.424176,200
+Semantic-rare,warm,7,43.975886,200
+Semantic-rare,warm,8,43.157061,200
+Semantic-rare,warm,9,42.769875,200
+Semantic-rare,warm,10,42.507735,200
+Semantic-rare,warm,11,43.395777,200
+Semantic-rare,warm,12,41.723093,200
+Semantic-rare,warm,13,43.712794,200
+Semantic-rare,warm,14,44.468132,200
+Semantic-rare,warm,15,44.095399,200
+Semantic-rare,warm,16,42.586768,200
+Semantic-rare,warm,17,42.357848,200
+Semantic-rare,warm,18,42.039925,200
+Semantic-rare,warm,19,41.316600,200
+Semantic-rare,warm,20,42.287681,200
+Semantic-rare,warm,21,43.192506,200
+Semantic-rare,warm,22,43.280052,200
+Semantic-rare,warm,23,42.833859,200
+Semantic-rare,warm,24,43.792473,200
+Semantic-rare,warm,25,43.597684,200
+Semantic-rare,warm,26,42.372321,200
+Semantic-rare,warm,27,43.083575,200
+Semantic-rare,warm,28,42.892964,200
+Semantic-rare,warm,29,42.820189,200
+Semantic-common,reopened,0,112.448488,200
+Semantic-common,reopened,1,113.591229,200
+Semantic-common,reopened,2,114.840529,200
+Semantic-common,reopened,3,112.260305,200
+Semantic-common,reopened,4,115.505666,200
+Semantic-common,warm,0,43.868682,200
+Semantic-common,warm,1,42.595375,200
+Semantic-common,warm,2,44.183510,200
+Semantic-common,warm,3,42.464514,200
+Semantic-common,warm,4,42.771754,200
+Semantic-common,warm,5,45.948845,200
+Semantic-common,warm,6,42.696547,200
+Semantic-common,warm,7,43.002227,200
+Semantic-common,warm,8,43.116118,200
+Semantic-common,warm,9,43.192835,200
+Semantic-common,warm,10,44.452570,200
+Semantic-common,warm,11,40.847253,200
+Semantic-common,warm,12,43.024604,200
+Semantic-common,warm,13,42.634978,200
+Semantic-common,warm,14,42.940723,200
+Semantic-common,warm,15,41.876046,200
+Semantic-common,warm,16,44.507483,200
+Semantic-common,warm,17,41.986372,200
+Semantic-common,warm,18,42.901467,200
+Semantic-common,warm,19,42.399104,200
+Semantic-common,warm,20,41.635138,200
+Semantic-common,warm,21,43.416509,200
+Semantic-common,warm,22,46.058476,200
+Semantic-common,warm,23,44.395420,200
+Semantic-common,warm,24,41.912698,200
+Semantic-common,warm,25,42.241381,200
+Semantic-common,warm,26,42.086126,200
+Semantic-common,warm,27,42.494595,200
+Semantic-common,warm,28,42.508477,200
+Semantic-common,warm,29,42.393217,200
+Semantic-filtered,reopened,0,33.294442,200
+Semantic-filtered,reopened,1,33.950423,200
+Semantic-filtered,reopened,2,36.652998,200
+Semantic-filtered,reopened,3,35.380591,200
+Semantic-filtered,reopened,4,33.628754,200
+Semantic-filtered,warm,0,11.774648,200
+Semantic-filtered,warm,1,12.574789,200
+Semantic-filtered,warm,2,11.950055,200
+Semantic-filtered,warm,3,11.822371,200
+Semantic-filtered,warm,4,12.104150,200
+Semantic-filtered,warm,5,11.840886,200
+Semantic-filtered,warm,6,11.865575,200
+Semantic-filtered,warm,7,11.531700,200
+Semantic-filtered,warm,8,11.527326,200
+Semantic-filtered,warm,9,11.958545,200
+Semantic-filtered,warm,10,11.174400,200
+Semantic-filtered,warm,11,12.176315,200
+Semantic-filtered,warm,12,11.827059,200
+Semantic-filtered,warm,13,11.828702,200
+Semantic-filtered,warm,14,11.870259,200
+Semantic-filtered,warm,15,11.267981,200
+Semantic-filtered,warm,16,11.505300,200
+Semantic-filtered,warm,17,12.081690,200
+Semantic-filtered,warm,18,11.443803,200
+Semantic-filtered,warm,19,12.161992,200
+Semantic-filtered,warm,20,11.750125,200
+Semantic-filtered,warm,21,11.935121,200
+Semantic-filtered,warm,22,12.056887,200
+Semantic-filtered,warm,23,11.976721,200
+Semantic-filtered,warm,24,11.450517,200
+Semantic-filtered,warm,25,11.432612,200
+Semantic-filtered,warm,26,11.586415,200
+Semantic-filtered,warm,27,11.390650,200
+Semantic-filtered,warm,28,11.332158,200
+Semantic-filtered,warm,29,11.387954,200
+Semantic-page2,reopened,0,131.081657,200
+Semantic-page2,reopened,1,142.839403,200
+Semantic-page2,reopened,2,132.823147,200
+Semantic-page2,reopened,3,128.854454,200
+Semantic-page2,reopened,4,128.833842,200
+Semantic-page2,warm,0,57.921787,200
+Semantic-page2,warm,1,57.775161,200
+Semantic-page2,warm,2,59.060113,200
+Semantic-page2,warm,3,58.671475,200
+Semantic-page2,warm,4,58.435107,200
+Semantic-page2,warm,5,58.821733,200
+Semantic-page2,warm,6,59.247523,200
+Semantic-page2,warm,7,59.365816,200
+Semantic-page2,warm,8,60.155766,200
+Semantic-page2,warm,9,57.545495,200
+Semantic-page2,warm,10,58.351113,200
+Semantic-page2,warm,11,57.994979,200
+Semantic-page2,warm,12,57.699955,200
+Semantic-page2,warm,13,60.236242,200
+Semantic-page2,warm,14,59.283428,200
+Semantic-page2,warm,15,58.328778,200
+Semantic-page2,warm,16,59.791877,200
+Semantic-page2,warm,17,58.958460,200
+Semantic-page2,warm,18,57.999182,200
+Semantic-page2,warm,19,58.663575,200
+Semantic-page2,warm,20,57.895180,200
+Semantic-page2,warm,21,58.811529,200
+Semantic-page2,warm,22,58.287971,200
+Semantic-page2,warm,23,58.144010,200
+Semantic-page2,warm,24,58.675182,200
+Semantic-page2,warm,25,57.772166,200
+Semantic-page2,warm,26,57.639286,200
+Semantic-page2,warm,27,58.373717,200
+Semantic-page2,warm,28,58.407583,200
+Semantic-page2,warm,29,58.541244,200
+Hybrid-rare,reopened,0,117.661662,200
+Hybrid-rare,reopened,1,119.044686,200
+Hybrid-rare,reopened,2,119.145595,200
+Hybrid-rare,reopened,3,116.558532,200
+Hybrid-rare,reopened,4,117.952334,200
+Hybrid-rare,warm,0,43.402342,200
+Hybrid-rare,warm,1,43.064044,200
+Hybrid-rare,warm,2,43.062981,200
+Hybrid-rare,warm,3,45.340914,200
+Hybrid-rare,warm,4,45.327594,200
+Hybrid-rare,warm,5,45.751408,200
+Hybrid-rare,warm,6,46.009662,200
+Hybrid-rare,warm,7,45.951078,200
+Hybrid-rare,warm,8,46.795531,200
+Hybrid-rare,warm,9,53.658668,200
+Hybrid-rare,warm,10,49.272253,200
+Hybrid-rare,warm,11,47.549034,200
+Hybrid-rare,warm,12,48.610097,200
+Hybrid-rare,warm,13,44.625650,200
+Hybrid-rare,warm,14,45.795425,200
+Hybrid-rare,warm,15,45.156982,200
+Hybrid-rare,warm,16,44.809415,200
+Hybrid-rare,warm,17,46.216119,200
+Hybrid-rare,warm,18,48.669645,200
+Hybrid-rare,warm,19,69.568841,200
+Hybrid-rare,warm,20,51.019417,200
+Hybrid-rare,warm,21,55.733127,200
+Hybrid-rare,warm,22,58.974245,200
+Hybrid-rare,warm,23,48.302444,200
+Hybrid-rare,warm,24,48.292476,200
+Hybrid-rare,warm,25,50.165728,200
+Hybrid-rare,warm,26,47.292721,200
+Hybrid-rare,warm,27,51.322710,200
+Hybrid-rare,warm,28,47.217972,200
+Hybrid-rare,warm,29,47.548001,200
+Hybrid-common,reopened,0,182.704494,200
+Hybrid-common,reopened,1,172.404852,200
+Hybrid-common,reopened,2,179.287169,200
+Hybrid-common,reopened,3,152.435565,200
+Hybrid-common,reopened,4,152.936390,200
+Hybrid-common,warm,0,76.109370,200
+Hybrid-common,warm,1,75.195543,200
+Hybrid-common,warm,2,77.145759,200
+Hybrid-common,warm,3,78.350223,200
+Hybrid-common,warm,4,76.331864,200
+Hybrid-common,warm,5,75.519132,200
+Hybrid-common,warm,6,75.234359,200
+Hybrid-common,warm,7,77.846852,200
+Hybrid-common,warm,8,75.811471,200
+Hybrid-common,warm,9,77.550136,200
+Hybrid-common,warm,10,85.464762,200
+Hybrid-common,warm,11,93.481194,200
+Hybrid-common,warm,12,80.855364,200
+Hybrid-common,warm,13,78.471543,200
+Hybrid-common,warm,14,75.822824,200
+Hybrid-common,warm,15,74.428099,200
+Hybrid-common,warm,16,75.799910,200
+Hybrid-common,warm,17,73.485814,200
+Hybrid-common,warm,18,75.615409,200
+Hybrid-common,warm,19,74.823049,200
+Hybrid-common,warm,20,73.103260,200
+Hybrid-common,warm,21,73.902996,200
+Hybrid-common,warm,22,75.081602,200
+Hybrid-common,warm,23,74.203882,200
+Hybrid-common,warm,24,74.614032,200
+Hybrid-common,warm,25,74.045333,200
+Hybrid-common,warm,26,75.446650,200
+Hybrid-common,warm,27,72.959711,200
+Hybrid-common,warm,28,74.658045,200
+Hybrid-common,warm,29,74.572000,200
+Hybrid-filtered,reopened,0,68.143997,200
+Hybrid-filtered,reopened,1,66.576011,200
+Hybrid-filtered,reopened,2,64.961287,200
+Hybrid-filtered,reopened,3,65.174186,200
+Hybrid-filtered,reopened,4,67.265077,200
+Hybrid-filtered,warm,0,36.899682,200
+Hybrid-filtered,warm,1,43.630183,200
+Hybrid-filtered,warm,2,37.199647,200
+Hybrid-filtered,warm,3,39.586703,200
+Hybrid-filtered,warm,4,36.862379,200
+Hybrid-filtered,warm,5,36.956583,200
+Hybrid-filtered,warm,6,37.923114,200
+Hybrid-filtered,warm,7,37.996989,200
+Hybrid-filtered,warm,8,37.632253,200
+Hybrid-filtered,warm,9,38.918437,200
+Hybrid-filtered,warm,10,37.916482,200
+Hybrid-filtered,warm,11,37.001050,200
+Hybrid-filtered,warm,12,37.006761,200
+Hybrid-filtered,warm,13,38.566271,200
+Hybrid-filtered,warm,14,36.836750,200
+Hybrid-filtered,warm,15,36.969397,200
+Hybrid-filtered,warm,16,37.006636,200
+Hybrid-filtered,warm,17,39.758607,200
+Hybrid-filtered,warm,18,45.617766,200
+Hybrid-filtered,warm,19,38.505172,200
+Hybrid-filtered,warm,20,37.919507,200
+Hybrid-filtered,warm,21,39.005561,200
+Hybrid-filtered,warm,22,37.015203,200
+Hybrid-filtered,warm,23,36.784714,200
+Hybrid-filtered,warm,24,37.588975,200
+Hybrid-filtered,warm,25,37.293563,200
+Hybrid-filtered,warm,26,42.766082,200
+Hybrid-filtered,warm,27,38.199487,200
+Hybrid-filtered,warm,28,37.589415,200
+Hybrid-filtered,warm,29,43.631605,200
+Hybrid-page2,reopened,0,169.378819,200
+Hybrid-page2,reopened,1,171.799724,200
+Hybrid-page2,reopened,2,180.046602,200
+Hybrid-page2,reopened,3,175.691307,200
+Hybrid-page2,reopened,4,168.999456,200
+Hybrid-page2,warm,0,93.831965,200
+Hybrid-page2,warm,1,94.969103,200
+Hybrid-page2,warm,2,92.990338,200
+Hybrid-page2,warm,3,92.222089,200
+Hybrid-page2,warm,4,89.046498,200
+Hybrid-page2,warm,5,96.117495,200
+Hybrid-page2,warm,6,91.766802,200
+Hybrid-page2,warm,7,89.647457,200
+Hybrid-page2,warm,8,92.806391,200
+Hybrid-page2,warm,9,90.333768,200
+Hybrid-page2,warm,10,91.547410,200
+Hybrid-page2,warm,11,92.792584,200
+Hybrid-page2,warm,12,91.840875,200
+Hybrid-page2,warm,13,92.226327,200
+Hybrid-page2,warm,14,99.304254,200
+Hybrid-page2,warm,15,93.700931,200
+Hybrid-page2,warm,16,91.712317,200
+Hybrid-page2,warm,17,89.877855,200
+Hybrid-page2,warm,18,89.869369,200
+Hybrid-page2,warm,19,89.802680,200
+Hybrid-page2,warm,20,90.346198,200
+Hybrid-page2,warm,21,95.464344,200
+Hybrid-page2,warm,22,89.748358,200
+Hybrid-page2,warm,23,95.390455,200
+Hybrid-page2,warm,24,93.802866,200
+Hybrid-page2,warm,25,91.982095,200
+Hybrid-page2,warm,26,90.223574,200
+Hybrid-page2,warm,27,90.654763,200
+Hybrid-page2,warm,28,88.328450,200
+Hybrid-page2,warm,29,89.619750,200
+Lexical-empty-inbox,reopened,0,1.149308,200
+Lexical-empty-inbox,reopened,1,1.032911,200
+Lexical-empty-inbox,reopened,2,0.930773,200
+Lexical-empty-inbox,reopened,3,0.932826,200
+Lexical-empty-inbox,reopened,4,0.916675,200
+Lexical-empty-inbox,warm,0,0.582304,200
+Lexical-empty-inbox,warm,1,0.582374,200
+Lexical-empty-inbox,warm,2,0.561634,200
+Lexical-empty-inbox,warm,3,0.584579,200
+Lexical-empty-inbox,warm,4,0.566243,200
+Lexical-empty-inbox,warm,5,0.553648,200
+Lexical-empty-inbox,warm,6,0.557876,200
+Lexical-empty-inbox,warm,7,0.615077,200
+Lexical-empty-inbox,warm,8,0.564238,200
+Lexical-empty-inbox,warm,9,0.559920,200
+Lexical-empty-inbox,warm,10,0.584518,200
+Lexical-empty-inbox,warm,11,0.543679,200
+Lexical-empty-inbox,warm,12,0.592092,200
+Lexical-empty-inbox,warm,13,0.604577,200
+Lexical-empty-inbox,warm,14,0.605128,200
+Lexical-empty-inbox,warm,15,0.583977,200
+Lexical-empty-inbox,warm,16,0.564839,200
+Lexical-empty-inbox,warm,17,0.546033,200
+Lexical-empty-inbox,warm,18,0.534762,200
+Lexical-empty-inbox,warm,19,0.555752,200
+Lexical-empty-inbox,warm,20,0.565521,200
+Lexical-empty-inbox,warm,21,0.590369,200
+Lexical-empty-inbox,warm,22,0.539150,200
+Lexical-empty-inbox,warm,23,0.573297,200
+Lexical-empty-inbox,warm,24,0.537837,200
+Lexical-empty-inbox,warm,25,0.525754,200
+Lexical-empty-inbox,warm,26,0.542156,200
+Lexical-empty-inbox,warm,27,0.592834,200
+Lexical-empty-inbox,warm,28,0.333088,200
+Lexical-empty-inbox,warm,29,0.315685,200
+Semantic-filtered-page2,reopened,0,41.830951,200
+Semantic-filtered-page2,reopened,1,39.767526,200
+Semantic-filtered-page2,reopened,2,41.878979,200
+Semantic-filtered-page2,reopened,3,40.375883,200
+Semantic-filtered-page2,reopened,4,40.953125,200
+Semantic-filtered-page2,warm,0,20.557515,200
+Semantic-filtered-page2,warm,1,20.247231,200
+Semantic-filtered-page2,warm,2,26.355991,200
+Semantic-filtered-page2,warm,3,23.473899,200
+Semantic-filtered-page2,warm,4,38.451901,200
+Semantic-filtered-page2,warm,5,23.267606,200
+Semantic-filtered-page2,warm,6,16.558563,200
+Semantic-filtered-page2,warm,7,17.474399,200
+Semantic-filtered-page2,warm,8,16.992603,200
+Semantic-filtered-page2,warm,9,16.906348,200
+Semantic-filtered-page2,warm,10,16.764530,200
+Semantic-filtered-page2,warm,11,16.501680,200
+Semantic-filtered-page2,warm,12,16.423726,200
+Semantic-filtered-page2,warm,13,16.322159,200
+Semantic-filtered-page2,warm,14,16.695551,200
+Semantic-filtered-page2,warm,15,17.011646,200
+Semantic-filtered-page2,warm,16,16.333813,200
+Semantic-filtered-page2,warm,17,16.876823,200
+Semantic-filtered-page2,warm,18,16.236854,200
+Semantic-filtered-page2,warm,19,17.008835,200
+Semantic-filtered-page2,warm,20,18.036157,200
+Semantic-filtered-page2,warm,21,17.387497,200
+Semantic-filtered-page2,warm,22,16.847733,200
+Semantic-filtered-page2,warm,23,16.591097,200
+Semantic-filtered-page2,warm,24,16.373220,200
+Semantic-filtered-page2,warm,25,16.371260,200
+Semantic-filtered-page2,warm,26,17.279478,200
+Semantic-filtered-page2,warm,27,16.125196,200
+Semantic-filtered-page2,warm,28,16.263976,200
+Semantic-filtered-page2,warm,29,16.184431,200
+# sparse_phase,total_rows=100031,sparse_vectors=31,large_account_vectors=25000
+Semantic-sparse,reopened,0,1.204689,20
+Semantic-sparse,reopened,1,1.162243,20
+Semantic-sparse,reopened,2,1.060986,20
+Semantic-sparse,reopened,3,1.050916,20
+Semantic-sparse,reopened,4,1.052619,20
+Semantic-sparse,warm,0,0.159882,20
+Semantic-sparse,warm,1,0.156485,20
+Semantic-sparse,warm,2,0.153188,20
+Semantic-sparse,warm,3,0.160823,20
+Semantic-sparse,warm,4,0.157337,20
+Semantic-sparse,warm,5,0.189829,20
+Semantic-sparse,warm,6,0.193697,20
+Semantic-sparse,warm,7,0.166935,20
+Semantic-sparse,warm,8,0.156505,20
+Semantic-sparse,warm,9,0.155122,20
+Semantic-sparse,warm,10,0.123671,20
+Semantic-sparse,warm,11,0.121818,20
+Semantic-sparse,warm,12,0.123280,20
+Semantic-sparse,warm,13,0.122208,20
+Semantic-sparse,warm,14,0.121637,20
+Semantic-sparse,warm,15,0.123771,20
+Semantic-sparse,warm,16,0.137347,20
+Semantic-sparse,warm,17,0.131766,20
+Semantic-sparse,warm,18,0.204929,20
+Semantic-sparse,warm,19,0.176072,20
+Semantic-sparse,warm,20,0.158979,20
+Semantic-sparse,warm,21,0.154561,20
+Semantic-sparse,warm,22,0.153048,20
+Semantic-sparse,warm,23,0.155924,20
+Semantic-sparse,warm,24,0.152697,20
+Semantic-sparse,warm,25,0.152507,20
+Semantic-sparse,warm,26,0.185401,20
+Semantic-sparse,warm,27,0.185972,20
+Semantic-sparse,warm,28,0.160142,20
+Semantic-sparse,warm,29,0.140343,20
+Semantic-sparse-page2,reopened,0,1.035667,11
+Semantic-sparse-page2,reopened,1,1.033362,11
+Semantic-sparse-page2,reopened,2,1.059913,11
+Semantic-sparse-page2,reopened,3,1.130521,11
+Semantic-sparse-page2,reopened,4,1.027130,11
+Semantic-sparse-page2,warm,0,0.136667,11
+Semantic-sparse-page2,warm,1,0.138039,11
+Semantic-sparse-page2,warm,2,0.137438,11
+Semantic-sparse-page2,warm,3,0.136756,11
+Semantic-sparse-page2,warm,4,0.141405,11
+Semantic-sparse-page2,warm,5,0.136676,11
+Semantic-sparse-page2,warm,6,0.136646,11
+Semantic-sparse-page2,warm,7,0.173207,11
+Semantic-sparse-page2,warm,8,0.150633,11
+Semantic-sparse-page2,warm,9,0.142668,11
+Semantic-sparse-page2,warm,10,0.144391,11
+Semantic-sparse-page2,warm,11,0.139631,11
+Semantic-sparse-page2,warm,12,0.138970,11
+Semantic-sparse-page2,warm,13,0.194889,11
+Semantic-sparse-page2,warm,14,0.164911,11
+Semantic-sparse-page2,warm,15,0.142638,11
+Semantic-sparse-page2,warm,16,0.140253,11
+Semantic-sparse-page2,warm,17,0.138710,11
+Semantic-sparse-page2,warm,18,0.138250,11
+Semantic-sparse-page2,warm,19,0.138850,11
+Semantic-sparse-page2,warm,20,0.169780,11
+Semantic-sparse-page2,warm,21,0.159090,11
+Semantic-sparse-page2,warm,22,0.196172,11
+Semantic-sparse-page2,warm,23,0.151626,11
+Semantic-sparse-page2,warm,24,0.142066,11
+Semantic-sparse-page2,warm,25,0.140553,11
+Semantic-sparse-page2,warm,26,0.139351,11
+Semantic-sparse-page2,warm,27,0.139802,11
+Semantic-sparse-page2,warm,28,0.137497,11
+Semantic-sparse-page2,warm,29,0.138369,11
+Semantic-empty-account,reopened,0,0.136977,0
+Semantic-empty-account,reopened,1,0.126696,0
+Semantic-empty-account,reopened,2,0.122899,0
+Semantic-empty-account,reopened,3,0.148459,0
+Semantic-empty-account,reopened,4,0.122959,0
+Semantic-empty-account,warm,0,0.012123,0
+Semantic-empty-account,warm,1,0.012604,0
+Semantic-empty-account,warm,2,0.012364,0
+Semantic-empty-account,warm,3,0.012274,0
+Semantic-empty-account,warm,4,0.012825,0
+Semantic-empty-account,warm,5,0.014518,0
+Semantic-empty-account,warm,6,0.012284,0
+Semantic-empty-account,warm,7,0.012253,0
+Semantic-empty-account,warm,8,0.012184,0
+Semantic-empty-account,warm,9,0.012324,0
+Semantic-empty-account,warm,10,0.012244,0
+Semantic-empty-account,warm,11,0.012163,0
+Semantic-empty-account,warm,12,0.012314,0
+Semantic-empty-account,warm,13,0.012154,0
+Semantic-empty-account,warm,14,0.015240,0
+Semantic-empty-account,warm,15,0.012274,0
+Semantic-empty-account,warm,16,0.012495,0
+Semantic-empty-account,warm,17,0.012244,0
+Semantic-empty-account,warm,18,0.012104,0
+Semantic-empty-account,warm,19,0.012104,0
+Semantic-empty-account,warm,20,0.012124,0
+Semantic-empty-account,warm,21,0.012044,0
+Semantic-empty-account,warm,22,0.012184,0
+Semantic-empty-account,warm,23,0.012234,0
+Semantic-empty-account,warm,24,0.012234,0
+Semantic-empty-account,warm,25,0.012113,0
+Semantic-empty-account,warm,26,0.012164,0
+Semantic-empty-account,warm,27,0.012143,0
+Semantic-empty-account,warm,28,0.012193,0
+Semantic-empty-account,warm,29,0.012233,0
+# final_process_rss,VmRSS:	   81640 kB

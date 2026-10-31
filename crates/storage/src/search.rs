@@ -20,57 +20,75 @@ pub fn execute_lexical_search(
 
 fn lexical_ids(conn: &Connection, query: &HybridQuery) -> Result<Vec<String>, StorageError> {
     if query.query_text.trim().is_empty() {
-        return select_ids(
-            conn,
-            "SELECT id FROM messages WHERE (?2 IS NULL OR account_id=?2)
-             ORDER BY received_at_epoch_ms DESC, id LIMIT ?3 OFFSET ?4",
-            "",
-            query,
-        );
+        return if let Some(account) = query.account_filter.as_deref() {
+            let mut stmt = conn
+                .prepare_cached(
+                    "SELECT id FROM messages WHERE account_id=?1
+                     ORDER BY received_at_epoch_ms DESC, id LIMIT ?2 OFFSET ?3",
+                )
+                .map_err(query_error)?;
+            let rows = stmt
+                .query_map(
+                    rusqlite::params![account, query.limit as i64, query.offset as i64],
+                    |row| row.get(0),
+                )
+                .map_err(query_error)?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
+        } else {
+            let mut stmt = conn
+                .prepare_cached(
+                    "SELECT id FROM messages
+                     ORDER BY received_at_epoch_ms DESC, id LIMIT ?1 OFFSET ?2",
+                )
+                .map_err(query_error)?;
+            let rows = stmt
+                .query_map(
+                    rusqlite::params![query.limit as i64, query.offset as i64],
+                    |row| row.get(0),
+                )
+                .map_err(query_error)?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
+        };
     }
     let expression = format!("\"{}\"", query.query_text.trim().replace('"', "\"\""));
     // INVARIANT: Rank narrow candidates before reading message payload pages. rowid breaks
     // BM25 ties consistently without loading full external-content rows for every match.
     // INVARIANT: Unary + prevents FTS5 from turning rowid IN into repeated MATCH
     // point scans. The covering account index supplies membership without payload reads.
-    let sql = if query.account_filter.is_some() {
-        "WITH ranked AS MATERIALIZED (
+    // INVARIANT: Avoid MATERIALIZED temp-table overhead; non-materialized CTE flattens
+    // into a single query without intermediate table writes while preserving tie determinism.
+    if let Some(account) = query.account_filter.as_deref() {
+        let sql = "WITH ranked AS (
             SELECT rowid AS rid, rank AS score FROM messages_fts
             WHERE messages_fts MATCH ?1
               AND +rowid IN (SELECT rowid FROM messages WHERE account_id=?2)
             ORDER BY rank, rowid LIMIT ?3 OFFSET ?4)
          SELECT m.id FROM ranked r JOIN messages m ON m.rowid=r.rid
-         ORDER BY r.score, r.rid"
+         ORDER BY r.score, r.rid";
+        let mut stmt = conn.prepare_cached(sql).map_err(query_error)?;
+        let rows = stmt
+            .query_map(
+                rusqlite::params![expression, account, query.limit as i64, query.offset as i64],
+                |row| row.get(0),
+            )
+            .map_err(query_error)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
     } else {
-        "WITH ranked AS MATERIALIZED (
+        let sql = "WITH ranked AS (
             SELECT rowid AS rid, rank AS score FROM messages_fts
-            WHERE messages_fts MATCH ?1 AND ?2 IS NULL
-            ORDER BY rank, rowid LIMIT ?3 OFFSET ?4)
+            WHERE messages_fts MATCH ?1
+            ORDER BY rank, rowid LIMIT ?2 OFFSET ?3)
          SELECT m.id FROM ranked r JOIN messages m ON m.rowid=r.rid
-         ORDER BY r.score, r.rid"
-    };
-    select_ids(conn, sql, &expression, query)
-}
-
-fn select_ids(
-    conn: &Connection,
-    sql: &str,
-    expression: &str,
-    query: &HybridQuery,
-) -> Result<Vec<String>, StorageError> {
-    let mut stmt = conn.prepare_cached(sql).map_err(query_error)?;
-    let rows = stmt
-        .query_map(
-            rusqlite::params![
-                expression,
-                query.account_filter,
-                query.limit as i64,
-                query.offset as i64
-            ],
-            |row| row.get(0),
-        )
-        .map_err(query_error)?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
+         ORDER BY r.score, r.rid";
+        let mut stmt = conn.prepare_cached(sql).map_err(query_error)?;
+        let rows = stmt
+            .query_map(
+                rusqlite::params![expression, query.limit as i64, query.offset as i64],
+                |row| row.get(0),
+            )
+            .map_err(query_error)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
+    }
 }
 
 /// Executes exact cosine nearest-neighbor search over eligible message vectors.
@@ -132,20 +150,33 @@ fn knn_candidates(
     account: Option<&str>,
 ) -> Result<Vec<(String, f64)>, StorageError> {
     // INVARIANT: vec0 prunes account partitions before top-k, never after truncation.
-    let sql = if account.is_some() {
-        "SELECT message_id,distance FROM vec_messages_by_account
-         WHERE embedding_int8 MATCH vec_int8(?1) AND k=?2 AND account_id=?3"
+    if let Some(account_id) = account {
+        let mut stmt = conn
+            .prepare_cached(
+                "SELECT message_id,distance FROM vec_messages_by_account
+                 WHERE embedding_int8 MATCH vec_int8(?1) AND k=?2 AND account_id=?3",
+            )
+            .map_err(query_error)?;
+        let rows = stmt
+            .query_map(rusqlite::params![bytes, k as i64, account_id], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .map_err(query_error)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
     } else {
-        "SELECT message_id,distance FROM vec_messages
-         WHERE embedding_int8 MATCH vec_int8(?1) AND k=?2 AND ?3 IS NULL"
-    };
-    let mut stmt = conn.prepare_cached(sql).map_err(query_error)?;
-    let rows = stmt
-        .query_map(rusqlite::params![bytes, k as i64, account], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })
-        .map_err(query_error)?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
+        let mut stmt = conn
+            .prepare_cached(
+                "SELECT message_id,distance FROM vec_messages
+                 WHERE embedding_int8 MATCH vec_int8(?1) AND k=?2",
+            )
+            .map_err(query_error)?;
+        let rows = stmt
+            .query_map(rusqlite::params![bytes, k as i64], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .map_err(query_error)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
+    }
 }
 
 fn exact_semantic_ids(
@@ -156,30 +187,32 @@ fn exact_semantic_ids(
     // INVARIANT: Account eligibility is resolved before distance ranking and LIMIT.
     // CROSS JOIN keeps the account-index scan outside point lookups into vec0, avoiding
     // a full vector scan followed by post-filtering. Missing embeddings simply don't join.
-    let sql = if query.account_filter.is_some() {
-        "SELECT v.message_id FROM messages m CROSS JOIN vec_messages v
-         WHERE m.account_id=?2 AND v.message_id=m.id
-         ORDER BY vec_distance_cosine(v.embedding_int8, vec_int8(?1)), v.message_id
-         LIMIT ?3 OFFSET ?4"
+    if let Some(account) = query.account_filter.as_deref() {
+        let sql = "SELECT v.message_id FROM messages m CROSS JOIN vec_messages v
+         WHERE m.account_id=?1 AND v.message_id=m.id
+         ORDER BY vec_distance_cosine(v.embedding_int8, vec_int8(?2)), v.message_id
+         LIMIT ?3 OFFSET ?4";
+        let mut stmt = conn.prepare_cached(sql).map_err(query_error)?;
+        let rows = stmt
+            .query_map(
+                rusqlite::params![account, bytes, query.limit as i64, query.offset as i64],
+                |row| row.get(0),
+            )
+            .map_err(query_error)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
     } else {
-        "SELECT v.message_id FROM vec_messages v JOIN messages m ON m.id=v.message_id
-         WHERE ?2 IS NULL
+        let sql = "SELECT v.message_id FROM vec_messages v JOIN messages m ON m.id=v.message_id
          ORDER BY vec_distance_cosine(v.embedding_int8, vec_int8(?1)), v.message_id
-         LIMIT ?3 OFFSET ?4"
-    };
-    let mut stmt = conn.prepare_cached(sql).map_err(query_error)?;
-    let rows = stmt
-        .query_map(
-            rusqlite::params![
-                bytes,
-                query.account_filter,
-                query.limit as i64,
-                query.offset as i64
-            ],
-            |row| row.get(0),
-        )
-        .map_err(query_error)?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
+         LIMIT ?2 OFFSET ?3";
+        let mut stmt = conn.prepare_cached(sql).map_err(query_error)?;
+        let rows = stmt
+            .query_map(
+                rusqlite::params![bytes, query.limit as i64, query.offset as i64],
+                |row| row.get(0),
+            )
+            .map_err(query_error)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
+    }
 }
 
 /// Combines lexical and semantic candidates with Reciprocal Rank Fusion.
@@ -200,7 +233,7 @@ pub fn execute_hybrid_search(
                 offset: 0,
                 ..query.clone()
             };
-            let mut scores: HashMap<String, f64> = HashMap::new();
+            let mut scores: HashMap<String, f64> = HashMap::with_capacity(candidates.limit * 2);
             for ids in [
                 lexical_ids(conn, &candidates)?,
                 semantic_ids(conn, &candidates)?,
@@ -290,7 +323,7 @@ fn hydrate_metadata(
              WHERE m.id IN ({placeholders}) ORDER BY t.tag_name"
         );
         let mut statement = conn
-            .prepare(&sql)
+            .prepare_cached(&sql)
             .map_err(|e| StorageError::Query(e.to_string()))?;
         let ids: Vec<&str> = chunk.iter().map(|row| row.id.as_str()).collect();
         let records = statement
