@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
 	import Icon from './Icon.svelte';
+	import BadgePreview from './BadgePreview.svelte';
+	import type { BadgeLoader } from './badges';
 	import type { InboxController } from './controller.svelte';
 	import { ROW_HEIGHT, visibleRange, selectionTop } from './virtual';
-	let { inbox }: { inbox: InboxController } = $props();
+	let { inbox, badgeLoader }: { inbox: InboxController; badgeLoader?: BadgeLoader } = $props();
 	let viewport: HTMLDivElement;
 	let previousRows: typeof inbox.rows = [];
 	let top = $state(0);
@@ -129,8 +131,14 @@
 								{row.subject || '(No subject)'}
 							</p>
 							<div class="flex items-center gap-2 text-xs opacity-65">
-								<span class="truncate">{row.category_badge || row.folder}</span
+								<span class="truncate"
+									>{inbox.folderLabels[row.id] || row.category_badge || row.folder}</span
 								>{#if row.has_attachments}<Icon name="paperclip" size={12} />{/if}
+								{#if badgeLoader}<BadgePreview
+										id={row.id}
+										loader={badgeLoader}
+										revision={inbox.badgeRevision}
+									/>{/if}
 							</div>
 						</div>
 					</div>

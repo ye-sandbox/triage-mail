@@ -32,6 +32,7 @@ function setup() {
 	let handler: (event: SyncProgressEvent) => void = () => {};
 	const stop = vi.fn();
 	const inbox = new InboxController({
+		triage: async () => {},
 		search,
 		subscribe: async (callback) => {
 			handler = callback;

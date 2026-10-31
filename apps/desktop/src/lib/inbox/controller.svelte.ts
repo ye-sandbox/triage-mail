@@ -1,4 +1,5 @@
 import type { InboxTransport, MessageRowDto, SearchMode, SyncProgressEvent } from './types';
+import { validTag, type TriageAction } from './triage';
 export const PAGE_SIZE = 200;
 
 export class InboxController {
@@ -11,6 +12,12 @@ export class InboxController {
 	query = $state('');
 	mode = $state<SearchMode>('Lexical');
 	revision = $state(0);
+	badgeRevision = $state(0);
+	mutating = $state(false);
+	mutationError = $state('');
+	mutationNotice = $state('');
+	localTags = $state<Record<string, string[]>>({});
+	folderLabels = $state<Record<string, string>>({});
 	private generation = 0;
 	private disposed = false;
 	private refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -18,6 +25,58 @@ export class InboxController {
 	private refreshing = false;
 	private refreshAgain = false;
 	constructor(private transport: InboxTransport) {}
+
+	async mutate(id: string, action: TriageAction) {
+		if (this.disposed || this.mutating || this.loading) return;
+		const original = this.rows.find((row) => row.id === id);
+		if (!original || (typeof action === 'object' && !validTag(action.Tag))) return;
+		// INVARIANT: Invalidate reads begun before this optimistic write; defer sync until it settles.
+		const generation = ++this.generation;
+		const oldFolder = this.folderLabels[id];
+		const oldTags = this.localTags[id] ?? [];
+		this.mutating = true;
+		this.mutationError = '';
+		this.mutationNotice = '';
+		this.applyOptimistic(id, action);
+		try {
+			await this.transport.triage({ message_ids: [id], action });
+			if (!this.disposed)
+				this.mutationNotice =
+					action === 'OneClickUnsubscribe'
+						? 'Unsubscribe request sent.'
+						: typeof action === 'object'
+							? 'Local tag saved.'
+							: 'Saved locally. Server changes sync in the background.';
+		} catch {
+			if (this.disposed) return;
+			if (generation === this.generation) {
+				this.rows = this.rows.map((row) =>
+					row.id === id ? { ...row, is_read: original.is_read } : row
+				);
+			}
+			if (oldFolder === undefined) delete this.folderLabels[id];
+			else this.folderLabels[id] = oldFolder;
+			this.localTags[id] = oldTags;
+			this.mutationError =
+				action === 'OneClickUnsubscribe'
+					? 'Unsubscribe could not be confirmed. Check before trying again.'
+					: 'Change could not be saved. Please try again.';
+		} finally {
+			this.mutating = false;
+			if (!this.disposed) this.scheduleRefresh();
+		}
+	}
+
+	private applyOptimistic(id: string, action: TriageAction) {
+		if (action === 'MarkRead' || action === 'MarkUnread')
+			this.rows = this.rows.map((row) =>
+				row.id === id ? { ...row, is_read: action === 'MarkRead' } : row
+			);
+		// INVARIANT: Folder labels must never overwrite canonical IMAP attachment identity.
+		if (action === 'Archive' || action === 'Trash') this.folderLabels[id] = action;
+		if (typeof action === 'object')
+			this.localTags[id] = [...new Set([...(this.localTags[id] ?? []), action.Tag])];
+	}
 
 	async connect() {
 		try {
@@ -65,7 +124,15 @@ export class InboxController {
 	}
 
 	async loadMore() {
-		if (this.loading || !this.hasMore || this.disposed || this.error || this.refreshing) return;
+		if (
+			this.loading ||
+			!this.hasMore ||
+			this.disposed ||
+			this.error ||
+			this.refreshing ||
+			this.mutating
+		)
+			return;
 		const generation = this.generation;
 		const offset = this.rows.length;
 		this.loading = true;
@@ -94,7 +161,7 @@ export class InboxController {
 
 	async refresh() {
 		if (this.disposed) return;
-		if (this.loading || this.refreshing) {
+		if (this.loading || this.refreshing || this.mutating) {
 			this.refreshAgain = true;
 			return;
 		}
@@ -119,6 +186,7 @@ export class InboxController {
 			if (generation !== this.generation || this.disposed) return;
 			const unique = new Map(rows.map((row) => [row.id, row]));
 			this.rows = [...unique.values()];
+			this.badgeRevision++;
 			this.hasMore = hasMore;
 			if (this.selectedId && !unique.has(this.selectedId)) this.selectedId = null;
 			this.error = '';

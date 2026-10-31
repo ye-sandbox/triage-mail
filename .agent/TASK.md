@@ -14,7 +14,7 @@
 - **Action Type:**
   - [ ] Read-only / Documentation
   - [x] Source code changes
-- **Status:** READY FOR PLANNING
+- **Status:** RUNNING
   *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
@@ -102,6 +102,29 @@
   navigation, forms, remote images and lazy CID resources; raster data images remain supported.
 - Synthetic browser QA at desktop and 390×844 verified the actual reader, sandbox document,
   explicit file saving and compact back navigation with restored list focus.
+
+---
+
+### Validation ([04.4])
+- User approved the implementation plan and cached bits-ui v2 on 2026-10-30.
+- Rust workspace check, tests (141 passed), formatting and Clippy (`-D warnings`): passed.
+- Frontend check (zero errors/warnings), tests (36 passed), Prettier and SPA build: passed.
+- Regressions cover optimistic rollback, duplicate suppression, stale refresh/search responses,
+  canonical attachment identity, UTF-8 tag limits, extraction cache revision invalidation,
+  bounded badge requests, keyboard filtering/navigation, Escape, focus restoration, explicit
+  unsubscribe gating and escaped extraction values. Existing durable outbox tests still pass.
+- Browser QA used 100,000 synthetic summaries at desktop and 390×844. Verified palette layout,
+  keyboard action execution, Tab containment, restored focus, local tags and all six badge
+  types. Eleven rows were mounted at the observed desktop viewport. No new native frame-rate
+  measurement was made. The temporary fixture route was removed before the final SPA build.
+- Svelte runes invariant, tracked/new-file email/secret-pattern scan and `git diff --check`: passed.
+- Rust socket mocks required loopback binding permission; no live provider, model, AI endpoint
+  or package registry was contacted. Cached bits-ui dependency contents and integrity metadata
+  were restored locally. Lockfile references/integrity metadata validate; a fresh frozen offline
+  pnpm install remains unverified because pnpm's policy metadata mirror is absent (k-008).
+- No IPC/schema/core boundaries, CLI flags, environment variables or documented validation
+  commands changed. Existing DTOs persist tags through IPC but do not expose saved tags/folder
+  overrides for rehydrating UI feedback after restart; these presentation labels are session-local.
 
 ---
 
