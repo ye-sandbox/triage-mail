@@ -15,7 +15,7 @@
   - [ ] Read-only / Documentation
   - [x] Source code changes
 - **Status:** DONE
-- **Next Task:** None queued.
+- **Next Task:** [04.6] Vault Unlock & Account Onboarding UI (`READY FOR PLANNING`).
 
 ### Approved Plan
 User approved on 2026-10-30.
@@ -66,7 +66,7 @@ User subsequently authorized native build dependency downloads into a temporary 
   remain outside the repository.
 - Workspace check and Clippy (`-D warnings`) also passed against the prepared native
   sysroot. Implementation and security documentation committed as `75599f1`.
-- Task complete. No next task is queued; further work requires a new scoped request.
+- Task complete. Post-audit gap analysis registered [04.6]–[04.8], [00.2], [90.1] in Backlog.
 
 ---
 
@@ -177,14 +177,48 @@ User subsequently authorized native build dependency downloads into a temporary 
 
 ## Backlog (Upcoming, in priority order)
 
-*(No tasks queued after [04.5]; further optimization/hardening work follows as requested).*
+Registered 2026-10-31 from post-[04.5] gap analysis. Each task requires its own plan approval.
+
+### [04.6] Vault Unlock & Account Onboarding UI — `READY FOR PLANNING`
+- **Gap:** `cmd_unlock_vault`, `cmd_add_account`, `cmd_list_accounts` exist in
+  `apps/desktop/src-tauri/src/runtime.rs` but no frontend caller exists; app is not usable end-to-end.
+- **Scope:** Vault unlock screen; account list; add-account flows for App Password, OAuth2 Public
+  PKCE (`127.0.0.1` loopback), BYO-OAuth (`client_id`/`client_secret` → `vault` only), Proton Bridge.
+- **Constraints:** Secrets never persisted in frontend state/storage; fixed redacted error strings;
+  reuse existing IPC contracts (extend only with recorded `NOTES.md` contract update).
+
+### [04.7] Settings & AI Opt-in UI — `BACKLOG`
+- **Gap:** Tier 3 LLM summarizer has no IPC surface; Tier 2 model download has no consent UI.
+- **Scope:** Explicit opt-in for embedding model download (`$XDG_DATA_HOME/triage-mail/models`);
+  Ollama/BYOK endpoint config (keys → `vault`); FTS5 tokenizer choice (`unicode61`/`trigram`);
+  per-message remote-image unblock preference.
+- **Constraints:** Zero network calls without explicit opt-in (P0).
+
+### [04.8] Persist Tag & Folder Override Rehydration — `BACKLOG`
+- **Gap:** DTOs do not expose saved tags/folder overrides; UI feedback is session-local ([04.4]).
+- **Scope:** Extend message summary DTOs and storage reads; rehydrate UI after restart.
+- **Constraints:** P1 IPC/schema change — record contract update in `NOTES.md` before implementing.
+
+### [00.2] CI Pipeline (GitHub Actions) — `BACKLOG`
+- **Scope:** Workflow running full DoD: cargo check/test/fmt/clippy (`-D warnings`), pnpm
+  check/test/build, Svelte runes invariant, secret/PII scan, `git diff --check`.
+- **Constraints:** No secrets in workflow; pinned action versions; GTK/WebKitGTK deps documented
+  (see `k-006`); resolve offline frozen pnpm install question (`k-008`).
+
+### [90.1] Native Performance Validation — `BACKLOG`
+- **Gap:** 60fps evidence is browser-fixture only; no native WebKitGTK measurement.
+- **Scope:** Native WebKitGTK frame timing with 100k messages; hybrid search `<15ms` benchmark
+  at 100k rows over SQLCipher; release binary size and idle RAM baseline.
+
+---
 
 ---
 
 
 ## Release / Cycle Wrap-up (Not the next task)
 
-Release/tag only with explicit human request. When triggered, the ID is `[99.1]`. Do not number feature, hygiene, or CI tasks as `99.x`. Do not calculate next task ID from this section.
+Release/tag only with explicit human request. When triggered, the ID is `[99.1]`
+(public-transition audit: git-history secret scan, AGPLv3 compliance, README sync, `v0.1.0` tag). Do not number feature, hygiene, or CI tasks as `99.x`. Do not calculate next task ID from this section.
 
 ---
 
