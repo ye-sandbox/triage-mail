@@ -218,25 +218,36 @@ impl SqliteMailStore {
         message_id: &str,
         embedding_int8: &[i8],
     ) -> Result<(), StorageError> {
-        let conn = self
+        let mut conn = self
             .conn
             .lock()
             .map_err(|e| StorageError::Query(format!("mutex poisoned: {e}")))?;
-
+        let tx = conn
+            .transaction()
+            .map_err(|e| StorageError::Query(e.to_string()))?;
         let vec_bytes = int8_slice_to_bytes(embedding_int8);
-
-        // Delete existing if present to allow updating embedding
-        conn.execute(
-            "DELETE FROM vec_messages WHERE message_id = ?1;",
-            rusqlite::params![message_id],
-        )
-        .map_err(|e| StorageError::Query(format!("failed to delete old embedding: {e}")))?;
-
-        conn.execute(
-            "INSERT INTO vec_messages (message_id, embedding_int8) VALUES (?1, vec_int8(?2));",
+        // INVARIANT: A failed replacement must retain both previous vectors. Orphans
+        // remain authoritative-only until a message insertion establishes account membership.
+        for table in ["vec_messages", "vec_messages_by_account"] {
+            tx.execute(
+                &format!("DELETE FROM {table} WHERE message_id=?1"),
+                [message_id],
+            )
+            .map_err(|e| StorageError::Query(e.to_string()))?;
+        }
+        tx.execute(
+            "INSERT INTO vec_messages(message_id,embedding_int8) VALUES (?1,vec_int8(?2))",
             rusqlite::params![message_id, vec_bytes],
         )
-        .map_err(|e| StorageError::Query(format!("failed to insert message embedding: {e}")))?;
+        .map_err(|e| StorageError::Query(e.to_string()))?;
+        tx.execute(
+            "INSERT INTO vec_messages_by_account(message_id,account_id,embedding_int8)
+             SELECT id,account_id,vec_int8(?2) FROM messages WHERE id=?1",
+            rusqlite::params![message_id, vec_bytes],
+        )
+        .map_err(|e| StorageError::Query(e.to_string()))?;
+        tx.commit()
+            .map_err(|e| StorageError::Query(e.to_string()))?;
 
         Ok(())
     }

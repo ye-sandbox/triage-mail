@@ -28,6 +28,14 @@ fn vector(id: usize) -> Vec<i8> {
 fn seed(path: &std::path::Path, key: &DatabaseKey) -> Result<()> {
     let mut conn = open_encrypted_connection(path, key)?;
     SchemaMigrator::new(FtsTokenizerMode::default()).migrate(&mut conn)?;
+    // INVARIANT: This disposable fixture models a real v4 upgrade. Never downgrade a
+    // user database; remove only this empty fixture's v5 additions before population.
+    conn.execute_batch(
+        "DROP TRIGGER messages_vector_insert;
+        DROP TRIGGER messages_vector_delete; DROP TRIGGER messages_vector_account;
+        DROP TRIGGER messages_vector_account_insert; DROP TABLE vec_messages_by_account;
+        DELETE FROM schema_migrations WHERE version=5;",
+    )?;
     let tx = conn.transaction()?;
     for account in 0..4 {
         tx.execute(
@@ -71,6 +79,23 @@ fn seed(path: &std::path::Path, key: &DatabaseKey) -> Result<()> {
     }
     tx.commit()?;
     conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
+    let before = std::fs::metadata(path)?.len();
+    let start = Instant::now();
+    assert_eq!(
+        SchemaMigrator::new(Default::default()).migrate(&mut conn)?,
+        1
+    );
+    let migration_ms = start.elapsed().as_secs_f64() * 1000.;
+    conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
+    let indexed: usize =
+        conn.query_row("SELECT count(*) FROM vec_messages_by_account", [], |r| {
+            r.get(0)
+        })?;
+    assert_eq!(indexed, ROWS);
+    println!(
+        "# migration_ms={migration_ms:.6},bytes_before={before},bytes_after={},indexed={indexed}",
+        std::fs::metadata(path)?.len()
+    );
     let count: usize = conn.query_row("SELECT count(*) FROM messages", [], |r| r.get(0))?;
     let vectors: usize = conn.query_row("SELECT count(*) FROM vec_messages", [], |r| r.get(0))?;
     assert_eq!((count, vectors), (ROWS, ROWS));
@@ -95,8 +120,15 @@ fn measure(
     assert_eq!(unique.len(), rows.len());
     assert_eq!(
         rows.len(),
-        query.limit,
-        "all benchmark cases have enough eligible rows"
+        if query.mode == SearchMode::Semantic {
+            neighbors
+                .len()
+                .saturating_sub(query.offset)
+                .min(query.limit)
+        } else {
+            query.limit
+        },
+        "complete eligible pages are required"
     );
     assert!(rows.iter().all(|r| query
         .account_filter
@@ -157,10 +189,13 @@ fn run_case(
 
 // Independent integer dot products/norms; fixture vectors are never zero.
 fn reference_neighbors(account: Option<usize>) -> Vec<String> {
+    reference_ids((0..ROWS).filter(|id| account.is_none_or(|a| id % 4 == a)))
+}
+
+fn reference_ids(ids: impl Iterator<Item = usize>) -> Vec<String> {
     let query = vector(4242);
     let norm = query.iter().map(|&v| i64::from(v).pow(2)).sum::<i64>() as f64;
-    let mut ranked: Vec<_> = (0..ROWS)
-        .filter(|id| account.is_none_or(|a| id % 4 == a))
+    let mut ranked: Vec<_> = ids
         .map(|id| {
             let values = vector(id);
             let dot = values
@@ -179,6 +214,104 @@ fn reference_neighbors(account: Option<usize>) -> Vec<String> {
     ranked.into_iter().map(|(_, id)| id).collect()
 }
 
+fn profile_cache(path: &std::path::Path, key: &DatabaseKey) -> Result<()> {
+    for kib in [2048, 16384, 65536] {
+        let conn = open_encrypted_connection(path, key)?;
+        conn.pragma_update(None, "cache_size", -kib)?;
+        for (name,sql) in [
+            ("vector-topk","SELECT message_id FROM vec_messages WHERE embedding_int8 MATCH vec_int8(?1) AND k=201"),
+            ("fts-rank","SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'newsletter' AND ?1 IS NOT NULL ORDER BY rank,rowid LIMIT 200"),
+            ("summary-hydration","SELECT id,subject,sender FROM messages WHERE rowid BETWEEN 4200 AND 4399 AND ?1 IS NOT NULL"),
+        ] {
+            let mut stmt=conn.prepare(sql)?;
+            for sample in 0..8 {
+                let start=Instant::now();
+                let count=stmt.query_map(params![int8_slice_to_bytes(&vector(4242))], |_|Ok(()))?
+                    .collect::<std::result::Result<Vec<_>,_>>()?.len();
+                let ms=start.elapsed().as_secs_f64()*1000.;
+                println!("# cache_profile,{kib},{name},{sample},{ms:.6},{count},{}",rss()?);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn rss() -> Result<String> {
+    Ok(std::fs::read_to_string("/proc/self/status")?
+        .lines()
+        .find(|line| line.starts_with("VmRSS:"))
+        .unwrap_or("VmRSS: unavailable")
+        .to_string())
+}
+
+fn sparse_cases(path: &std::path::Path, key: &DatabaseKey, neighbors: &[String]) -> Result<()> {
+    run_case(
+        path,
+        key,
+        "Semantic-filtered-page2",
+        HybridQuery {
+            query_text: String::new(),
+            query_embedding_int8: Some(vector(4242)),
+            account_filter: Some("account-2".into()),
+            mode: SearchMode::Semantic,
+            limit: 200,
+            offset: 200,
+        },
+        neighbors,
+    )?;
+    let mut conn = open_encrypted_connection(path, key)?;
+    let tx = conn.transaction()?;
+    tx.execute_batch(
+        "INSERT INTO accounts VALUES ('account-sparse','sparse@example.com','synthetic',0,0),
+        ('account-empty','empty@example.com','synthetic',0,0)",
+    )?;
+    for id in ROWS..ROWS + 31 {
+        let name = format!("message-{id}");
+        tx.execute(
+            "INSERT INTO vec_messages(message_id,embedding_int8) VALUES (?1,vec_int8(?2))",
+            params![name, int8_slice_to_bytes(&vector(id))],
+        )?;
+        // Exercise the production late-message membership trigger, not a benchmark-only index.
+        tx.execute("INSERT INTO messages(id,account_id,folder,uid,subject,sender,recipients,
+            received_at_epoch_ms,raw_headers,created_at_epoch_ms)
+            VALUES (?1,'account-sparse','INBOX',?2,'synthetic','sender@example.org','reader@example.com',?2,'',0)",
+            params![name,id+1])?;
+    }
+    tx.commit()?;
+    drop(conn);
+    println!(
+        "# sparse_phase,total_rows={},sparse_vectors=31,large_account_vectors=25000",
+        ROWS + 31
+    );
+    let sparse = reference_ids(ROWS..ROWS + 31);
+    for (label, account, offset, expected) in [
+        ("Semantic-sparse", "account-sparse", 0, sparse.as_slice()),
+        (
+            "Semantic-sparse-page2",
+            "account-sparse",
+            20,
+            sparse.as_slice(),
+        ),
+        ("Semantic-empty-account", "account-empty", 0, &[]),
+    ] {
+        run_case(
+            path,
+            key,
+            label,
+            HybridQuery {
+                query_text: String::new(),
+                query_embedding_int8: Some(vector(4242)),
+                account_filter: Some(account.into()),
+                mode: SearchMode::Semantic,
+                limit: 20,
+                offset,
+            },
+            expected,
+        )?;
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("synthetic.db");
@@ -187,6 +320,7 @@ fn main() -> Result<()> {
     std::fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
     let key = DatabaseKey::from_bytes(bytes);
     seed(&path, &key)?;
+    profile_cache(&path, &key)?;
     let mut header = [0; 16];
     std::fs::File::open(&path)?.read_exact(&mut header)?;
     assert_ne!(&header, b"SQLite format 3\0");
@@ -242,5 +376,7 @@ fn main() -> Result<()> {
         },
         &neighbors,
     )?;
+    sparse_cases(&path, &key, &filtered_neighbors)?;
+    println!("# final_process_rss,{}", rss()?);
     Ok(())
 }

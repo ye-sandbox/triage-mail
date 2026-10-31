@@ -65,3 +65,24 @@ type: architectural-decision-log
 - **Alternatives Considered:**
   - *MIT / Apache-2.0:* Rejected because third parties could wrap the engine into proprietary SaaS or closed commercial forks without contributing back.
 - **Consequences:** Every commit is audited for secret/PII cleanliness so the full git history can be made public safely.
+
+
+### [2026-10-31] ADR-006: Derived Account-Partitioned Vector Index
+
+- **Context:** Correct account-aware scalar vector ranking at 100k messages takes about 380ms.
+  Filtering global KNN output underfills pages; per-message vector lookups defeat contiguous scans.
+- **Decision:** Approved [90.3] adds migration v5 with `vec_messages_by_account`, using opaque
+  account IDs as vec0 partition keys and unchanged int8[384] cosine vectors. Preserve legacy
+  `vec_messages` as authoritative. Backfill only live messages transactionally; embedding writes
+  update both tables together and message triggers reconcile insertion/deletion/account changes.
+  Use partition-constrained KNN, with the existing exact tie/deep-page fallback. Keep IPC and
+  core trait signatures unchanged. Use a measured 64MiB connection-local SQLite page-cache target.
+- **Alternatives Considered:** Replacing the legacy vector table would break its established
+  schema. Global overfetch without a coverage proof loses eligible neighbors. Exact scalar account
+  scans preserve correctness but incur many point lookups. External/vector sidecars violate the
+  single-file native design; approximation changes ranking semantics.
+- **Consequences:** Duplicate encrypted vectors increase disk size, write work and migration
+  time. Schema/backfill failure rolls back atomically; orphans do not enter the derived index.
+  No vector shadow-table access, new network behavior, FFI or dependency is required. Cache_size
+  is a soft per-connection target; process memory and migration growth must be measured separately.
+  Old binaries must not write a v5 database because they cannot maintain the derived index.
