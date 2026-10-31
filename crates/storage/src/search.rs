@@ -2,168 +2,251 @@ use std::collections::HashMap;
 
 use rusqlite::Connection;
 
-use crate::{HybridQuery, MessageRowSummary, SearchMode, StorageError};
+use crate::{HybridQuery, MessageRowSummary, StorageError};
 
 /// Converts an int8 slice into a byte vector for sqlite-vec.
 pub fn int8_slice_to_bytes(slice: &[i8]) -> Vec<u8> {
     slice.iter().map(|&b| b as u8).collect()
 }
 
-/// Executes a lexical search against `messages_fts` using BM25 ranking.
+/// Blank lexical input lists persisted messages newest first, including local metadata.
 pub fn execute_lexical_search(
     conn: &Connection,
     query: &HybridQuery,
 ) -> Result<Vec<MessageRowSummary>, StorageError> {
-    let sanitized_query = query.query_text.trim();
-    if sanitized_query.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Wrap query in double quotes if it contains spaces or punctuation, or use standard FTS5 match string
-    let match_expr = format!("\"{}\"", sanitized_query.replace('"', "\"\""));
-
-    let mut stmt = conn
-        .prepare(
-            "SELECT m.id, m.account_id, m.folder, m.uid, m.subject, m.sender,
-                    m.received_at_epoch_ms, m.is_read, m.has_attachments, m.category_badge
-             FROM messages_fts f
-             JOIN messages m ON f.rowid = m.rowid
-             WHERE messages_fts MATCH ?1
-               AND (?2 IS NULL OR m.account_id = ?2)
-             ORDER BY rank
-             LIMIT ?3 OFFSET ?4;",
-        )
-        .map_err(|e| StorageError::Query(format!("failed to prepare lexical search: {e}")))?;
-
-    let limit = query.limit as i64;
-    let offset = query.offset as i64;
-
-    let rows = stmt
-        .query_map(
-            rusqlite::params![match_expr, query.account_filter, limit, offset],
-            row_to_summary,
-        )
-        .map_err(|e| StorageError::Query(format!("failed to execute lexical search: {e}")))?;
-
-    let mut results = Vec::new();
-    for row in rows {
-        results.push(row.map_err(|e| StorageError::Query(e.to_string()))?);
-    }
-
-    hydrate_metadata(conn, &mut results)?;
-    Ok(results)
+    query.validate()?;
+    load_summaries(conn, &lexical_ids(conn, query)?)
 }
 
-/// Executes a semantic KNN search against `vec_messages` using cosine distance.
+fn lexical_ids(conn: &Connection, query: &HybridQuery) -> Result<Vec<String>, StorageError> {
+    if query.query_text.trim().is_empty() {
+        return select_ids(
+            conn,
+            "SELECT id FROM messages WHERE (?2 IS NULL OR account_id=?2)
+             ORDER BY received_at_epoch_ms DESC, id LIMIT ?3 OFFSET ?4",
+            "",
+            query,
+        );
+    }
+    let expression = format!("\"{}\"", query.query_text.trim().replace('"', "\"\""));
+    // INVARIANT: Rank narrow candidates before reading message payload pages. rowid breaks
+    // BM25 ties consistently without loading full external-content rows for every match.
+    // INVARIANT: Unary + prevents FTS5 from turning rowid IN into repeated MATCH
+    // point scans. The covering account index supplies membership without payload reads.
+    let sql = if query.account_filter.is_some() {
+        "WITH ranked AS MATERIALIZED (
+            SELECT rowid AS rid, rank AS score FROM messages_fts
+            WHERE messages_fts MATCH ?1
+              AND +rowid IN (SELECT rowid FROM messages WHERE account_id=?2)
+            ORDER BY rank, rowid LIMIT ?3 OFFSET ?4)
+         SELECT m.id FROM ranked r JOIN messages m ON m.rowid=r.rid
+         ORDER BY r.score, r.rid"
+    } else {
+        "WITH ranked AS MATERIALIZED (
+            SELECT rowid AS rid, rank AS score FROM messages_fts
+            WHERE messages_fts MATCH ?1 AND ?2 IS NULL
+            ORDER BY rank, rowid LIMIT ?3 OFFSET ?4)
+         SELECT m.id FROM ranked r JOIN messages m ON m.rowid=r.rid
+         ORDER BY r.score, r.rid"
+    };
+    select_ids(conn, sql, &expression, query)
+}
+
+fn select_ids(
+    conn: &Connection,
+    sql: &str,
+    expression: &str,
+    query: &HybridQuery,
+) -> Result<Vec<String>, StorageError> {
+    let mut stmt = conn.prepare_cached(sql).map_err(query_error)?;
+    let rows = stmt
+        .query_map(
+            rusqlite::params![
+                expression,
+                query.account_filter,
+                query.limit as i64,
+                query.offset as i64
+            ],
+            |row| row.get(0),
+        )
+        .map_err(query_error)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
+}
+
+/// Executes exact cosine nearest-neighbor search over eligible message vectors.
 pub fn execute_semantic_search(
     conn: &Connection,
     query: &HybridQuery,
 ) -> Result<Vec<MessageRowSummary>, StorageError> {
+    query.validate()?;
+    load_summaries(conn, &semantic_ids(conn, query)?)
+}
+
+fn semantic_ids(conn: &Connection, query: &HybridQuery) -> Result<Vec<String>, StorageError> {
     let embedding = query
         .query_embedding_int8
         .as_ref()
-        .ok_or_else(|| StorageError::InvalidSearchQuery("missing query embedding".to_string()))?;
-
-    let vec_bytes = int8_slice_to_bytes(embedding);
-    let k = (query.limit + query.offset) as i64;
-
-    let mut stmt = conn
-        .prepare(
-            "SELECT m.id, m.account_id, m.folder, m.uid, m.subject, m.sender,
-                    m.received_at_epoch_ms, m.is_read, m.has_attachments, m.category_badge
-             FROM vec_messages v
-             JOIN messages m ON v.message_id = m.id
-             WHERE v.embedding_int8 MATCH vec_int8(?1)
-               AND k = ?2
-               AND (?3 IS NULL OR m.account_id = ?3)
-             ORDER BY v.distance ASC
-             LIMIT ?4 OFFSET ?5;",
-        )
-        .map_err(|e| StorageError::Query(format!("failed to prepare semantic search: {e}")))?;
-
-    let limit = query.limit as i64;
-    let offset = query.offset as i64;
-
-    let rows = stmt
-        .query_map(
-            rusqlite::params![vec_bytes, k, query.account_filter, limit, offset],
-            row_to_summary,
-        )
-        .map_err(|e| StorageError::Query(format!("failed to execute semantic search: {e}")))?;
-
-    let mut results = Vec::new();
-    for row in rows {
-        results.push(row.map_err(|e| StorageError::Query(e.to_string()))?);
+        .ok_or_else(|| StorageError::InvalidSearchQuery("missing query embedding".into()))?;
+    let bytes = int8_slice_to_bytes(embedding);
+    let end = query.limit + query.offset;
+    // INVARIANT: vec0 0.1.9 caps k at 4096. Exact ranking also handles arbitrarily
+    // large distance-tie groups, so page membership never depends on a truncated tie.
+    if query.account_filter.is_some() || end >= 4096 {
+        return exact_semantic_ids(conn, query, &bytes);
     }
-
-    hydrate_metadata(conn, &mut results)?;
-    Ok(results)
+    let mut k = end + 1;
+    loop {
+        let mut rows = knn_candidates(conn, &bytes, k)?;
+        rows.sort_by(|a, b| a.1.total_cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+        let complete = rows.len() < k || rows[end - 1].1 < rows[k - 1].1;
+        if complete {
+            let ids: Vec<_> = rows.into_iter().take(end).map(|(id, _)| id).collect();
+            // Orphan vectors must not consume page slots (vec0 has no foreign keys).
+            let existing: i64 = conn
+                .query_row(
+                    &format!(
+                        "SELECT count(*) FROM messages WHERE id IN ({})",
+                        vec!["?"; ids.len()].join(",")
+                    ),
+                    rusqlite::params_from_iter(&ids),
+                    |row| row.get(0),
+                )
+                .map_err(query_error)?;
+            return if existing as usize == ids.len() {
+                Ok(ids.into_iter().skip(query.offset).collect())
+            } else {
+                exact_semantic_ids(conn, query, &bytes)
+            };
+        }
+        if k == 4096 {
+            return exact_semantic_ids(conn, query, &bytes);
+        }
+        k = (k * 2).min(4096);
+    }
 }
 
-/// Executes a hybrid search combining lexical and semantic results via Reciprocal Rank Fusion.
+fn knn_candidates(
+    conn: &Connection,
+    bytes: &[u8],
+    k: usize,
+) -> Result<Vec<(String, f64)>, StorageError> {
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT message_id, distance FROM vec_messages
+         WHERE embedding_int8 MATCH vec_int8(?1) AND k=?2",
+        )
+        .map_err(query_error)?;
+    let rows = stmt
+        .query_map(rusqlite::params![bytes, k as i64], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .map_err(query_error)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
+}
+
+fn exact_semantic_ids(
+    conn: &Connection,
+    query: &HybridQuery,
+    bytes: &[u8],
+) -> Result<Vec<String>, StorageError> {
+    // INVARIANT: Account eligibility is resolved before distance ranking and LIMIT.
+    // CROSS JOIN keeps the account-index scan outside point lookups into vec0, avoiding
+    // a full vector scan followed by post-filtering. Missing embeddings simply don't join.
+    let sql = if query.account_filter.is_some() {
+        "SELECT v.message_id FROM messages m CROSS JOIN vec_messages v
+         WHERE m.account_id=?2 AND v.message_id=m.id
+         ORDER BY vec_distance_cosine(v.embedding_int8, vec_int8(?1)), v.message_id
+         LIMIT ?3 OFFSET ?4"
+    } else {
+        "SELECT v.message_id FROM vec_messages v JOIN messages m ON m.id=v.message_id
+         WHERE ?2 IS NULL
+         ORDER BY vec_distance_cosine(v.embedding_int8, vec_int8(?1)), v.message_id
+         LIMIT ?3 OFFSET ?4"
+    };
+    let mut stmt = conn.prepare_cached(sql).map_err(query_error)?;
+    let rows = stmt
+        .query_map(
+            rusqlite::params![
+                bytes,
+                query.account_filter,
+                query.limit as i64,
+                query.offset as i64
+            ],
+            |row| row.get(0),
+        )
+        .map_err(query_error)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
+}
+
+/// Combines lexical and semantic candidates with Reciprocal Rank Fusion.
 pub fn execute_hybrid_search(
     conn: &Connection,
     query: &HybridQuery,
 ) -> Result<Vec<MessageRowSummary>, StorageError> {
-    let has_lexical = !query.query_text.trim().is_empty();
-    let has_semantic = query.query_embedding_int8.is_some();
-
-    match (has_lexical, has_semantic) {
-        (true, false) => execute_lexical_search(conn, query),
+    query.validate()?;
+    match (
+        !query.query_text.trim().is_empty(),
+        query.query_embedding_int8.is_some(),
+    ) {
+        (false, false) | (true, false) => execute_lexical_search(conn, query),
         (false, true) => execute_semantic_search(conn, query),
-        (false, false) => Ok(Vec::new()),
         (true, true) => {
-            // Expand fetch window to blend top candidates
-            let candidate_limit = (query.limit + query.offset).max(50);
-            let lexical_query = HybridQuery {
-                mode: SearchMode::Lexical,
-                limit: candidate_limit,
+            let candidates = HybridQuery {
+                limit: (query.limit + query.offset).max(50),
                 offset: 0,
                 ..query.clone()
             };
-            let semantic_query = HybridQuery {
-                mode: SearchMode::Semantic,
-                limit: candidate_limit,
-                offset: 0,
-                ..query.clone()
-            };
-
-            let lexical_results = execute_lexical_search(conn, &lexical_query)?;
-            let semantic_results = execute_semantic_search(conn, &semantic_query)?;
-
-            // RRF formula: score = sum(1.0 / (60.0 + rank))
-            const RRF_K: f64 = 60.0;
-            let mut scores: HashMap<String, (f64, MessageRowSummary)> = HashMap::new();
-
-            for (rank, item) in lexical_results.into_iter().enumerate() {
-                let score = 1.0 / (RRF_K + (rank as f64) + 1.0);
-                scores
-                    .entry(item.id.clone())
-                    .and_modify(|(s, _)| *s += score)
-                    .or_insert((score, item));
+            let mut scores: HashMap<String, f64> = HashMap::new();
+            for ids in [
+                lexical_ids(conn, &candidates)?,
+                semantic_ids(conn, &candidates)?,
+            ] {
+                for (rank, id) in ids.into_iter().enumerate() {
+                    *scores.entry(id).or_default() += 1.0 / (60.0 + rank as f64 + 1.0);
+                }
             }
-
-            for (rank, item) in semantic_results.into_iter().enumerate() {
-                let score = 1.0 / (RRF_K + (rank as f64) + 1.0);
-                scores
-                    .entry(item.id.clone())
-                    .and_modify(|(s, _)| *s += score)
-                    .or_insert((score, item));
-            }
-
-            let mut blended: Vec<(f64, MessageRowSummary)> = scores.into_values().collect();
-            blended.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-
-            let paged: Vec<MessageRowSummary> = blended
+            let mut ranked: Vec<_> = scores.into_iter().collect();
+            // INVARIANT: HashMap iteration must never decide equal-score page membership.
+            ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+            let ids: Vec<_> = ranked
                 .into_iter()
                 .skip(query.offset)
                 .take(query.limit)
-                .map(|(_, item)| item)
+                .map(|(id, _)| id)
                 .collect();
-
-            Ok(paged)
+            load_summaries(conn, &ids)
         }
     }
+}
+
+fn query_error(error: rusqlite::Error) -> StorageError {
+    StorageError::Query(error.to_string())
+}
+
+fn load_summaries(
+    conn: &Connection,
+    ids: &[String],
+) -> Result<Vec<MessageRowSummary>, StorageError> {
+    let mut summaries = HashMap::new();
+    // INVARIANT: Hydrate only the final page, once after fusion, without changing rank order.
+    for chunk in ids.chunks(500) {
+        let sql = format!(
+            "SELECT id, account_id, folder, uid, subject, sender, received_at_epoch_ms,
+             is_read, has_attachments, category_badge FROM messages WHERE id IN ({})",
+            vec!["?"; chunk.len()].join(",")
+        );
+        let mut stmt = conn.prepare_cached(&sql).map_err(query_error)?;
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(chunk), row_to_summary)
+            .map_err(query_error)?;
+        for row in rows {
+            let row = row.map_err(query_error)?;
+            summaries.insert(row.id.clone(), row);
+        }
+    }
+    let mut rows: Vec<_> = ids.iter().filter_map(|id| summaries.remove(id)).collect();
+    hydrate_metadata(conn, &mut rows)?;
+    Ok(rows)
 }
 
 fn row_to_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageRowSummary> {

@@ -13,11 +13,64 @@
   candidate selection and address measured search latency at 100,000 messages.
 - **Systems Involved:** Storage/search and the existing desktop search adapter.
 - **Action Type:** Implementation; requires a separately approved plan.
-- **Status:** READY FOR PLANNING
-- **Plan:** Not yet proposed or approved. No [90.2] implementation has started.
+- **Status:** RUNNING
+- **Plan:** Approved by the user on 2026-10-31; implementation in progress.
 - **Evidence:** [90.1] report in `docs/performance/native-validation.md`; raw samples included.
 - **Constraints:** Preserve existing IPC/schema/core trait contracts unless an explicit plan
   approves an additive change. Separate correctness assertions from timing observations.
+
+### Approved Plan ([90.2])
+1. Restore blank lexical inbox requests as newest-first persisted listings with a stable ID
+   tie-breaker, bounded pagination and existing tag/folder metadata. Cover empty/whitespace
+   input, equal timestamps, account isolation and restart persistence with regressions.
+2. Correct semantic candidate selection so account restrictions apply before top-k selection.
+   Verify complete eligible pages and nearest-neighbor ordering against a deterministic
+   reference, including second pages, sparse accounts and ties. Preserve IPC payloads,
+   schema versions and core trait signatures; escalate any required additive schema change.
+3. Profile existing 100k SQLCipher workloads and optimize measured query/ranking/hydration
+   bottlenecks without reducing candidate coverage or changing the RRF scoring formula.
+   Make tie ordering deterministic and avoid hydrating discarded hybrid candidates where safe.
+4. Rerun the existing release benchmark with stronger correctness assertions and separate
+   timing observations. Preserve baseline samples and document before/after distributions,
+   result counts and remaining limits; do not claim the <15ms target unless measured.
+5. Run the full repository Definition of Done and frontend build using cached dependencies
+   and synthetic local fixtures, respecting the two-failure circuit breaker. Synchronize
+   READMEs with readme-standard only if documented commands or configuration change.
+6. Record applicable invariants/knowledge, create an atomic Conventional Commit and log its
+   hash. Promote any remaining follow-up explicitly; no push, release or tag.
+
+### Acceptance and Validation ([90.2])
+
+- [x] Blank lexical inbox requests return newest-first persisted pages with stable ID ties,
+  account filtering and saved metadata. A desktop service regression needs no embedding provider.
+- [x] Account semantic pages select exact eligible neighbors before pagination. Unfiltered
+  vector ties, orphan vectors, absent embeddings, deep offsets and the vec0 k ceiling are covered.
+- [x] Lexical ranking uses narrow rowids and covering-index account membership; hybrid keeps
+  RRF/candidate coverage and hydrates final-page metadata once. IPC/schema/traits are unchanged.
+- [x] Full offline workspace check/test/fmt/Clippy passed: 163 Rust tests, zero Clippy warnings.
+  Frontend check had zero errors/warnings; all 56 tests and ordinary SPA build passed.
+- [x] The final 100k release benchmark passed stronger count/reference assertions for all
+  455 samples. Every case returns 200 rows. Original baseline samples remain unchanged.
+- [x] Warm p50 lexical-common/filter changed from 56.303/58.740ms to 39.950/34.502ms. Blank
+  inbox retrieval returns 200 rows at 0.363ms. The <15ms target remains unmet; corrected
+  semantic-filtered returns 200 instead of 41 rows at 380.273ms. Record this cost explicitly.
+- [x] Five policy scanner regressions passed with authorized subprocess access; tracked scan
+  found zero issues. Runes/whitespace checks passed. k-015 preserves search query invariants;
+  k-006 records expired sysroot recovery. No documented commands/configuration changed.
+- [x] User authorized resuming after the sandbox subprocess circuit breaker. Native tests used
+  loopback mocks; missing Linux prerequisites were restored through explicitly authorized
+  build-package downloads into a disposable sysroot, without system installation.
+- [ ] Record the atomic implementation commit and promote [90.3] for separate planning.
+
+### Remaining Limits ([90.2])
+
+- Full hybrid/vector workloads still miss <15ms. Corrected account-filtered semantic/hybrid
+  queries are slower than the previous incorrect candidate path; see before/after samples in
+  `docs/performance/native-validation.md`. Account-partitioned indexing requires separate planning.
+- Timing excludes embeddings, IPC and debounce; reopened samples retain the OS cache. Native
+  rendering/production-memory, hosted CI, package installation, push/release/tag were not performed.
+- The fixed-request tie-breakers do not guarantee stable hybrid pages across changing branch
+  candidate-window sizes or concurrent writes; this existing ranking limitation is documented.
 
 ---
 
@@ -579,7 +632,7 @@ Registered 2026-10-31 from post-[04.5] gap analysis. Each task requires its own 
 - **Scope:** Native WebKitGTK frame timing with 100k messages; hybrid search `<15ms` benchmark
   at 100k rows over SQLCipher; release binary size and idle RAM baseline.
 
-### [90.2] Search Correctness and Performance — `READY FOR PLANNING`
+### [90.2] Search Correctness and Performance — `RUNNING`
 - **Evidence:** [90.1] measured hybrid p50 117–193ms, semantic account-filter underfill (41/200),
   and zero rows for blank lexical inbox queries. See the committed methodology/raw samples.
 - **Scope:** Plan ordinary inbox listing, account-aware KNN selection and evidence-backed

@@ -87,6 +87,15 @@ impl HybridQuery {
                 "limit must be between 1 and 500".to_string(),
             ));
         }
+        if self
+            .offset
+            .checked_add(self.limit)
+            .is_none_or(|end| i64::try_from(end).is_err())
+        {
+            return Err(StorageError::InvalidSearchQuery(
+                "pagination exceeds SQLite integer bounds".to_string(),
+            ));
+        }
         if self.mode == SearchMode::Semantic && self.query_embedding_int8.is_none() {
             return Err(StorageError::InvalidSearchQuery(
                 "semantic search requires an int8 query embedding".to_string(),

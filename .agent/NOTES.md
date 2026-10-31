@@ -206,3 +206,18 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   retain triggers and infer persisted tokenizer from sqlite_master on reopen.
 - Remote-image consent belongs to the current message identity only, defaults blocked and
   is never persisted as a global allow setting. Sanitization and the empty sandbox remain.
+
+## Persisted Inbox and Search Ranking ([90.2])
+
+- Blank/whitespace lexical requests list persisted summaries by received time descending,
+  then message ID ascending. Account restrictions, pagination and existing tag/folder metadata
+  apply; canonical IMAP folder/UID remain unchanged. Hybrid without text or a vector also lists.
+- Lexical candidates rank by BM25 then message rowid. Semantic candidates rank by exact cosine
+  distance then message ID, with account eligibility applied before pagination. Unfiltered vec0
+  top-k expands across ties; exact ranking handles deep pages, oversized ties and orphan vectors.
+- Hybrid retains the existing per-branch `max(limit+offset, 50)` candidate window and RRF
+  constant 60; equal fused scores use message ID. This stabilizes a given request, not ranking
+  across changing candidate-window sizes or concurrent ingestion. Final summaries/metadata are
+  hydrated once after fusion. IPC DTOs, schema versions and trait signatures are unchanged.
+- Storage rejects pagination beyond SQLite integer bounds before query execution. Details and
+  query-plan constraints live in k-015; target latency remains subject to measured evidence.

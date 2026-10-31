@@ -181,3 +181,78 @@ optimizing latency. Profile common FTS matches, vector scans, account filtering,
 hydration and pagination at this scale. Repeat native measurement on a supported accelerated
 desktop before drawing compositor or hardware-wide conclusions. These are proposed follow-ups;
 no production search/UI optimization, schema/IPC change, push, release or tag is part of [90.1].
+
+
+## Search correction follow-up ([90.2])
+
+Recorded on 2026-10-31 after the separately approved implementation plan. The original
+[90.1] samples above remain the historical baseline. New raw samples are in
+[search-100k-corrected.csv](search-100k-corrected.csv); the existing reproduction command and
+fixture distribution are unchanged. Same host/compiler, SQLCipher/SQLite/sqlite-vec versions,
+release profile, disk-backed workspace and 216,387,584-byte database. This final run started
+after compilation/tests finished. Earlier compiler-contended diagnostic runs are excluded.
+These are sequential observations on a shared host, not a randomized controlled comparison.
+
+Blank lexical requests now list persisted mail newest first with message-ID ties and normal
+pagination. Account-filtered semantic search enumerates eligible message IDs before exact
+cosine ranking, so other accounts cannot consume its top-k slots. Unfiltered search keeps
+vec0 top-k with one extra neighbor, expands across boundary ties and falls back to exact
+ranking at its 4096-candidate ceiling or for deeper pages. Missing embeddings and orphan
+vectors cannot consume returned page slots. Schema versions, IPC DTOs and trait signatures
+are unchanged; no migration or new dependency was introduced.
+
+Lexical search ranks rowids before reading summary payload pages. For account filters,
+`+rowid IN (...)` prevents repeated FTS MATCH point scans and uses the existing covering
+account index for membership. An isolated query-plan diagnostic found an explicit
+rank/rowid tie-breaker plus wide joins took roughly 250ms, whereas membership filtering
+before summary hydration took roughly 30ms. Hybrid retains its existing RRF formula and
+candidate-window sizes, adds a message-ID tie-breaker and hydrates metadata only after
+fusion. Stable ranking applies to a fixed request and dataset; changing the hybrid candidate
+window or ingesting messages can still change page membership.
+
+Correctness assertions now require **200 rows in every benchmark case**. Every semantic
+page is compared, outside the timer, with an independent reference built from integer dot
+products/norms over the synthetic vectors. The empty lexical page is checked against exact
+newest-first fixture IDs. Existing uniqueness, account-isolation and lexical-content checks
+remain. Unit/service regressions additionally cover reopening encrypted storage, whitespace,
+equal timestamps, tags/folder overrides, missing embeddings, orphan vectors, tied neighbors,
+an oversized 4100-vector tie and offsets beyond vec0's k ceiling. Ordinary timing assertions
+were not weakened. The independent reference tests ordering, not semantic relevance.
+
+| Case | Warm p50 ms | Warm p95 ms | Reopened p50 ms | Rows returned |
+|---|---:|---:|---:|---:|
+| Lexical-rare | 6.325 | 7.244 | 6.026 | 200 |
+| Lexical-common | 39.950 | 44.692 | 44.687 | 200 |
+| Lexical-filtered | 34.502 | 35.952 | 35.588 | 200 |
+| Lexical-page2 | 38.563 | 41.435 | 39.038 | 200 |
+| Semantic-rare | 110.343 | 113.919 | 112.841 | 200 |
+| Semantic-common | 109.576 | 112.448 | 110.218 | 200 |
+| Semantic-filtered | 380.273 | 391.899 | 382.545 | 200 |
+| Semantic-page2 | 126.846 | 131.932 | 127.005 | 200 |
+| Hybrid-rare | 114.302 | 118.479 | 114.292 | 200 |
+| Hybrid-common | 153.382 | 169.400 | 147.850 | 200 |
+| Hybrid-filtered | 426.470 | 483.285 | 445.044 | 200 |
+| Hybrid-page2 | 172.060 | 182.446 | 166.623 | 200 |
+| Lexical-empty-inbox | 0.363 | 0.430 | 1.054 | 200 |
+
+Common lexical warm p50 improved from 56.303ms to 39.950ms (29% lower); filtered lexical
+improved from 58.740ms to 34.502ms (41% lower). Hybrid-common changed from 171.650ms to
+153.382ms and hybrid-page2 from 192.626ms to 172.060ms. Rare lexical changed from 5.469ms
+to 6.325ms; this is not a claim that every workload improved. Blank inbox retrieval returns
+200 rows at 0.363ms warm p50 instead of returning no persisted mail.
+
+**The <15ms search target remains unmet.** In particular, the schema-preserving account
+semantic path now returns the correct 200 neighbors at 380.273ms warm p50. The original
+127.864ms returned only 41 rows and is not an equivalent complete-result workload.
+Hybrid-filtered now uses those correct candidates and measures 426.470ms versus 168.010ms
+with the old incomplete semantic branch. Exact per-message vector lookups are expensive;
+this correctness cost remains a performance regression requiring further work.
+
+[90.3] should evaluate account-partitioned vector storage/indexing and the remaining lexical
+ranking cost under a separately approved plan, including any additive schema migration.
+Do not silently cap candidates, accept underfilled pages or substitute approximate neighbors
+to pass the target. Final measurements still exclude embeddings, IPC and UI debounce;
+reopened connections retain the OS cache. Native frame timing and production memory were
+not remeasured in [90.2]. No real accounts, providers, model downloads or AI calls were used.
+The user explicitly permitted build-package downloads to restore a missing disposable Linux
+sysroot; these were extracted locally without installing system packages.
