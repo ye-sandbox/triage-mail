@@ -17,6 +17,8 @@ export type MessageRowDto = {
 	is_read: boolean;
 	has_attachments: boolean;
 	category_badge: string | null;
+	tags: string[];
+	folder_override: string | null;
 };
 export type SyncState =
 	'Syncing' | 'Idle' | 'Retrying' | 'MutationPending' | 'MutationFailed' | 'ResyncRequired';

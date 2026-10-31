@@ -170,9 +170,13 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - One UI mutation runs at a time. It invalidates earlier reads and defers sync refresh until
   settled. Rejected IPC writes roll back local feedback; background remote failures retain
   durable local mutations and surface the existing sync status rather than undoing the outbox.
-- Folder feedback never replaces canonical row folder/UID identity. Tag/folder feedback is
-  session-local because the established DTOs do not expose persisted tags/folder overrides;
-  backend persistence and background IMAP synchronization remain authoritative.
+- Folder feedback never replaces canonical row folder/UID identity. Summary fields `tags`
+  (sorted unique strings, default empty) and `folder_override` (nullable string, default null)
+  expose persisted local metadata additively. Storage hydrates ranked pages from existing
+  tables; no schema or trait signature changes. Desktop search preserves canonical identity.
+- Accepted search/refresh pages replace feedback with authoritative metadata; optimistic writes
+  remain immediate and rejected mutations roll back. MOVE completion clears the override and
+  updates canonical folder/UID together. Stale pages cannot restore older feedback.
 - Visible rows request extraction metadata through the existing local detail command. The
   shared loader permits four concurrent requests, cancels obsolete queued callbacks, caches
   at most 400 badge entries (never bodies), and refetches after authoritative sync revisions.

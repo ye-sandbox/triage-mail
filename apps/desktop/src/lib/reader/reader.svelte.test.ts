@@ -15,6 +15,8 @@ const row = (id: string): MessageRowDto => ({
 	received_at_epoch_ms: 0,
 	is_read: false,
 	has_attachments: true,
+	tags: [],
+	folder_override: null,
 	category_badge: null
 });
 const detail = (id: string, html_raw: string | null = null): MessageDetailDto => ({

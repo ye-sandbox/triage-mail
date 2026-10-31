@@ -50,6 +50,7 @@ pub fn execute_lexical_search(
         results.push(row.map_err(|e| StorageError::Query(e.to_string()))?);
     }
 
+    hydrate_metadata(conn, &mut results)?;
     Ok(results)
 }
 
@@ -95,6 +96,7 @@ pub fn execute_semantic_search(
         results.push(row.map_err(|e| StorageError::Query(e.to_string()))?);
     }
 
+    hydrate_metadata(conn, &mut results)?;
     Ok(results)
 }
 
@@ -176,5 +178,51 @@ fn row_to_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageRowSummary
         is_read: row.get::<_, i64>(7)? != 0,
         has_attachments: row.get::<_, i64>(8)? != 0,
         category_badge: row.get(9)?,
+        tags: Vec::new(),
+        folder_override: None,
     })
+}
+
+/// Hydrates only ranked candidates; joins must not alter result order or pagination.
+fn hydrate_metadata(
+    conn: &Connection,
+    summaries: &mut [MessageRowSummary],
+) -> Result<(), StorageError> {
+    // INVARIANT: Bound SQL parameters, and never join tags into the ranked query (fan-out).
+    for chunk in summaries.chunks_mut(500) {
+        let positions: HashMap<String, usize> = chunk
+            .iter()
+            .enumerate()
+            .map(|(index, row)| (row.id.clone(), index))
+            .collect();
+        let placeholders = vec!["?"; chunk.len()].join(",");
+        let sql = format!(
+            "SELECT m.id, o.folder, t.tag_name FROM messages m
+             LEFT JOIN message_folder_overrides o ON o.message_id=m.id
+             LEFT JOIN tags t ON t.message_id=m.id
+             WHERE m.id IN ({placeholders}) ORDER BY t.tag_name"
+        );
+        let mut statement = conn
+            .prepare(&sql)
+            .map_err(|e| StorageError::Query(e.to_string()))?;
+        let ids: Vec<&str> = chunk.iter().map(|row| row.id.as_str()).collect();
+        let records = statement
+            .query_map(rusqlite::params_from_iter(ids), |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            })
+            .map_err(|e| StorageError::Query(e.to_string()))?;
+        for record in records {
+            let (id, folder, tag) = record.map_err(|e| StorageError::Query(e.to_string()))?;
+            let summary = &mut chunk[positions[&id]];
+            summary.folder_override = folder;
+            if let Some(tag) = tag {
+                summary.tags.push(tag);
+            }
+        }
+    }
+    Ok(())
 }

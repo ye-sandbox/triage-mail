@@ -272,3 +272,91 @@ fn test_semantic_and_hybrid_sub_15ms_search() {
         hyb_elapsed
     );
 }
+
+#[test]
+fn persisted_triage_metadata_rehydrates_ranked_pages_after_reopen() {
+    use storage::desktop::LocalMutation;
+
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("metadata.db");
+    let key = DatabaseKey::from_bytes([63; 32]);
+    let tokenizer = FtsTokenizerMode::Unicode61RemoveDiacritics;
+    let store = SqliteMailStore::open(&path, &key, tokenizer).unwrap();
+    store
+        .insert_account(&create_sample_account("local", "reader@example.com"))
+        .unwrap();
+    let mut embedding = vec![0i8; 384];
+    embedding[0] = 100;
+    for index in 1..=4 {
+        let mut message = create_sample_message(
+            &format!("saved-{index}"),
+            "local",
+            "INBOX",
+            index,
+            "Invoice",
+            "Invoice details",
+        );
+        message.tags.clear();
+        store.insert_message(&message).unwrap();
+        let mut vector = embedding.clone();
+        vector[1] = (index * 10) as i8;
+        store
+            .insert_message_embedding(&message.id, &vector)
+            .unwrap();
+    }
+    let queries: Vec<_> = [
+        SearchMode::Lexical,
+        SearchMode::Semantic,
+        SearchMode::Hybrid,
+    ]
+    .into_iter()
+    .map(|mode| HybridQuery {
+        query_text: "Invoice".into(),
+        query_embedding_int8: Some(embedding.clone()),
+        account_filter: Some("local".into()),
+        mode,
+        limit: 2,
+        offset: 1,
+    })
+    .collect();
+    let before: Vec<_> = queries.iter().map(|q| store.search(q).unwrap()).collect();
+    for index in 1..=3 {
+        let id = format!("saved-{index}");
+        store
+            .apply_local_mutations(&[
+                (id.clone(), LocalMutation::Folder("Archive"), None),
+                (id.clone(), LocalMutation::Tag("Zulu, with comma"), None),
+                (id.clone(), LocalMutation::Tag("Alpha"), None),
+                (id, LocalMutation::Tag("Alpha"), None),
+            ])
+            .unwrap();
+    }
+    drop(store);
+    let reopened = SqliteMailStore::open(&path, &key, tokenizer).unwrap();
+    for (query, original) in queries.iter().zip(before) {
+        let rows = reopened.search(query).unwrap();
+        assert_eq!(
+            rows.iter().map(|r| &r.id).collect::<Vec<_>>(),
+            original.iter().map(|r| &r.id).collect::<Vec<_>>()
+        );
+        assert_eq!(rows.len(), 2);
+        for row in rows {
+            assert_eq!(row.folder, "INBOX");
+            assert_eq!(
+                row.uid,
+                row.id
+                    .strip_prefix("saved-")
+                    .unwrap()
+                    .parse::<u32>()
+                    .unwrap()
+            );
+            if row.id == "saved-4" {
+                assert!(row.tags.is_empty());
+                assert_eq!(row.folder_override, None);
+            } else {
+                assert_eq!(row.tags, vec!["Alpha", "Zulu, with comma"]);
+                assert_eq!(row.folder_override.as_deref(), Some("Archive"));
+            }
+        }
+    }
+}

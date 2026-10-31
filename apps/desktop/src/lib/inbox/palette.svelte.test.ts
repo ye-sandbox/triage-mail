@@ -15,6 +15,8 @@ const row: MessageRowDto = {
 	received_at_epoch_ms: 0,
 	is_read: false,
 	has_attachments: false,
+	tags: [],
+	folder_override: null,
 	category_badge: 'Newsletter'
 };
 const badges: TriageBadge[] = [

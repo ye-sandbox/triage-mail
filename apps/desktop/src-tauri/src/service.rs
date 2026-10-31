@@ -244,13 +244,8 @@ impl DesktopService {
             let query = query
                 .into_hybrid_query(embedding)
                 .map_err(|_| IpcError::InvalidRequest)?;
-            let mut rows = s.store.search(&query).map_err(storage_error)?;
-            for row in &mut rows {
-                if let Some(folder) = s.store.folder_override(&row.id).map_err(storage_error)? {
-                    row.folder = folder;
-                }
-            }
-            Ok(rows)
+            // INVARIANT: Display overrides never replace the canonical IMAP folder/UID.
+            s.store.search(&query).map_err(storage_error)
         })
         .await
     }
