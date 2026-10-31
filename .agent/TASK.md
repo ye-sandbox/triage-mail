@@ -7,14 +7,33 @@
 
 ## Active Task
 
+### 📌 Task [90.4]: Remaining Exact Search Latency
+
+- **Description:** Profile and reduce remaining global vector/FTS ranking and hybrid latency
+  while preserving exact eligible neighbors and deterministic fixed-request ranking.
+- **Systems Involved:** Storage/search; headless core boundaries remain unchanged.
+- **Action Type:** Implementation; requires a separately approved plan.
+- **Status:** READY FOR PLANNING
+- **Plan:** Not yet proposed or approved. No [90.4] implementation has started.
+- **Evidence:** [90.3] report and raw samples in `docs/performance/native-validation.md`.
+- **Constraints:** Preserve v5 index consistency, encryption/durability, exact coverage and
+  tie/deep-page behavior. No approximations, stale-result caches or unsafe-code expansion.
+  Distinguish warm/reopened results and account for memory and migration costs.
+
+---
+
+## Completed Partition Optimization Evidence
+
 ### 📌 Task [90.3]: Account-Partitioned Search Optimization
 
 - **Description:** Evaluate account-partitioned vector storage/indexing and remaining lexical
   ranking costs to pursue <15ms search at 100,000 messages with complete, exact results.
 - **Systems Involved:** Storage/search; desktop adapter only if an approved plan requires it.
 - **Action Type:** Implementation; requires a separately approved plan.
-- **Status:** RUNNING
-- **Plan:** Approved by the user on 2026-10-31; implementation in progress.
+- **Status:** DONE
+- **Plan:** Approved by the user on 2026-10-31; implementation and validation complete.
+- **Commit:** `e40056a` (`perf(search): partition account vectors and tune page cache`).
+- **Next Task:** [90.4] Remaining Exact Search Latency (`READY FOR PLANNING`).
 - **Evidence:** [90.2] corrected samples/report in `docs/performance/native-validation.md`.
 - **Constraints:** Any additive schema migration needs explicit plan approval and contract
   documentation. Preserve account isolation, exact neighbor coverage, stable tie boundaries
@@ -77,7 +96,7 @@
   authorized subprocess/mock access. No external requests or new dependencies were needed.
   k-016 preserves partition/subtype pitfalls; ADR-006 records the approved trade-off. No CLI flags,
   environment settings or validation commands changed, so README perimeter remains unchanged.
-- [ ] Record the atomic implementation commit and promote remaining latency work for planning.
+- [x] Atomic implementation commit `e40056a` recorded; [90.4] promoted to READY FOR PLANNING.
 
 ### Remaining Limits ([90.3])
 
@@ -610,6 +629,7 @@ User subsequently authorized native build dependency downloads into a temporary 
 | [04.8] | Persist Tag & Folder Override Rehydration | `2f14690` | 2026-10-31 |
 | [90.1] | Native Performance Validation | `98ed221` | 2026-10-31 |
 | [90.2] | Search Correctness and Performance | `c14f6fa` | 2026-10-31 |
+| [90.3] | Account-Partitioned Search Optimization | `e40056a` | 2026-10-31 |
 
 
 ### Validation ([04.1])
@@ -730,14 +750,22 @@ Registered 2026-10-31 from post-[04.5] gap analysis. Each task requires its own 
 - **Outcome:** All cases return 200 rows; lexical-common/filter warm p50 is 39.950/34.502ms.
   The <15ms target remains unmet, and corrected account-vector ranking is slower. See [90.3].
 
-### [90.3] Account-Partitioned Search Optimization — `RUNNING`
+### [90.3] Account-Partitioned Search Optimization — `DONE`
 - **Evidence:** [90.2] semantic-filtered/hybrid-filtered warm p50 is 380.273/426.470ms with
   complete 200-row pages; common lexical remains above <15ms.
-- **Scope:** Evaluate account partitioning/indexing and remaining FTS ranking cost, with
-  correctness/reference checks and comparable 100k SQLCipher samples.
-- **Constraints:** Separate approval required before implementation, especially for additive
-  schema changes. Keep exact eligible coverage, ties, restart persistence and existing DTOs.
-  Native accelerated frame/presentation and real-account memory remain separate future work.
+- **Scope:** Completed additive v5 account partition index, atomic maintenance and measured
+  64MiB page-cache target; retained exact ties, fallback, DTOs and traits.
+- **Outcome:** Warm filtered semantic p50/p95 is 12.041/12.928ms; hybrid-filtered p50 is 37.482ms.
+  Other/reopened cases still miss <15ms; migration took 1296.317ms and added 44.11MiB in the fixture.
+
+### [90.4] Remaining Exact Search Latency — `READY FOR PLANNING`
+- **Evidence:** [90.3] global semantic-common/hybrid-common warm p50 is 43.650/77.060ms;
+  common lexical is 33.704ms. Filtered second semantic page is 16.099ms warm median.
+- **Scope:** Profile global vector and FTS ranking costs, exact hybrid latency and remaining
+  reopened overhead with independently checked neighbors and comparable 100k workloads.
+- **Constraints:** Separate plan approval required. Preserve encryption, v5 partition consistency,
+  exact ranking/candidate coverage and safety boundaries. Native rendering/real-account memory
+  remain separate; no automatic push, release or tag.
 
 ---
 
