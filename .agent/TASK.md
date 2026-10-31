@@ -7,14 +7,33 @@
 
 ## Active Task
 
+### 📌 Task [90.3]: Account-Partitioned Search Optimization
+
+- **Description:** Evaluate account-partitioned vector storage/indexing and remaining lexical
+  ranking costs to pursue <15ms search at 100,000 messages with complete, exact results.
+- **Systems Involved:** Storage/search; desktop adapter only if an approved plan requires it.
+- **Action Type:** Implementation; requires a separately approved plan.
+- **Status:** READY FOR PLANNING
+- **Plan:** Not yet proposed or approved. No [90.3] implementation has started.
+- **Evidence:** [90.2] corrected samples/report in `docs/performance/native-validation.md`.
+- **Constraints:** Any additive schema migration needs explicit plan approval and contract
+  documentation. Preserve account isolation, exact neighbor coverage, stable tie boundaries
+  and metadata hydration. No approximate/empty/underfilled-result substitution.
+
+---
+
+## Completed Search Task Evidence
+
 ### 📌 Task [90.2]: Search Correctness and Performance
 
 - **Description:** Restore ordinary persisted-inbox retrieval, correct account-aware vector
   candidate selection and address measured search latency at 100,000 messages.
 - **Systems Involved:** Storage/search and the existing desktop search adapter.
 - **Action Type:** Implementation; requires a separately approved plan.
-- **Status:** RUNNING
-- **Plan:** Approved by the user on 2026-10-31; implementation in progress.
+- **Status:** DONE
+- **Plan:** Approved by the user on 2026-10-31; implementation and validation complete.
+- **Commit:** `c14f6fa` (`fix(search): restore inbox listing and exact account neighbors`).
+- **Next Task:** [90.3] Account-Partitioned Search Optimization (`READY FOR PLANNING`).
 - **Evidence:** [90.1] report in `docs/performance/native-validation.md`; raw samples included.
 - **Constraints:** Preserve existing IPC/schema/core trait contracts unless an explicit plan
   approves an additive change. Separate correctness assertions from timing observations.
@@ -60,7 +79,7 @@
 - [x] User authorized resuming after the sandbox subprocess circuit breaker. Native tests used
   loopback mocks; missing Linux prerequisites were restored through explicitly authorized
   build-package downloads into a disposable sysroot, without system installation.
-- [ ] Record the atomic implementation commit and promote [90.3] for separate planning.
+- [x] Atomic implementation commit `c14f6fa` recorded; [90.3] promoted to READY FOR PLANNING.
 
 ### Remaining Limits ([90.2])
 
@@ -520,6 +539,7 @@ User subsequently authorized native build dependency downloads into a temporary 
 | [04.7] | Settings & AI Opt-in UI | `3686430` | 2026-10-31 |
 | [04.8] | Persist Tag & Folder Override Rehydration | `2f14690` | 2026-10-31 |
 | [90.1] | Native Performance Validation | `98ed221` | 2026-10-31 |
+| [90.2] | Search Correctness and Performance | `c14f6fa` | 2026-10-31 |
 
 
 ### Validation ([04.1])
@@ -632,14 +652,22 @@ Registered 2026-10-31 from post-[04.5] gap analysis. Each task requires its own 
 - **Scope:** Native WebKitGTK frame timing with 100k messages; hybrid search `<15ms` benchmark
   at 100k rows over SQLCipher; release binary size and idle RAM baseline.
 
-### [90.2] Search Correctness and Performance — `RUNNING`
+### [90.2] Search Correctness and Performance — `DONE`
 - **Evidence:** [90.1] measured hybrid p50 117–193ms, semantic account-filter underfill (41/200),
   and zero rows for blank lexical inbox queries. See the committed methodology/raw samples.
-- **Scope:** Plan ordinary inbox listing, account-aware KNN selection and evidence-backed
-  latency improvements; rerun the same 100k SQLCipher benchmark with correctness checks.
-- **Constraints:** Approval required before implementation. Preserve P1 contracts; do not
-  weaken tests or report partial/empty results as a performance improvement. Native accelerated
-  frame/presentation and real-account memory validation remain separate future work.
+- **Scope:** Completed persisted inbox listing, exact account-aware neighbor selection,
+  narrow lexical ranking and final-page metadata hydration; reran the 100k benchmark.
+- **Outcome:** All cases return 200 rows; lexical-common/filter warm p50 is 39.950/34.502ms.
+  The <15ms target remains unmet, and corrected account-vector ranking is slower. See [90.3].
+
+### [90.3] Account-Partitioned Search Optimization — `READY FOR PLANNING`
+- **Evidence:** [90.2] semantic-filtered/hybrid-filtered warm p50 is 380.273/426.470ms with
+  complete 200-row pages; common lexical remains above <15ms.
+- **Scope:** Evaluate account partitioning/indexing and remaining FTS ranking cost, with
+  correctness/reference checks and comparable 100k SQLCipher samples.
+- **Constraints:** Separate approval required before implementation, especially for additive
+  schema changes. Keep exact eligible coverage, ties, restart persistence and existing DTOs.
+  Native accelerated frame/presentation and real-account memory remain separate future work.
 
 ---
 
