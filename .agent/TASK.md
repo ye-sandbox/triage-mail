@@ -7,17 +7,34 @@
 
 ## Active Task
 
+### 📌 Task [04.8]: Persist Tag & Folder Override Rehydration
+
+- **Description:** Extend message summary reads to restore persisted local tags and folder
+  overrides after restart.
+- **Systems Involved:** Storage, additive desktop DTOs and inbox UI.
+- **Action Type:** Source code changes.
+- **Status:** READY FOR PLANNING
+- **Next Task:** [00.2] CI Pipeline (GitHub Actions) (`BACKLOG`).
+- **Plan:** Not yet proposed or approved. No [04.8] implementation has started.
+
+---
+
+## Completed Task Evidence
+
 ### 📌 Task [04.7]: Settings & AI Opt-in UI
 
-- **Description:** Add explicit settings and consent for local model download, optional AI
-  endpoints, search tokenizer selection and per-message remote images.
-- **Systems Involved:** Desktop UI and explicitly documented additive IPC as needed.
+- **Description:** Add explicit model download and AI consent, vault-backed endpoint settings,
+  persistent FTS tokenizer selection and per-message remote-image controls.
+- **Systems Involved:** Desktop UI/IPC; additive storage tokenizer methods; LLM proxy policy.
 - **Action Type:** Source code changes.
-- **Status:** RUNNING
-- **Next Task:** [04.8] Persist Tag & Folder Override Rehydration (`BACKLOG`).
-- **Plan:** Approved by the user on 2026-10-31; implementation in progress.
+- **Status:** DONE
+- **Next Task:** [04.8] Persist Tag & Folder Override Rehydration (`READY FOR PLANNING`).
+- **Commit:** `3686430` (`feat(desktop): add settings and explicit AI consent`).
 
-### Proposed Plan ([04.7])
+User approved the implementation plan on 2026-10-31. Used the required `svelte-dev` skill at
+`/home/yegear/github/ye-sandbox/agent-skills/skills/svelte-dev/SKILL.md`.
+
+### Approved Plan ([04.7])
 1. Trace native settings, model caching, LLM clients, tokenizer migrations and reader policy.
    Record additive IPC and encrypted settings contracts in `NOTES.md` before implementation;
    preserve existing wire formats, core traits and the headless Rust boundary.
@@ -38,7 +55,53 @@
 
 ---
 
-## Completed Task Evidence
+### Acceptance and Validation ([04.7])
+
+- [x] Settings are accessible from the connected inbox. AI defaults disabled; saving makes
+  no provider request. Metadata and endpoint-bound API keys persist atomically in vault.
+  Keys stay in transient inputs/invoke arguments, clear on submit/teardown and never return.
+- [x] Explicit artifact consent gates bounded direct HTTPS downloads (128 MiB model, 8 MiB
+  tokenizer), with no redirects, proxies or automatic retries. Files use the existing XDG
+  cache. No download fetcher is installed in background indexing or search.
+- [x] Each summary requires a separate confirmation naming destination/model and transmitted
+  content. Native dispatch checks the displayed settings snapshot and reads only the selected
+  stored subject/plain body. Returned summaries render as text. Existing LLM proxy inheritance
+  is disabled; endpoint validation and fixed redacted IPC errors remain.
+- [x] Tokenizer changes rebuild the external-content FTS index transactionally, preserve
+  message triggers, and rehydrate from table SQL on reopen. No schema-version change.
+- [x] HTTPS image permission defaults blocked, applies only to the current message identity
+  and resets on selection changes. DOMPurify, sandbox, no-referrer and restrictive CSP remain.
+- [x] `cargo check --workspace`, `cargo test --workspace` (158 passed), Rust formatting and
+  Clippy (`-D warnings`) passed using cached dependencies and the prepared native sysroot.
+  Socket mocks required loopback permission. One new mock's ignored read length was corrected
+  after Clippy reported it; Clippy and both affected download tests then passed.
+- [x] Frontend check (zero errors/warnings), tests (54 passed), Prettier and SPA build passed.
+  Regressions cover consent, vault rehydration/key isolation, malformed-secret error redaction,
+  native IPC envelopes, stale settings, selected-content summary dispatch, download transport
+  bounds/redirects, duplicate actions, untrusted summary text and image-consent reset.
+- [x] Browser QA with actual components and removed synthetic fixture verified settings save,
+  explicit summary confirmation/output and layouts at 390x844 and 1200x800 without horizontal
+  overflow. The temporary server and browser tab were closed.
+- [x] Tracked/new text scan (150 files before this completion log) found zero non-reserved
+  email/high-signal secret candidates after excluding package-version syntax. Svelte runes
+  and unchecked-any scans passed; `git diff --check` passed.
+- [x] Additive IPC contracts documented in `NOTES.md`; settings/rebuild gotchas recorded in
+  `k-011`. CLI flags, environment variables and validation commands did not change; README
+  synchronization is not required. Atomic implementation commit recorded above.
+
+### Remaining Limits ([04.7])
+
+- Existing embeddings are deterministic projections seeded by cached files, not ONNX inference.
+  Settings explicitly disclose this pre-existing limitation; true Tier 2 inference remains debt.
+- Live BYOK/Ollama providers, actual hosted model downloads and native WebKit visual behavior
+  were not exercised. Synthetic network requests used loopback only. Direct artifact URLs must
+  avoid redirects and query strings; many model-hosting share/signed URLs will be rejected.
+- Disabling AI prevents future dispatch; it does not retract an already dispatched request.
+  No live provider, model host or package registry was contacted. No push, release or tag.
+
+---
+
+## Previous Task Evidence
 
 ### 📌 Task [04.6]: Vault Unlock & Account Onboarding UI
 
@@ -102,7 +165,7 @@ User approved on 2026-10-31. The required skill was located and read at
 
 ---
 
-## Previous Task Evidence
+## Earlier Task Evidence
 
 ### 📌 Task [04.5]: Desktop Security Boundary Audit and Targeted Hardening
 
@@ -188,6 +251,7 @@ User subsequently authorized native build dependency downloads into a temporary 
 | [04.4] | Keyboard-driven Command Palette & Triage Badges UI (`apps/desktop`) | `78016a4` | 2026-10-30 |
 | [04.5] | Desktop Security Boundary Audit and Targeted Hardening | `75599f1` | 2026-10-30 |
 | [04.6] | Vault Unlock & Account Onboarding UI | `79ebb4c` | 2026-10-31 |
+| [04.7] | Settings & AI Opt-in UI | `3686430` | 2026-10-31 |
 
 
 ### Validation ([04.1])
@@ -277,14 +341,14 @@ User subsequently authorized native build dependency downloads into a temporary 
 
 Registered 2026-10-31 from post-[04.5] gap analysis. Each task requires its own plan approval.
 
-### [04.7] Settings & AI Opt-in UI — `READY FOR PLANNING`
+### [04.7] Settings & AI Opt-in UI — `DONE`
 - **Gap:** Tier 3 LLM summarizer has no IPC surface; Tier 2 model download has no consent UI.
 - **Scope:** Explicit opt-in for embedding model download (`$XDG_DATA_HOME/triage-mail/models`);
   Ollama/BYOK endpoint config (keys → `vault`); FTS5 tokenizer choice (`unicode61`/`trigram`);
   per-message remote-image unblock preference.
 - **Constraints:** Zero network calls without explicit opt-in (P0).
 
-### [04.8] Persist Tag & Folder Override Rehydration — `BACKLOG`
+### [04.8] Persist Tag & Folder Override Rehydration — `READY FOR PLANNING`
 - **Gap:** DTOs do not expose saved tags/folder overrides; UI feedback is session-local ([04.4]).
 - **Scope:** Extend message summary DTOs and storage reads; rehydrate UI after restart.
 - **Constraints:** P1 IPC/schema change — record contract update in `NOTES.md` before implementing.
