@@ -53,6 +53,7 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 | Debt | Rationale | Revisit When |
 |---|---|---|
 | Outbound SMTP / Email Composer omitted | MVP v0.1 is strictly "Triage-First" (Inbound reading, search, and triage) | Post-v0.1 (`v0.2+`) after inbound sync and hybrid search reach stability |
+| Local embedding runtime uses deterministic projections, without ONNX inference | Existing provider seeds projections from cached artifacts; [04.7] discloses this limitation instead of implying learned semantics | Tier 2 ONNX runtime integration |
 
 ## Desktop IPC Implementation Details ([04.1])
 
@@ -176,3 +177,28 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   shared loader permits four concurrent requests, cancels obsolete queued callbacks, caches
   at most 400 badge entries (never bodies), and refetches after authoritative sync revisions.
   Reader badges show full values; compact list badges expose values through accessible labels.
+
+## Settings and AI Consent IPC ([04.7])
+
+- Add `cmd_get_settings()` -> `SettingsDto { ai: { enabled, provider: Ollama | Byok,
+  endpoint, model }, tokenizer, has_api_key, model_cached }` and
+  `cmd_save_settings(settings: AiSettings, apiKey)` -> `()`. Native vault atomically stores
+  AI metadata with its endpoint-bound API key; responses contain only secret-free metadata.
+  Empty key preserves an existing key only for the same provider/endpoint; saving Ollama
+  clears it. Saving performs no network request. A disabled setting revokes future dispatch.
+- Add `cmd_set_tokenizer(tokenizer: FtsTokenizerMode)` -> `()` as a separate explicit rebuild
+  action. AI configuration and search changes have independent persistence/error boundaries.
+- Add `cmd_download_model(request: { model_url, tokenizer_url, consent })` -> `()`.
+  Only explicit consent permits HTTPS artifact requests; credentials, fragments, redirects,
+  inherited proxies and retries are forbidden. Downloads are bounded and cached under the
+  existing XDG model directory. This is artifact caching, not an ONNX inference implementation.
+- Add `cmd_summarize_message(messageId, consent, expected: AiSettings)` -> summary string. Native code reads the
+  selected stored subject/plain body, checks enabled settings, per-call consent and equality
+  with the displayed settings snapshot, retrieves
+  the key from vault and calls the existing LLM client. No background summarization or probing.
+  Errors remain fixed `IpcError` variants. Summaries are untrusted text, never HTML.
+- Add storage tokenizer inspection/reconfiguration methods without schema-version changes.
+  Recreate the existing external-content FTS table and rebuild from messages in one transaction;
+  retain triggers and infer persisted tokenizer from sqlite_master on reopen.
+- Remote-image consent belongs to the current message identity only, defaults blocked and
+  is never persisted as a global allow setting. Sanitization and the empty sandbox remain.

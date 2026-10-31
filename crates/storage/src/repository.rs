@@ -1,5 +1,8 @@
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicU8, Ordering},
+    Mutex,
+};
 
 use rusqlite::Connection;
 
@@ -17,7 +20,7 @@ use crate::{
 /// Encrypted SQLite repository with SQLCipher, WAL mode, FTS5, and sqlite-vec KNN search.
 pub struct SqliteMailStore {
     pub(crate) conn: Mutex<Connection>,
-    tokenizer_mode: FtsTokenizerMode,
+    pub(crate) tokenizer_mode: AtomicU8,
 }
 
 impl SqliteMailStore {
@@ -32,8 +35,10 @@ impl SqliteMailStore {
         migrator.migrate(&mut conn)?;
 
         Ok(Self {
+            tokenizer_mode: AtomicU8::new(u8::from(
+                crate::settings::read_tokenizer(&conn)? == FtsTokenizerMode::Trigram,
+            )),
             conn: Mutex::new(conn),
-            tokenizer_mode,
         })
     }
 
@@ -47,14 +52,20 @@ impl SqliteMailStore {
         migrator.migrate(&mut conn)?;
 
         Ok(Self {
+            tokenizer_mode: AtomicU8::new(u8::from(
+                crate::settings::read_tokenizer(&conn)? == FtsTokenizerMode::Trigram,
+            )),
             conn: Mutex::new(conn),
-            tokenizer_mode,
         })
     }
 
     /// Returns the active FTS5 tokenizer configuration mode.
     pub fn tokenizer_mode(&self) -> FtsTokenizerMode {
-        self.tokenizer_mode
+        if self.tokenizer_mode.load(Ordering::Acquire) == 1 {
+            FtsTokenizerMode::Trigram
+        } else {
+            FtsTokenizerMode::Unicode61RemoveDiacritics
+        }
     }
 
     /// Inserts an account record.
@@ -376,7 +387,7 @@ impl MigrationRunner for SqliteMailStore {
             .conn
             .lock()
             .map_err(|e| StorageError::Query(format!("mutex poisoned: {e}")))?;
-        let migrator = SchemaMigrator::new(self.tokenizer_mode);
+        let migrator = SchemaMigrator::new(self.tokenizer_mode());
         migrator.migrate(&mut conn)
     }
 }

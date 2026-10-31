@@ -94,6 +94,8 @@ pub struct DesktopService {
     pub(crate) embedding: Option<Arc<dyn EmbeddingProvider>>,
     pub events: Arc<EventBus>,
     account_gate: Mutex<()>,
+    pub(crate) settings_gate: Mutex<()>,
+    pub(crate) download_gate: tokio::sync::Mutex<()>,
     pub(crate) mutation_gate: tokio::sync::Mutex<()>,
     pub(crate) outbox_gate: tokio::sync::Mutex<()>,
 }
@@ -112,6 +114,8 @@ impl DesktopService {
             embedding,
             events: Arc::new(EventBus::default()),
             account_gate: Mutex::new(()),
+            settings_gate: Mutex::new(()),
+            download_gate: tokio::sync::Mutex::new(()),
             mutation_gate: tokio::sync::Mutex::new(()),
             outbox_gate: tokio::sync::Mutex::new(()),
         })

@@ -13,9 +13,28 @@
   endpoints, search tokenizer selection and per-message remote images.
 - **Systems Involved:** Desktop UI and explicitly documented additive IPC as needed.
 - **Action Type:** Source code changes.
-- **Status:** READY FOR PLANNING
+- **Status:** RUNNING
 - **Next Task:** [04.8] Persist Tag & Folder Override Rehydration (`BACKLOG`).
-- **Plan:** Not yet proposed or approved. No [04.7] implementation has started.
+- **Plan:** Approved by the user on 2026-10-31; implementation in progress.
+
+### Proposed Plan ([04.7])
+1. Trace native settings, model caching, LLM clients, tokenizer migrations and reader policy.
+   Record additive IPC and encrypted settings contracts in `NOTES.md` before implementation;
+   preserve existing wire formats, core traits and the headless Rust boundary.
+2. Add accessible Svelte 5 settings for explicit model download consent, disabled-by-default
+   Ollama/BYOK configuration and tokenizer selection. Store API keys exclusively through vault;
+   keep key inputs transient and expose only redacted status. Saving settings makes no request.
+3. Connect explicit model download and per-message summarization actions to native services.
+   Explain downloaded artifacts and transmitted message content before consent. No automatic
+   downloads, endpoint probes, summaries or retries; use local synthetic network fixtures for QA.
+4. Apply tokenizer changes through the existing storage machinery with safe index rebuild and
+   persisted selection. Add explicit per-message remote-image controls that reset on message
+   identity changes; retain DOMPurify, sandbox, CSP and default resource blocking.
+5. Add consent, persistence, vault isolation, stale-response and rendering regressions. Run
+   the full repository Definition of Done, frontend formatting/build and responsive UI QA;
+   respect the two-failure circuit breaker and record any unverified behavior.
+6. Record evidence and applicable knowledge, create an atomic Conventional Commit, log its
+   hash and promote [04.8]. No push, release or tag.
 
 ---
 
