@@ -255,6 +255,15 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
                 } else {
                     untagged_lines.push(line);
                 }
+            } else if line.starts_with('+') {
+                // Continuation or challenge line (e.g. SASL error challenge).
+                untagged_lines.push(line);
+                // INVARIANT: In SASL exchange, if the server challenges with error details (+ ...),
+                // sending an empty CRLF line aborts the handshake so the server returns the tagged NO.
+                if command.starts_with("AUTHENTICATE") {
+                    let _ = self.stream.write_all(b"\r\n").await;
+                    let _ = self.stream.flush().await;
+                }
             } else {
                 untagged_lines.push(line);
             }
@@ -380,7 +389,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
 
         let res = self.execute_command(&cmd).await?;
         if res.status != TaggedStatus::Ok {
-            return Err(EngineError::ImapProtocol(format!(
+            return Err(EngineError::AuthenticationFailed(format!(
                 "LOGIN authentication failed: {}",
                 res.message
             )));
@@ -399,7 +408,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
 
         let res = self.execute_command(&cmd).await?;
         if res.status != TaggedStatus::Ok {
-            return Err(EngineError::ImapProtocol(format!(
+            return Err(EngineError::AuthenticationFailed(format!(
                 "XOAUTH2 authentication failed: {}",
                 res.message
             )));

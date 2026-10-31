@@ -258,3 +258,21 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   - `DEFAULT_SYNC_UID_BATCH_SIZE: u32 = 300` limits window chunks during initial sync.
   - Desktop background worker commits each 300-message batch and updates the `FolderSyncState.uidnext` watermark in SQLCipher before requesting the subsequent batch. If interrupted, already ingested batches remain durable.
 
+## OAuth Token Refresh & Orphan Staging Cleanup ([02.5])
+
+- **Vault Extension:**
+  - `AccountAuthMaterial::OAuth2PublicPkce` and `AccountAuthMaterial::OAuth2ByoCredentials` include `#[serde(default, skip_serializing_if = "Option::is_none")] token_endpoint: Option<String>`.
+  - Helper methods: `token_endpoint(&self)`, `refresh_token(&self)`, `client_id(&self)`, `client_secret(&self)`, and atomic token updater `update_tokens(&mut self, access_token: String, refresh_token: Option<String>) -> bool`.
+- **SASL XOAUTH2 Protocol Challenge Abort:**
+  - Per RFC 6749 and Google/Microsoft IMAP XOAUTH2 specifications, if authentication fails, IMAP servers send `+ <base64 error>` and await client continuation.
+  - The client must reply with `\r\n` to complete the challenge abort, after which the server emits the tagged `NO`.
+  - `mail-engine::protocol::execute_command` detects `+ ` continuation on `AUTHENTICATE` commands and transmits `\r\n` before reading the tagged response, returning `EngineError::AuthenticationFailed`.
+- **Automatic Token Refresh on Auth Failure:**
+  - In `DefaultImapConnector::connect_and_authenticate_as`: if `try_authenticate` returns `EngineError::AuthenticationFailed`, and the stored auth material has both a `token_endpoint` and `refresh_token`, the connector invokes `TokenRefresher` to exchange the refresh token for a new access token (and optional rotated refresh token), persists the updated auth material in `SecretStore` atomically, establishes a fresh TLS session, and retries authentication once.
+- **P0 Network Policy on Token Refresh:**
+  - Enforced via `HttpTokenRefreshTransport` and `validate_token_endpoint`: scheme must strictly be HTTPS, URL length bounded to 2048 chars, no embedded credentials, queries, or fragments, `no_proxy()`, `Policy::none()` (no redirects), timeout 30s, and response body bounded to 64KB.
+- **Deterministic Staging Key & Startup Hygiene (k-010):**
+  - OAuth onboarding uses a deterministic vault key: `staging_oauth_vault_key() -> VaultKey::for_account("staging", "oauth-pending")`.
+  - On application startup, `DesktopService::new` invokes `clean_orphaned_staging(vault)` to remove any pending staging secret left over from process termination or crashes, preventing secret accretion in OS keyring backends.
+
+

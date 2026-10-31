@@ -175,12 +175,41 @@ async fn registers_both_oauth_modes_without_exposing_or_leaving_staged_secrets()
         let entries = vault.0.lock().unwrap();
         assert_eq!(entries.len(), 1);
         let auth = AccountAuthMaterial::from_bytes(entries.values().next().unwrap()).unwrap();
+        assert_eq!(
+            auth.token_endpoint(),
+            Some("https://auth.example.com/token")
+        );
         assert!(matches!(
             auth,
             AccountAuthMaterial::OAuth2PublicPkce { .. }
                 | AccountAuthMaterial::OAuth2ByoCredentials { .. }
         ));
     }
+}
+
+#[tokio::test]
+async fn clean_orphaned_staging_removes_pending_secret_on_startup() {
+    let vault = Arc::new(TestVault::default());
+    let staging_key = staging_oauth_vault_key().unwrap();
+    vault
+        .set_secret(&staging_key, b"leftover-staging-data")
+        .unwrap();
+    assert!(vault.get_secret(&staging_key).is_ok());
+
+    let store = storage::SqliteMailStore::open_in_memory(
+        &storage::DatabaseKey::from_bytes([52; 32]),
+        Default::default(),
+    )
+    .unwrap();
+    let _service = DesktopService::new(
+        Arc::new(store),
+        vault.clone(),
+        Arc::new(NativeRemoteMail::new(vault.clone())),
+        None,
+    );
+
+    // Staging secret was purged upon DesktopService initialization
+    assert!(vault.get_secret(&staging_key).is_err());
 }
 #[tokio::test]
 async fn rejects_wrong_state_and_cleans_vault_without_exchange() {

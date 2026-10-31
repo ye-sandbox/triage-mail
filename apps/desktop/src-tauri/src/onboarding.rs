@@ -115,6 +115,18 @@ fn validate(config: &AccountConfigDto, fields: &AuthorizationFields) -> Result<(
     validate_config(config, &material.0)
 }
 
+/// Deterministic staging vault key for pending OAuth flows.
+pub fn staging_oauth_vault_key() -> Result<VaultKey, IpcError> {
+    VaultKey::for_account("staging", "oauth-pending").map_err(|_| IpcError::Internal)
+}
+
+/// Cleans any leftover orphaned OAuth staging entry from the vault.
+pub fn clean_orphaned_staging(vault: &dyn vault::SecretStore) {
+    if let Ok(key) = staging_oauth_vault_key() {
+        let _ = vault.delete_secret(&key);
+    }
+}
+
 fn credentials(
     method: AuthMethod,
     fields: &AuthorizationFields,
@@ -127,6 +139,7 @@ fn credentials(
                 client_id: fields.client_id.clone(),
                 access_token,
                 refresh_token,
+                token_endpoint: Some(fields.token_endpoint.clone()),
             }
         }
         AuthMethod::OAuth2ByoCredentials => AccountAuthMaterial::OAuth2ByoCredentials {
@@ -137,6 +150,7 @@ fn credentials(
                 .ok_or(IpcError::InvalidRequest)?,
             access_token,
             refresh_token,
+            token_endpoint: Some(fields.token_endpoint.clone()),
         },
         _ => return Err(IpcError::InvalidRequest),
     }))
@@ -172,8 +186,7 @@ pub async fn authorize(
         ("code_challenge", &pkce.challenge),
         ("code_challenge_method", "S256"),
     ]);
-    let key =
-        VaultKey::for_account(&opaque_id()?, "oauth-pending").map_err(|_| IpcError::Internal)?;
+    let key = staging_oauth_vault_key()?;
     let staged_key = key.clone();
     service
         .blocking(move |s| {

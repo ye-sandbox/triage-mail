@@ -16,6 +16,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
 rustls-pki-types = "1.15.1"
 serde = { workspace = true }
+serde_json = { workspace = true }
 sha2 = "0.11.1"
 thiserror = { workspace = true }
 tokio = { version = "1.54.1", features = ["rt", "rt-multi-thread", "net", "io-util", "time", "sync", "macros"] }
@@ -23,3 +24,4 @@ tokio-rustls = { version = "0.26.6", default-features = false, features = ["aws_
 url = "2.5.8"
 vault = { workspace = true }
 webpki-roots = "1.0.11"
+zeroize = "1.9.1"
