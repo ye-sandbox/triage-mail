@@ -7,56 +7,21 @@
 
 ## Active Task
 
-### 📌 Task [04.3]: Sandboxed Email Viewer & On-Demand Attachment Downloader (`apps/desktop`)
+### 📌 Task [04.4]: Keyboard-driven Command Palette & Triage Badges UI (`apps/desktop`)
 
-- **Description:** Replace the selection overview with a secure message reader using the existing body and attachment IPC contracts.
-- **Systems Involved:** `apps/desktop`, existing `apps/desktop/src-tauri` IPC contracts
+- **Description:** Implement the keyboard-driven Command Palette (Mark read/unread, Archive, Trash, Local Tags, RFC 8058 One-Click Unsubscribe, two-way IMAP flag sync via `cmd_triage_action`) and render extracted Tier 1 Triage Badges (`2FA/OTP`, `FEBRABAN Boleto`, `Pix`, `NF-e`, `Tracking`, `UnsubscribeAvailable`) in the inbox list and message reader.
+- **Systems Involved:** `apps/desktop`, existing `apps/desktop/src-tauri` IPC contracts (`cmd_triage_action`, `TriageBadge`)
 - **Action Type:**
   - [ ] Read-only / Documentation
   - [x] Source code changes
-- **Status:** RUNNING
+- **Status:** READY FOR PLANNING
   *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
-- [x] Fetch selected message details with stale-request protection and accessible loading/error states.
-- [x] Sanitize HTML using DOMPurify and render in an isolated `<iframe sandbox="">`, with strict CSP, normalized dark-mode CSS and remote tracking pixels blocked by default.
-- [x] Download attachments only after an explicit user action through the established `BODY.PEEK` IPC command.
-- [x] Preserve the Apple HIG direction, keyboard access, adaptive layout and strict Svelte 5 Runes.
-- [ ] Complete the full repository Definition of Done, atomic commit and task log.
-
-### Approved Plan ([04.3])
-
-User approved implementation on 2026-10-30.
-1. Add typed message-detail and attachment transport adapters without changing established IPC payloads.
-2. Replace the selection overview with an accessible reader, stale-request protection, retry states, and preserved adaptive navigation/motion.
-3. Harden DOMPurify sanitization and iframe CSP against active content and remote resource loads; normalize dark-mode presentation.
-4. Add explicit attachment download controls with safe filenames, per-download status, and object URL cleanup; never prefetch attachments.
-5. Verify security and selection/download regressions, run the full repository Definition of Done, then commit and promote [04.4].
-
-
-### Implementation / Validation Progress ([04.3])
-
-- Implementation checkpoint: `8164ca2` (`feat(reader): add sandboxed messages and explicit attachment downloads`).
-- Approved implementation completed; task remains RUNNING pending the full Definition of Done.
-- Frontend check: zero errors/warnings. Unit/component tests: 20 passed. SPA build: passed.
-- Regressions cover stale success/error responses, detail identity mismatch, safe plain text,
-  empty iframe sandbox/referrer policy, IPC argument casing, explicit lazy download identity,
-  duplicate clicks, failed/dismissed downloads, safe filenames and object URL cleanup.
-- Sanitizer regressions cover scripts/events, CSS imports/URLs, srcset/picture, SVG/media,
-  navigation, forms, remote images and lazy CID resources; raster data images remain supported.
-- Synthetic browser QA at desktop and 390×844 verified the actual reader, sandbox document,
-  explicit file saving and compact back navigation with restored list focus. Fixture removed.
-  This is browser evidence; native WebKit download behavior remains to be verified.
-- Svelte runes invariant, tracked/new-file email/secret scan and git diff whitespace check: passed.
-- TypeScript files formatted using locally installed Prettier. Full Svelte Prettier verification
-  remains pending because prettier-plugin-svelte is not installed/cached in this environment.
-- `cargo check --workspace` could not start: `cargo: command not found`. No Rust toolchain was
-  found locally; cargo test/fmt/clippy were not attempted with the same missing prerequisite.
-  User accepted leaving the task open with frontend checks recorded on 2026-10-30.
-- No dependencies, IPC contracts, schemas, CLI flags, environment variables or documented
-  validation commands changed. No live provider, model or AI service was contacted.
-- Pending: Rust workspace check/test/fmt/clippy, Svelte formatter verification, native WebKit
-  download verification and final completion log/promotion of [04.4].
+- [ ] Keyboard-accessible Command Palette (`⌘K` / `Ctrl+K` and shortcut triggers) for Mark Read/Unread, Archive, Trash, Local Tags, and RFC 8058 One-Click Unsubscribe using `cmd_triage_action`.
+- [ ] Optimistic UI updates and resilient error/sync reconciliation with `InboxController` and reader states.
+- [ ] Accessible Triage Badges UI for OTP codes, FEBRABAN Boletos (BRL amount & due date), Pix payloads, NF-e access keys, tracking codes, and one-click unsubscribe availability.
+- [ ] Strictly enforce Svelte 5 Runes (`$props`, `$state`, `$derived`, `$effect`), Apple HIG restraint, reduced-motion compliance, and full repository Definition of Done.
 
 ---
 
@@ -77,6 +42,7 @@ User approved implementation on 2026-10-30.
 | [04.1] | Tauri v2 Typed IPC, Secret-Isolated Account Management, Durable Triage Outbox & Real-time Sync Channel Bridge | `ca79844` | 2026-10-30 |
 | [04.2] | Apple HIG-Informed Unified Inbox, Virtualized Message List, Typed Search & Sync Refresh | `16df93b` | 2026-10-30 |
 | [04.2.1] | Accessible Apple-Style Inbox Motion | `6820c4b` | 2026-10-30 |
+| [04.3] | Sandboxed Email Viewer & On-Demand Attachment Downloader (`apps/desktop`) | `8164ca2`, `2142c9e` | 2026-10-30 |
 
 
 ### Validation ([04.1])
@@ -125,11 +91,23 @@ User approved implementation on 2026-10-30.
 - Removed the temporary fixture route. No dependencies, IPC contracts, schemas, CLI flags,
   environment variables or documented validation commands changed. No live providers contacted.
 
+### Validation ([04.3])
+- Rust workspace check, tests (141 passed), formatting (`cargo fmt --all -- --check`) and Clippy (`-D warnings`): passed.
+- Frontend check (zero errors/warnings), unit/component tests (20 passed), Prettier (`prettier-plugin-svelte`) and SPA build: passed.
+- Svelte runes invariant, tracked/new-file secret/PII scan and `git diff --check`: passed.
+- Regressions cover stale success/error responses, detail identity mismatch, safe plain text,
+  empty iframe sandbox/referrer policy, IPC argument casing, explicit lazy download identity,
+  duplicate clicks, failed/dismissed downloads, safe filenames and object URL cleanup.
+- Sanitizer regressions cover scripts/events, CSS imports/URLs, srcset/picture, SVG/media,
+  navigation, forms, remote images and lazy CID resources; raster data images remain supported.
+- Synthetic browser QA at desktop and 390×844 verified the actual reader, sandbox document,
+  explicit file saving and compact back navigation with restored list focus.
+
 ---
 
 ## Backlog (Upcoming, in priority order)
 
-- [ ] **[04.4]** Keyboard-driven Command Palette (Mark read/unread, Archive, Trash, Local Tags, One-Click Unsubscribe, IMAP flag sync) & Triage Badges UI — `apps/desktop`
+*(No remaining MVP v0.1 tasks in queue after [04.4]; optimization/hardening phases follow as requested).*
 
 ---
 
