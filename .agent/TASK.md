@@ -7,21 +7,66 @@
 
 ## Active Task
 
-### 📌 Task [04.4]: Keyboard-driven Command Palette & Triage Badges UI (`apps/desktop`)
+### 📌 Task [04.5]: Desktop Security Boundary Audit and Targeted Hardening
 
-- **Description:** Implement the keyboard-driven Command Palette (Mark read/unread, Archive, Trash, Local Tags, RFC 8058 One-Click Unsubscribe, two-way IMAP flag sync via `cmd_triage_action`) and render extracted Tier 1 Triage Badges (`2FA/OTP`, `FEBRABAN Boleto`, `Pix`, `NF-e`, `Tracking`, `UnsubscribeAvailable`) in the inbox list and message reader.
-- **Systems Involved:** `apps/desktop`, existing `apps/desktop/src-tauri` IPC contracts (`cmd_triage_action`, `TriageBadge`)
+- **Description:** Audit email rendering, attachment downloads, native IPC input validation, credential isolation, and explicit network-action gating. Reproduce confirmed defects with synthetic local fixtures and apply narrowly scoped fixes preserving active contracts.
+- **Systems Involved:** `apps/desktop`; existing core security boundaries only where a confirmed desktop path requires investigation.
 - **Action Type:**
   - [ ] Read-only / Documentation
   - [x] Source code changes
 - **Status:** DONE
-- **Next Task:** None queued. Optimization or hardening work awaits a user request.
+- **Next Task:** None queued.
+
+### Approved Plan
+User approved on 2026-10-30.
+User subsequently authorized native build dependency downloads into a temporary sysroot.
+1. Trace untrusted email content and IPC inputs through rendering, downloads, vault access, and network-action dispatch; use local files and synthetic fixtures only.
+2. Record reproducible findings with severity and affected paths. Fix confirmed defects within the existing IPC/schema/trait contracts and add focused regression coverage.
+3. Run the repository Definition of Done and frontend formatting/build checks with cached dependencies; respect the two-failure circuit breaker.
+4. Record evidence and remaining limitations, then create an atomic Conventional Commit. No push, release, or tag is included.
 
 ### Acceptance Criteria
-- [x] Keyboard-accessible Command Palette (`⌘K` / `Ctrl+K` and shortcut triggers) for Mark Read/Unread, Archive, Trash, Local Tags, and RFC 8058 One-Click Unsubscribe using `cmd_triage_action`.
-- [x] Optimistic UI updates and resilient error/sync reconciliation with `InboxController` and reader states.
-- [x] Accessible Triage Badges UI for OTP codes, FEBRABAN Boletos (BRL amount & due date), Pix payloads, NF-e access keys, tracking codes, and one-click unsubscribe availability.
-- [x] Strictly enforce Svelte 5 Runes (`$props`, `$state`, `$derived`, `$effect`), Apple HIG restraint, reduced-motion compliance, and full repository Definition of Done.
+- [x] Audit findings reference concrete paths and reproduction evidence; distinguish confirmed defects from unverified concerns.
+- [x] Confirmed in-scope defects receive targeted fixes and meaningful regression coverage.
+- [x] Preserve secret isolation, sandboxed rendering, lazy attachments, explicit network consent, and active IPC/schema/trait contracts.
+- [x] Complete and record the full repository Definition of Done.
+
+### Audit Evidence ([04.5])
+
+- **Confirmed high-severity defect:** `crates/mail-engine/src/unsubscribe.rs` accepted
+  syntactically public HTTPS hostnames without validating their resolved addresses. A sender's
+  RFC 8058 endpoint could resolve to a non-public destination. The regression injects a
+  loopback answer for `unsubscribe.example.org`: URI validation accepts it, while the fixed
+  reqwest connector rejects it before connection.
+- Added a private connection-time resolver that rejects empty/non-public/mixed address sets
+  and supplies the same validated addresses to the connector. Disabled inherited proxies so
+  proxy-side DNS cannot bypass this policy. Redirect blocking, HTTPS verification, explicit
+  unsubscribe dispatch, and the timeout remain in place. See `k-009` for conservative address
+  exclusions and limitations.
+- Inspected the DOMPurify allowlist/CSP and empty sandbox reader, attachment metadata and
+  UIDVALIDITY checks, credential redaction/vault rollback, and stored-header unsubscribe
+  dispatch. Existing regression coverage passed for the frontend and core boundaries; this
+  bounded source audit is not a release certification or live-provider penetration test.
+- Workspace compilation and Clippy (`-D warnings`), Rust formatting, frontend typecheck
+  (zero errors/warnings), all 36 frontend tests, and the SPA build passed.
+- All 127 core Rust tests passed with offline dependencies and loopback socket access.
+  Four new regressions cover address classification, mixed/empty DNS, test-mode isolation,
+  and the actual HTTP connector. No external DNS, provider, AI, or registry request was made.
+- Svelte runes invariant and tracked/new-file email/high-signal secret-pattern scan
+  (126 files, zero candidates) passed. `git diff --check` passed.
+- **Native validation blocker resolved:** Initial workspace testing could not link GTK and
+  WebKitGTK. With explicit user authorization, downloaded Ubuntu development packages and
+  extracted a temporary sysroot without installing or upgrading system packages. Real pkgconf
+  metadata and repaired development symlinks resolved the native libraries. Full
+  `cargo test --workspace` passed: 145 tests, including native IPC wire/service tests.
+  Local socket mocks ran with authorized loopback access. Cargo dependencies remained offline;
+  only the authorized OS package download contacted external servers.
+- No release, tag, or push. No project dependency, schema, IPC, trait, CLI flag, environment
+  variable, or canonical validation-command changes were introduced. Temporary build paths
+  remain outside the repository.
+- Workspace check and Clippy (`-D warnings`) also passed against the prepared native
+  sysroot. Implementation and security documentation committed as `75599f1`.
+- Task complete. No next task is queued; further work requires a new scoped request.
 
 ---
 
@@ -44,6 +89,7 @@
 | [04.2.1] | Accessible Apple-Style Inbox Motion | `6820c4b` | 2026-10-30 |
 | [04.3] | Sandboxed Email Viewer & On-Demand Attachment Downloader (`apps/desktop`) | `8164ca2`, `2142c9e` | 2026-10-30 |
 | [04.4] | Keyboard-driven Command Palette & Triage Badges UI (`apps/desktop`) | `78016a4` | 2026-10-30 |
+| [04.5] | Desktop Security Boundary Audit and Targeted Hardening | `75599f1` | 2026-10-30 |
 
 
 ### Validation ([04.1])
@@ -131,7 +177,7 @@
 
 ## Backlog (Upcoming, in priority order)
 
-*(No remaining MVP v0.1 tasks in queue after [04.4]; optimization/hardening phases follow as requested).*
+*(No tasks queued after [04.5]; further optimization/hardening work follows as requested).*
 
 ---
 
