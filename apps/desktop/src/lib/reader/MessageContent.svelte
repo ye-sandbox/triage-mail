@@ -3,6 +3,7 @@
 	import type { MessageDetailDto, ReaderTransport } from './types';
 	import { sanitizeEmailHtml } from '../security/sanitize';
 	import AttachmentDownload from './AttachmentDownload.svelte';
+	import TriageBadges from '../inbox/TriageBadges.svelte';
 	let { message, transport }: { message: MessageRowDto; transport: ReaderTransport } = $props();
 	let detail = $state.raw<MessageDetailDto | null>(null);
 	let loading = $state(true);
@@ -51,6 +52,9 @@
 		</div>
 	{:else if detail}
 		<div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+			<div class="px-8 pt-4">
+				<TriageBadges badges={detail.triage_badges} />
+			</div>
 			<p class="px-8 py-4 text-xs text-[var(--secondary)]">
 				Remote images and external links are blocked for your privacy.
 			</p>

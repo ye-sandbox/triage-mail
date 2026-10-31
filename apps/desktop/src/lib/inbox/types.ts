@@ -27,6 +27,7 @@ export type SyncProgressEvent = {
 	triage_alerts: unknown[];
 };
 export interface InboxTransport {
+	triage(mutation: import('./triage').TriageMutation): Promise<void>;
 	search(query: SearchQueryDto): Promise<MessageRowDto[]>;
 	subscribe(handler: (event: SyncProgressEvent) => void): Promise<() => void>;
 }

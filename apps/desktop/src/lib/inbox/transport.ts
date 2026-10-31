@@ -5,6 +5,7 @@ export function nativeAvailable() {
 	return isTauri();
 }
 export const nativeTransport: InboxTransport = {
+	triage: (mutation) => invoke<void>('cmd_triage_action', { mutation }),
 	search: (query) => invoke<MessageRowDto[]>('cmd_search_messages', { query }),
 	async subscribe(handler) {
 		let active = true;

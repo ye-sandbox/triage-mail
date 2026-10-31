@@ -131,3 +131,23 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   are guarded. Object URLs expire after 60 seconds and are also released on teardown.
 - Synthetic browser QA verified the save flow and compact navigation; Cargo workspace check/test/
   fmt/clippy and Prettier (`prettier-plugin-svelte`) passed.
+
+## Keyboard Triage and Extraction UI ([04.4])
+
+- `InboxTransport.triage` sends `{ mutation: { message_ids, action } }` to the existing
+  `cmd_triage_action`; unit actions remain strings and tags use `{ Tag: string }`.
+- The palette uses bits-ui 2.19.5 (user-approved exception to the skill's v1 reference).
+  Ctrl/Cmd+K opens it; R marks read, Shift+U unread, E archives, Delete trashes and T adds
+  a local tag. Single-key actions ignore editable targets, repeats and IME composition.
+- One-click unsubscribe is enabled only by supported extraction metadata and requires an
+  explicit palette selection. No preview, shortcut or retry automatically sends its POST.
+- One UI mutation runs at a time. It invalidates earlier reads and defers sync refresh until
+  settled. Rejected IPC writes roll back local feedback; background remote failures retain
+  durable local mutations and surface the existing sync status rather than undoing the outbox.
+- Folder feedback never replaces canonical row folder/UID identity. Tag/folder feedback is
+  session-local because the established DTOs do not expose persisted tags/folder overrides;
+  backend persistence and background IMAP synchronization remain authoritative.
+- Visible rows request extraction metadata through the existing local detail command. The
+  shared loader permits four concurrent requests, cancels obsolete queued callbacks, caches
+  at most 400 badge entries (never bodies), and refetches after authoritative sync revisions.
+  Reader badges show full values; compact list badges expose values through accessible labels.
