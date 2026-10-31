@@ -7,15 +7,29 @@
 
 ## Active Task
 
+### 📌 Task [00.2]: CI Pipeline (GitHub Actions)
+
+- **Description:** Add a GitHub Actions workflow running the repository Definition of Done,
+  frontend build, runes invariant and secret/PII checks with pinned actions and native deps.
+- **Systems Involved:** CI configuration and validation documentation.
+- **Action Type:** Configuration and documentation changes.
+- **Status:** READY FOR PLANNING
+- **Next Task:** [90.1] Native Performance Validation (`BACKLOG`).
+- **Plan:** Not yet proposed or approved. No [00.2] implementation has started.
+
+---
+
+## Completed Task Evidence
+
 ### 📌 Task [04.8]: Persist Tag & Folder Override Rehydration
 
 - **Description:** Extend message summary reads to restore persisted local tags and folder
   overrides after restart.
 - **Systems Involved:** Storage, additive desktop DTOs and inbox UI.
 - **Action Type:** Source code changes.
-- **Status:** RUNNING
-- **Next Task:** [00.2] CI Pipeline (GitHub Actions) (`BACKLOG`).
-- **Plan:** Approved by the user on 2026-10-31; implementation in progress.
+- **Status:** DONE
+- **Next Task:** [00.2] CI Pipeline (GitHub Actions) (`READY FOR PLANNING`).
+- **Plan:** Approved by the user on 2026-10-31; implementation complete.
 
 ### Approved Plan ([04.8])
 1. Document additive message summary fields for persisted tags and folder overrides. Preserve
@@ -54,7 +68,8 @@
 - [x] Tracked text secret/PII scan found zero candidates; Svelte runes/unchecked-any scans and
   `git diff --check` passed. Contracts updated in `NOTES.md`; identity/ranking constraints in
   `k-012`. No CLI flags, environment variables or validation commands changed; no README update.
-- [ ] Atomic implementation commit and completion-log hash recorded; next task promoted.
+- [x] Atomic implementation commit `2f14690` (`feat(inbox): rehydrate persisted tags and folder
+  overrides`) recorded; [00.2] promoted to READY FOR PLANNING.
 
 ### Remaining Limits ([04.8])
 
@@ -65,7 +80,7 @@
 
 ---
 
-## Completed Task Evidence
+## Previous Settings Task Evidence
 
 ### 📌 Task [04.7]: Settings & AI Opt-in UI
 
@@ -298,6 +313,7 @@ User subsequently authorized native build dependency downloads into a temporary 
 | [04.5] | Desktop Security Boundary Audit and Targeted Hardening | `75599f1` | 2026-10-30 |
 | [04.6] | Vault Unlock & Account Onboarding UI | `79ebb4c` | 2026-10-31 |
 | [04.7] | Settings & AI Opt-in UI | `3686430` | 2026-10-31 |
+| [04.8] | Persist Tag & Folder Override Rehydration | `2f14690` | 2026-10-31 |
 
 
 ### Validation ([04.1])
@@ -394,12 +410,12 @@ Registered 2026-10-31 from post-[04.5] gap analysis. Each task requires its own 
   per-message remote-image unblock preference.
 - **Constraints:** Zero network calls without explicit opt-in (P0).
 
-### [04.8] Persist Tag & Folder Override Rehydration — `READY FOR PLANNING`
+### [04.8] Persist Tag & Folder Override Rehydration — `DONE`
 - **Gap:** DTOs do not expose saved tags/folder overrides; UI feedback is session-local ([04.4]).
 - **Scope:** Extend message summary DTOs and storage reads; rehydrate UI after restart.
 - **Constraints:** P1 IPC/schema change — record contract update in `NOTES.md` before implementing.
 
-### [00.2] CI Pipeline (GitHub Actions) — `BACKLOG`
+### [00.2] CI Pipeline (GitHub Actions) — `READY FOR PLANNING`
 - **Scope:** Workflow running full DoD: cargo check/test/fmt/clippy (`-D warnings`), pnpm
   check/test/build, Svelte runes invariant, secret/PII scan, `git diff --check`.
 - **Constraints:** No secrets in workflow; pinned action versions; GTK/WebKitGTK deps documented
