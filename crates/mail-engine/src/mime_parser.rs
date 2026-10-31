@@ -162,14 +162,14 @@ impl MimeExtractor for StalwartMimeParser {
 }
 
 /// Normalizes a Message-ID by trimming enclosing angle brackets and whitespace.
-fn clean_message_id(raw: &str) -> String {
+pub(crate) fn clean_message_id(raw: &str) -> String {
     raw.trim()
         .trim_matches(|c| c == '<' || c == '>')
         .to_string()
 }
 
 /// Formats the primary mailbox in an `AddressList` as `"Display Name <email@example.com>"` or `"email@example.com"`.
-fn format_address_list(list: Option<AddressList<'_>>) -> Option<String> {
+pub(crate) fn format_address_list(list: Option<AddressList<'_>>) -> Option<String> {
     let list = list?;
     let mb = list.mailboxes().next()?;
     let addr = mb.address().unwrap_or("").trim();
@@ -200,7 +200,9 @@ fn collect_addresses(list: Option<AddressList<'_>>, out: &mut Vec<String>) {
 }
 
 /// Extracts RFC 2369 / RFC 8058 unsubscribe descriptors.
-fn extract_unsubscribe_descriptor(message: &Message<'_>) -> Option<UnsubscribeDescriptor> {
+pub(crate) fn extract_unsubscribe_descriptor(
+    message: &Message<'_>,
+) -> Option<UnsubscribeDescriptor> {
     let mut raw_list_unsubscribe = None;
     let mut raw_list_unsubscribe_post = None;
     let mut https_uri = None;

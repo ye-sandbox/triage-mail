@@ -15,6 +15,7 @@ use thiserror::Error;
 use vault::VaultError;
 
 pub mod auth;
+pub mod bodystructure;
 pub mod connector;
 pub mod idle;
 pub mod mime_parser;
@@ -25,6 +26,13 @@ pub mod sync;
 pub mod tls;
 pub mod unsubscribe;
 
+pub const DEFAULT_SYNC_UID_BATCH_SIZE: u32 = 300;
+
+pub use bodystructure::{
+    extract_body_structure_metadata, extract_bodystructure_sexpr, parse_bodystructure_str,
+    BodyPartStructure, ExtractedBodyStructure, MultipartStructure, SinglePartStructure,
+    TextSectionInfo,
+};
 pub use connector::DefaultImapConnector;
 pub use idle::{
     AdaptivePollConfig, AdaptivePollSchedule, IdleConfig, IdleCycleOutcome, IdleManager,

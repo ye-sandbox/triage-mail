@@ -121,17 +121,34 @@ impl ImapConnector for DefaultImapConnector {
         let auth = self.load_auth_material(&endpoint.account_id)?;
         let (mut session, caps) = self.connect_and_authenticate(endpoint, &auth).await?;
 
-        let query = IncrementalSyncQuery {
-            account_id: &endpoint.account_id,
-            folder,
-            local_uidvalidity: 0, // caller or storage layer handles persistence
-            local_last_uid: last_uid,
-            local_last_modseq: last_modseq,
-        };
+        let mut all_messages = Vec::new();
+        let mut current_last_uid = last_uid;
+        let mut current_modseq = last_modseq;
 
-        let res = execute_incremental_sync(&mut session, query, &caps, sink).await?;
+        loop {
+            let query = IncrementalSyncQuery {
+                account_id: &endpoint.account_id,
+                folder,
+                local_uidvalidity: 0, // caller or storage layer handles persistence
+                local_last_uid: current_last_uid,
+                local_last_modseq: current_modseq,
+            };
 
-        Ok(res.new_messages)
+            let res = execute_incremental_sync(&mut session, query, &caps, sink).await?;
+            let batch_len = res.new_messages.len();
+            if res.uidvalidity_reset {
+                return Ok(res.new_messages);
+            }
+            all_messages.extend(res.new_messages);
+            current_last_uid = res.new_last_uid;
+            current_modseq = res.highest_modseq;
+
+            if (batch_len as u32) < crate::DEFAULT_SYNC_UID_BATCH_SIZE {
+                break;
+            }
+        }
+
+        Ok(all_messages)
     }
 
     async fn fetch_attachment_bytes(

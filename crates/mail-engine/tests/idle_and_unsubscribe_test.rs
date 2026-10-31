@@ -180,28 +180,45 @@ async fn test_idle_manager_end_to_end_heartbeat_and_event_sync() {
             .await
             .unwrap();
 
-        // UID FETCH 2:*
+        // Incremental sync two-phase Lazy Attachment fetch
+        // a. UID SEARCH UID 2:*
+        let _ = server_stream.read(&mut buf).await.unwrap();
+        server_stream
+            .write_all(b"* SEARCH 2\r\nA0006 OK SEARCH completed\r\n")
+            .await
+            .unwrap();
+
+        // b. Phase 1: UID FETCH 2 (UID MODSEQ FLAGS BODYSTRUCTURE BODY.PEEK[HEADER])
         let _ = server_stream.read(&mut buf).await.unwrap();
         let hdr = b"From: news@example.com\r\nTo: reader@example.org\r\nSubject: Digest\r\nMessage-ID: <d2@example.com>\r\n\r\n";
         let txt = b"Digest content.\r\n";
+        let bs = r#"("TEXT" "PLAIN" ("CHARSET" "UTF-8") NIL NIL "7BIT" 17 1 NIL NIL NIL NIL)"#;
         let line1 = format!(
-            "* 2 FETCH (UID 2 MODSEQ (12) FLAGS () BODY[HEADER] {{{}}}\r\n",
+            "* 2 FETCH (UID 2 MODSEQ (12) FLAGS () BODYSTRUCTURE {} BODY[HEADER] {{{}}}\r\n",
+            bs,
             hdr.len()
         );
         server_stream.write_all(line1.as_bytes()).await.unwrap();
         server_stream.write_all(hdr).await.unwrap();
-        let line2 = format!(" BODY[TEXT] {{{}}}\r\n", txt.len());
+        server_stream
+            .write_all(b")\r\nA0007 OK UID FETCH completed\r\n")
+            .await
+            .unwrap();
+
+        // c. Phase 2: UID FETCH 2 (BODY.PEEK[1])
+        let _ = server_stream.read(&mut buf).await.unwrap();
+        let line2 = format!("* 2 FETCH (UID 2 BODY[1] {{{}}}\r\n", txt.len());
         server_stream.write_all(line2.as_bytes()).await.unwrap();
         server_stream.write_all(txt).await.unwrap();
         server_stream
-            .write_all(b")\r\nA0006 OK UID FETCH completed\r\n")
+            .write_all(b")\r\nA0008 OK UID FETCH completed\r\n")
             .await
             .unwrap();
 
         // CHANGEDSINCE 10
         let _ = server_stream.read(&mut buf).await.unwrap();
         server_stream
-            .write_all(b"A0007 OK FETCH completed\r\n")
+            .write_all(b"A0009 OK FETCH completed\r\n")
             .await
             .unwrap();
     });

@@ -154,91 +154,100 @@ pub async fn sync_account_once(
     }
     let mut count = 0;
     for folder in folders {
-        let previous = checkpoint(service, &config.account_id, &folder).await?;
-        let events = Arc::new(BatchEvents::new(
-            config.account_id.clone(),
-            service.events.clone(),
-        ));
-        let result = tokio::time::timeout(
-            Duration::from_secs(120),
-            service.remote.sync(config, &previous, events.as_ref()),
-        )
-        .await
-        .map_err(|_| IpcError::RemoteUnavailable)??;
-        if result.uidvalidity == 0 {
-            return Err(IpcError::RemoteUnavailable);
-        }
-        count += result.new_messages.len();
-        let state = FolderSyncState {
-            account_id: config.account_id.clone(),
-            folder_name: folder,
-            uidvalidity: result.uidvalidity,
-            uidnext: if result.uidvalidity_reset {
-                1
-            } else {
-                result.new_last_uid.saturating_add(1)
-            },
-            highest_modseq: result.highest_modseq,
-        };
-        let _guard = service.mutation_gate.lock().await;
-        service
-            .blocking(move |s| {
-                let records = result
-                    .new_messages
-                    .into_iter()
-                    .map(|m| message_record(m, &state))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let flags: Vec<_> = result
-                    .flag_deltas
-                    .into_iter()
-                    .map(|f| {
-                        (
-                            f.uid,
-                            f.flags
-                                .iter()
-                                .any(|flag| flag.eq_ignore_ascii_case("\\Seen")),
-                        )
-                    })
-                    .collect();
-                let records = s
-                    .store
-                    .commit_sync_batch(&records, &flags, &state, result.uidvalidity_reset)
-                    .map_err(storage_error)?;
-                for record in &records {
-                    let triage = DefaultDeterministicTriage.analyze(
-                        &record.subject,
-                        &record.sender,
-                        record.text_body.as_deref().unwrap_or_default(),
-                        record.one_click_unsubscribe_supported,
-                    );
-                    events
-                        .on_message_triaged(&record.id, &triage)
-                        .map_err(|_| IpcError::Internal)?;
-                }
-                // Index only with an explicitly configured provider; missing models never trigger downloads.
-                if let Some(provider) = &s.embedding {
+        loop {
+            let previous = checkpoint(service, &config.account_id, &folder).await?;
+            let events = Arc::new(BatchEvents::new(
+                config.account_id.clone(),
+                service.events.clone(),
+            ));
+            let result = tokio::time::timeout(
+                Duration::from_secs(120),
+                service.remote.sync(config, &previous, events.as_ref()),
+            )
+            .await
+            .map_err(|_| IpcError::RemoteUnavailable)??;
+            if result.uidvalidity == 0 {
+                return Err(IpcError::RemoteUnavailable);
+            }
+            let batch_len = result.new_messages.len();
+            count += batch_len;
+            let state = FolderSyncState {
+                account_id: config.account_id.clone(),
+                folder_name: folder.clone(),
+                uidvalidity: result.uidvalidity,
+                uidnext: if result.uidvalidity_reset {
+                    1
+                } else {
+                    result.new_last_uid.saturating_add(1)
+                },
+                highest_modseq: result.highest_modseq,
+            };
+            let _guard = service.mutation_gate.lock().await;
+            service
+                .blocking(move |s| {
+                    let records = result
+                        .new_messages
+                        .into_iter()
+                        .map(|m| message_record(m, &state))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let flags: Vec<_> = result
+                        .flag_deltas
+                        .into_iter()
+                        .map(|f| {
+                            (
+                                f.uid,
+                                f.flags
+                                    .iter()
+                                    .any(|flag| flag.eq_ignore_ascii_case("\\Seen")),
+                            )
+                        })
+                        .collect();
+                    let records = s
+                        .store
+                        .commit_sync_batch(&records, &flags, &state, result.uidvalidity_reset)
+                        .map_err(storage_error)?;
                     for record in &records {
-                        let text = format!(
-                            "{}\n{}",
-                            record.subject,
-                            record.text_body.as_deref().unwrap_or_default()
+                        let triage = DefaultDeterministicTriage.analyze(
+                            &record.subject,
+                            &record.sender,
+                            record.text_body.as_deref().unwrap_or_default(),
+                            record.one_click_unsubscribe_supported,
                         );
-                        if let Ok(vector) = provider.embed_int8(&text) {
-                            s.store
-                                .insert_message_embedding(&record.id, &vector)
-                                .map_err(storage_error)?;
+                        events
+                            .on_message_triaged(&record.id, &triage)
+                            .map_err(|_| IpcError::Internal)?;
+                    }
+                    // Index only with an explicitly configured provider; missing models never trigger downloads.
+                    if let Some(provider) = &s.embedding {
+                        for record in &records {
+                            let text = format!(
+                                "{}\n{}",
+                                record.subject,
+                                record.text_body.as_deref().unwrap_or_default()
+                            );
+                            if let Ok(vector) = provider.embed_int8(&text) {
+                                s.store
+                                    .insert_message_embedding(&record.id, &vector)
+                                    .map_err(storage_error)?;
+                            }
                         }
                     }
-                }
-                // INVARIANT: Progress is published only after messages and checkpoints commit together.
-                events.committed_with_state(if result.uidvalidity_reset {
-                    SyncState::ResyncRequired
-                } else {
-                    SyncState::Idle
-                });
-                Ok(())
-            })
-            .await?;
+                    // INVARIANT: Progress is published only after messages and checkpoints commit together.
+                    events.committed_with_state(if result.uidvalidity_reset {
+                        SyncState::ResyncRequired
+                    } else {
+                        SyncState::Idle
+                    });
+                    Ok(())
+                })
+                .await?;
+
+            if batch_len < mail_engine::DEFAULT_SYNC_UID_BATCH_SIZE as usize
+                || result.uidvalidity_reset
+            {
+                break;
+            }
+        }
     }
     Ok(count)
 }

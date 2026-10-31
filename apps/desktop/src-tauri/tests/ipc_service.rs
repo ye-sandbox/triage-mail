@@ -127,8 +127,8 @@ fn store() -> Arc<SqliteMailStore> {
             .unwrap(),
     )
 }
-fn setup(
-    remote: Arc<FakeRemote>,
+fn setup<R: RemoteMail + 'static>(
+    remote: Arc<R>,
 ) -> (
     Arc<DesktopService>,
     Arc<SqliteMailStore>,
@@ -814,4 +814,220 @@ async fn blank_lexical_inbox_reads_persisted_mail_without_an_embedding_provider(
         .unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].id, "m-1");
+}
+
+fn mock_parsed_message(uid: u32) -> mail_engine::ParsedInboundMessage {
+    mail_engine::ParsedInboundMessage {
+        uid,
+        modseq: Some(10),
+        message_id_header: Some(format!("<msg-{}@example.org>", uid)),
+        in_reply_to: None,
+        references: vec![],
+        references_header: None,
+        subject: format!("Subject {}", uid),
+        sender: "sender@example.org".into(),
+        recipients: vec!["recipient@example.org".into()],
+        date_epoch_ms: Some(1000),
+        text_plain: Some(format!("Text body {}", uid)),
+        html_raw: None,
+        raw_headers: Some("From: sender@example.org\r\n".into()),
+        unsubscribe: None,
+        attachments: vec![],
+    }
+}
+
+#[tokio::test]
+async fn test_worker_sync_account_once_batches_and_commits_sequentially() {
+    struct BatchedRemote {
+        calls: AtomicUsize,
+    }
+    #[async_trait]
+    impl RemoteMail for BatchedRemote {
+        async fn fetch_attachment(
+            &self,
+            _: &AccountConfigDto,
+            _: &str,
+            _: u32,
+            _: &str,
+            _: u32,
+        ) -> Result<Vec<u8>, IpcError> {
+            Ok(vec![])
+        }
+        async fn mutate(
+            &self,
+            _: &AccountConfigDto,
+            _: &RemoteMutation,
+        ) -> Result<MutationOutcome, IpcError> {
+            Ok(MutationOutcome::FlagsUpdated)
+        }
+        async fn unsubscribe(&self, _: &UnsubscribeDescriptor) -> Result<(), IpcError> {
+            Ok(())
+        }
+        async fn sync(
+            &self,
+            _: &AccountConfigDto,
+            checkpoint: &FolderSyncState,
+            sink: &dyn SyncEventSink,
+        ) -> Result<IncrementalSyncResult, IpcError> {
+            let call = self.calls.fetch_add(1, Ordering::SeqCst);
+            if call == 0 {
+                let messages: Vec<_> = (1..=300).map(mock_parsed_message).collect();
+                sink.on_sync_progress(&mail_engine::SyncProgressEvent {
+                    account_id: "acct-1".into(),
+                    folder: "INBOX".into(),
+                    synced_count: 300,
+                    uidvalidity: 100,
+                    highest_modseq: Some(10),
+                })
+                .map_err(|_| IpcError::Internal)?;
+                Ok(IncrementalSyncResult {
+                    folder: "INBOX".into(),
+                    uidvalidity: 100,
+                    uidvalidity_reset: false,
+                    new_last_uid: 300,
+                    highest_modseq: Some(10),
+                    new_messages: messages,
+                    flag_deltas: vec![],
+                })
+            } else if call == 1 {
+                assert_eq!(checkpoint.uidnext, 301);
+                let messages: Vec<_> = (301..=350).map(mock_parsed_message).collect();
+                sink.on_sync_progress(&mail_engine::SyncProgressEvent {
+                    account_id: "acct-1".into(),
+                    folder: "INBOX".into(),
+                    synced_count: 50,
+                    uidvalidity: 100,
+                    highest_modseq: Some(20),
+                })
+                .map_err(|_| IpcError::Internal)?;
+                Ok(IncrementalSyncResult {
+                    folder: "INBOX".into(),
+                    uidvalidity: 100,
+                    uidvalidity_reset: false,
+                    new_last_uid: 350,
+                    highest_modseq: Some(20),
+                    new_messages: messages,
+                    flag_deltas: vec![],
+                })
+            } else {
+                panic!("unexpected extra sync call");
+            }
+        }
+        async fn wait_for_change(
+            &self,
+            _: &AccountConfigDto,
+            _: &FolderSyncState,
+        ) -> Result<bool, IpcError> {
+            Ok(false)
+        }
+    }
+
+    let remote = Arc::new(BatchedRemote {
+        calls: AtomicUsize::new(0),
+    });
+    let (service, store, _) = setup(remote.clone());
+    service
+        .add_account(config("acct-1"), credentials())
+        .await
+        .unwrap();
+
+    let total = triage_mail_desktop_lib::worker::sync_account_once(&service, &config("acct-1"))
+        .await
+        .unwrap();
+
+    assert_eq!(total, 350);
+    assert_eq!(remote.calls.load(Ordering::SeqCst), 2);
+
+    let state = store
+        .get_folder_sync_state("acct-1", "INBOX")
+        .unwrap()
+        .unwrap();
+    assert_eq!(state.uidnext, 351);
+    assert_eq!(state.highest_modseq, Some(20));
+}
+
+#[tokio::test]
+async fn test_worker_sync_account_once_retains_committed_batches_on_interruption() {
+    struct FailingBatchRemote {
+        calls: AtomicUsize,
+    }
+    #[async_trait]
+    impl RemoteMail for FailingBatchRemote {
+        async fn fetch_attachment(
+            &self,
+            _: &AccountConfigDto,
+            _: &str,
+            _: u32,
+            _: &str,
+            _: u32,
+        ) -> Result<Vec<u8>, IpcError> {
+            Ok(vec![])
+        }
+        async fn mutate(
+            &self,
+            _: &AccountConfigDto,
+            _: &RemoteMutation,
+        ) -> Result<MutationOutcome, IpcError> {
+            Ok(MutationOutcome::FlagsUpdated)
+        }
+        async fn unsubscribe(&self, _: &UnsubscribeDescriptor) -> Result<(), IpcError> {
+            Ok(())
+        }
+        async fn sync(
+            &self,
+            _: &AccountConfigDto,
+            _: &FolderSyncState,
+            sink: &dyn SyncEventSink,
+        ) -> Result<IncrementalSyncResult, IpcError> {
+            let call = self.calls.fetch_add(1, Ordering::SeqCst);
+            if call == 0 {
+                let messages: Vec<_> = (1..=300).map(mock_parsed_message).collect();
+                sink.on_sync_progress(&mail_engine::SyncProgressEvent {
+                    account_id: "acct-1".into(),
+                    folder: "INBOX".into(),
+                    synced_count: 300,
+                    uidvalidity: 100,
+                    highest_modseq: Some(10),
+                })
+                .map_err(|_| IpcError::Internal)?;
+                Ok(IncrementalSyncResult {
+                    folder: "INBOX".into(),
+                    uidvalidity: 100,
+                    uidvalidity_reset: false,
+                    new_last_uid: 300,
+                    highest_modseq: Some(10),
+                    new_messages: messages,
+                    flag_deltas: vec![],
+                })
+            } else {
+                Err(IpcError::RemoteUnavailable)
+            }
+        }
+        async fn wait_for_change(
+            &self,
+            _: &AccountConfigDto,
+            _: &FolderSyncState,
+        ) -> Result<bool, IpcError> {
+            Ok(false)
+        }
+    }
+
+    let remote = Arc::new(FailingBatchRemote {
+        calls: AtomicUsize::new(0),
+    });
+    let (service, store, _) = setup(remote.clone());
+    service
+        .add_account(config("acct-1"), credentials())
+        .await
+        .unwrap();
+
+    let err = triage_mail_desktop_lib::worker::sync_account_once(&service, &config("acct-1")).await;
+    assert_eq!(err, Err(IpcError::RemoteUnavailable));
+
+    // Batch 1 (300 messages) is already committed in SQLCipher and durable!
+    let state = store
+        .get_folder_sync_state("acct-1", "INBOX")
+        .unwrap()
+        .unwrap();
+    assert_eq!(state.uidnext, 301);
 }

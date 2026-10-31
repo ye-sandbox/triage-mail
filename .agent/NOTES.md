@@ -245,3 +245,16 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   to eliminate dead nullity checks (`?2 IS NULL` / `(?2 IS NULL OR account_id=?2)`).
 - Hybrid candidate fusion pre-allocates scores maps and uses cached prepared statements for
   final-page summary and metadata hydration. All schema versions, traits, and DTOs remain unchanged.
+
+## Lazy Body Fetch & Batched Initial Sync ([02.4])
+
+- **Two-Phase Fetch Protocol (`protocol.rs`):**
+  - Wire command strictly forbids `BODY.PEEK[TEXT]`, `BODY[]`, or `RFC822` during bulk sync.
+  - Phase 1: `UID FETCH <uids> (UID MODSEQ FLAGS BODYSTRUCTURE BODY.PEEK[HEADER])` downloads structure and headers only.
+  - RFC 3501 `BODYSTRUCTURE` parser (`bodystructure.rs`) extracts attachment metadata without downloading payload bytes and identifies candidate leaf text sections (`text/plain`, `text/html` <= 2MB).
+  - Phase 2: `UID FETCH <uids> (BODY.PEEK[1])` or `(BODY.PEEK[<sec>.MIME] BODY.PEEK[<sec>])` fetches only the targeted leaf text sections and synthesizes entities zero-copy.
+  - Attachment bodies are fetched strictly on-demand via `IMAP BODY.PEEK[<part_id>]`.
+- **Batched Initial Sync:**
+  - `DEFAULT_SYNC_UID_BATCH_SIZE: u32 = 300` limits window chunks during initial sync.
+  - Desktop background worker commits each 300-message batch and updates the `FolderSyncState.uidnext` watermark in SQLCipher before requesting the subsequent batch. If interrupted, already ingested batches remain durable.
+

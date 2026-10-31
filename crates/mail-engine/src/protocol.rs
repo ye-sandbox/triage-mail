@@ -66,6 +66,8 @@ pub struct RawFetchedMessage {
     pub header_bytes: Vec<u8>,
     pub text_bytes: Vec<u8>,
     pub raw_payload: Vec<u8>,
+    pub bodystructure: Option<String>,
+    pub sections: std::collections::HashMap<String, Vec<u8>>,
 }
 
 /// Represents the completed execution of an IMAP tagged command.
@@ -314,15 +316,30 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
                 }
             }
 
+            if msg.bodystructure.is_none() {
+                if let Some(bs) = crate::bodystructure::extract_bodystructure_sexpr(&current_chunk)
+                {
+                    msg.bodystructure = Some(bs.to_string());
+                }
+            }
+
             if let Some(literal_size) = extract_trailing_literal_size(&current_chunk) {
                 let literal = self.read_exact_bytes(literal_size).await?;
 
-                if current_chunk.contains("HEADER") {
-                    msg.header_bytes = literal.clone();
-                } else if current_chunk.contains("TEXT") {
-                    msg.text_bytes = literal.clone();
-                }
-                if msg.raw_payload.is_empty() {
+                if let Some(section) = extract_body_section_name(&current_chunk) {
+                    let section_upper = section.to_ascii_uppercase();
+                    if section_upper == "HEADER" {
+                        msg.header_bytes = literal;
+                    } else if section_upper == "TEXT" {
+                        msg.text_bytes = literal;
+                    } else {
+                        msg.sections.insert(section, literal);
+                    }
+                } else if current_chunk.to_ascii_uppercase().contains("BODYSTRUCTURE") {
+                    if let Ok(bs_str) = std::str::from_utf8(&literal) {
+                        msg.bodystructure = Some(bs_str.to_string());
+                    }
+                } else if msg.raw_payload.is_empty() {
                     msg.raw_payload = literal;
                 }
 
@@ -408,34 +425,190 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
         Ok(status)
     }
 
-    /// Fetches messages with UID greater than `last_uid` (Lightweight Invariant).
-    pub async fn fetch_new_messages(
-        &mut self,
-        last_uid: u32,
-    ) -> Result<Vec<RawFetchedMessage>, EngineError> {
-        let query_range = format!("{}:*", last_uid.saturating_add(1));
-        // INVARIANT: Fetch only lightweight parts (headers, text, flags, modseq) - never raw binary attachments!
-        let cmd = format!(
-            "UID FETCH {} (UID MODSEQ FLAGS BODY.PEEK[HEADER] BODY.PEEK[TEXT])",
-            query_range
-        );
-
+    /// Searches for message UIDs matching a search criterion (e.g. `UID 101:*`).
+    pub async fn search_uids(&mut self, query: &str) -> Result<Vec<u32>, EngineError> {
+        let cmd = format!("UID SEARCH {}", query);
         let res = self.execute_command(&cmd).await?;
         if res.status != TaggedStatus::Ok {
             return Err(EngineError::ImapProtocol(format!(
-                "UID FETCH failed: {}",
+                "UID SEARCH failed: {}",
                 res.message
             )));
         }
 
-        // Filter messages strictly greater than last_uid
-        let filtered = res
-            .fetched_messages
-            .into_iter()
-            .filter(|m| m.uid > last_uid)
-            .collect();
+        let mut uids = Vec::new();
+        for line in &res.untagged_lines {
+            if let Some(rest) = line.strip_prefix("* SEARCH") {
+                for token in rest.split_whitespace() {
+                    if let Ok(uid) = token.parse::<u32>() {
+                        uids.push(uid);
+                    }
+                }
+            }
+        }
+        uids.sort_unstable();
+        uids.dedup();
+        Ok(uids)
+    }
 
-        Ok(filtered)
+    /// Fetches message structure, headers, flags, and modseq for a set of UIDs.
+    pub async fn fetch_uids_structure_and_headers(
+        &mut self,
+        uids: &[u32],
+    ) -> Result<Vec<RawFetchedMessage>, EngineError> {
+        if uids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let seq_set = format_sequence_set(uids);
+        let cmd = format!(
+            "UID FETCH {} (UID MODSEQ FLAGS BODYSTRUCTURE BODY.PEEK[HEADER])",
+            seq_set
+        );
+        let res = self.execute_command(&cmd).await?;
+        if res.status != TaggedStatus::Ok {
+            return Err(EngineError::ImapProtocol(format!(
+                "UID FETCH structure and headers failed: {}",
+                res.message
+            )));
+        }
+        Ok(res.fetched_messages)
+    }
+
+    /// Fetches selective MIME/body sections for a set of UIDs.
+    pub async fn fetch_uids_sections(
+        &mut self,
+        uids: &[u32],
+        sections: &[String],
+    ) -> Result<Vec<RawFetchedMessage>, EngineError> {
+        if uids.is_empty() || sections.is_empty() {
+            return Ok(Vec::new());
+        }
+        let seq_set = format_sequence_set(uids);
+        let items = sections.join(" ");
+        let cmd = format!("UID FETCH {} (UID {})", seq_set, items);
+        let res = self.execute_command(&cmd).await?;
+        if res.status != TaggedStatus::Ok {
+            return Err(EngineError::ImapProtocol(format!(
+                "UID FETCH sections failed: {}",
+                res.message
+            )));
+        }
+        Ok(res.fetched_messages)
+    }
+
+    /// Fetches messages with UID greater than `last_uid` using the two-phase Lazy Attachment protocol.
+    ///
+    /// INVARIANT: Never fetch BODY.PEEK[TEXT] or RFC822 during bulk sync because multipart TEXT contains
+    /// raw binary attachments. Fetch BODYSTRUCTURE first, then fetch exclusively selective non-attachment
+    /// text/html sections (BODY.PEEK[<section>]) plus headers/flags/modseq.
+    pub async fn fetch_new_messages(
+        &mut self,
+        last_uid: u32,
+    ) -> Result<Vec<RawFetchedMessage>, EngineError> {
+        self.fetch_new_messages_two_phase(last_uid, crate::DEFAULT_SYNC_UID_BATCH_SIZE)
+            .await
+    }
+
+    /// Fetches new messages strictly using the two-phase Lazy Attachment protocol:
+    /// Phase 1: Discovers candidate UIDs and fetches BODYSTRUCTURE + HEADER (never BODY.PEEK[TEXT]).
+    /// Phase 2: Fetches exclusively selective text/plain and text/html leaf sections.
+    pub async fn fetch_new_messages_two_phase(
+        &mut self,
+        last_uid: u32,
+        batch_size: u32,
+    ) -> Result<Vec<RawFetchedMessage>, EngineError> {
+        let search_query = format!("UID {}:*", last_uid.saturating_add(1));
+        let candidate_uids = match self.search_uids(&search_query).await {
+            Ok(uids) => {
+                let filtered: Vec<u32> = uids.into_iter().filter(|&u| u > last_uid).collect();
+                filtered
+            }
+            Err(_) => Vec::new(),
+        };
+
+        let mut messages = if !candidate_uids.is_empty() {
+            let limit = (batch_size as usize).min(candidate_uids.len());
+            let batch_uids = &candidate_uids[..limit];
+            self.fetch_uids_structure_and_headers(batch_uids).await?
+        } else {
+            // Direct bounded range query if candidate search was empty or failed
+            let start = last_uid.saturating_add(1);
+            let range = format!("{}:*", start);
+            let mut msgs = self
+                .execute_command(&format!(
+                    "UID FETCH {} (UID MODSEQ FLAGS BODYSTRUCTURE BODY.PEEK[HEADER])",
+                    range
+                ))
+                .await?
+                .fetched_messages;
+            msgs.retain(|m| m.uid > last_uid);
+            msgs.sort_by_key(|m| m.uid);
+            if msgs.len() > batch_size as usize {
+                msgs.truncate(batch_size as usize);
+            }
+            msgs
+        };
+
+        messages.retain(|m| m.uid > last_uid);
+        messages.sort_by_key(|m| m.uid);
+
+        self.fetch_phase2_for_messages(messages).await
+    }
+
+    async fn fetch_phase2_for_messages(
+        &mut self,
+        mut messages: Vec<RawFetchedMessage>,
+    ) -> Result<Vec<RawFetchedMessage>, EngineError> {
+        if messages.is_empty() {
+            return Ok(messages);
+        }
+
+        let mut section_to_uids: std::collections::HashMap<Vec<String>, Vec<u32>> =
+            std::collections::HashMap::new();
+
+        for msg in &messages {
+            let mut needed_sections = Vec::new();
+            if let Some(bs_str) = &msg.bodystructure {
+                if let Ok(structure) = crate::bodystructure::parse_bodystructure_str(bs_str) {
+                    let meta = crate::bodystructure::extract_body_structure_metadata(&structure);
+                    if meta.is_single_part {
+                        if !meta.text_sections.is_empty() {
+                            needed_sections.push("BODY.PEEK[1]".to_string());
+                        }
+                    } else {
+                        for sec in meta.text_sections {
+                            needed_sections.push(format!("BODY.PEEK[{}.MIME]", sec.section));
+                            needed_sections.push(format!("BODY.PEEK[{}]", sec.section));
+                        }
+                    }
+                }
+            } else {
+                needed_sections.push("BODY.PEEK[1]".to_string());
+            }
+
+            if !needed_sections.is_empty() {
+                section_to_uids
+                    .entry(needed_sections)
+                    .or_default()
+                    .push(msg.uid);
+            }
+        }
+
+        for (sections, uids) in section_to_uids {
+            let fetched_sections = self.fetch_uids_sections(&uids, &sections).await?;
+            for fetched in fetched_sections {
+                if let Some(target) = messages.iter_mut().find(|m| m.uid == fetched.uid) {
+                    for (k, v) in fetched.sections {
+                        target.sections.insert(k, v);
+                    }
+                    if target.raw_payload.is_empty() && !fetched.raw_payload.is_empty() {
+                        target.raw_payload = fetched.raw_payload;
+                    }
+                }
+            }
+        }
+
+        Ok(messages)
     }
 
     /// Fetches changed message flags since `modseq` using RFC 7162 CONDSTORE.
@@ -505,7 +678,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
             .fetched_messages
             .into_iter()
             .find(|m| m.uid == uid)
-            .map(|m| m.raw_payload)
+            .map(|mut m| m.sections.remove(part_id).unwrap_or(m.raw_payload))
             .unwrap_or_default();
 
         Ok(bytes)
@@ -630,6 +803,33 @@ fn extract_bracket_token(line: &str, token_name: &str) -> Option<String> {
     None
 }
 
+/// Formats a list of UIDs into a valid RFC 3501 sequence-set.
+pub fn format_sequence_set(uids: &[u32]) -> String {
+    if uids.is_empty() {
+        return String::new();
+    }
+    if uids.len() == 1 {
+        return uids[0].to_string();
+    }
+    let is_contiguous = uids.windows(2).all(|w| w[1] == w[0].saturating_add(1));
+    if is_contiguous {
+        format!("{}:{}", uids[0], uids[uids.len() - 1])
+    } else {
+        uids.iter()
+            .map(|u| u.to_string())
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+}
+
+/// Extracts section tag from `BODY[...]` or `BODY.PEEK[...]`.
+pub fn extract_body_section_name(chunk: &str) -> Option<String> {
+    let pos = chunk.find("BODY[").or_else(|| chunk.find("BODY.PEEK["))?;
+    let start = chunk[pos..].find('[')? + pos + 1;
+    let end = chunk[start..].find(']')? + start;
+    Some(chunk[start..end].to_string())
+}
+
 /// Escapes double-quotes and backslashes in IMAP strings.
 pub fn escape_imap_string(input: &str) -> String {
     input.replace('\\', "\\\\").replace('"', "\\\"")
@@ -677,5 +877,37 @@ mod tests {
         assert_eq!(status.uidvalidity, 3001);
         assert_eq!(status.uidnext, 501);
         assert_eq!(status.highest_modseq, Some(9005));
+    }
+
+    #[test]
+    fn formats_sequence_sets_correctly() {
+        assert_eq!(format_sequence_set(&[]), "");
+        assert_eq!(format_sequence_set(&[42]), "42");
+        assert_eq!(format_sequence_set(&[1, 2, 3, 4, 5]), "1:5");
+        assert_eq!(format_sequence_set(&[1, 3, 5]), "1,3,5");
+    }
+
+    #[test]
+    fn extracts_body_section_names_correctly() {
+        assert_eq!(
+            extract_body_section_name("* 1 FETCH (BODY[HEADER] {120}"),
+            Some("HEADER".to_string())
+        );
+        assert_eq!(
+            extract_body_section_name("* 1 FETCH (BODY[1.MIME] {80}"),
+            Some("1.MIME".to_string())
+        );
+        assert_eq!(
+            extract_body_section_name("* 1 FETCH (BODY.PEEK[1.1] {500}"),
+            Some("1.1".to_string())
+        );
+        assert_eq!(
+            extract_body_section_name("* 1 FETCH (BODY[2] {1000}"),
+            Some("2".to_string())
+        );
+        assert_eq!(
+            extract_body_section_name("* 1 FETCH (FLAGS (\\Seen))"),
+            None
+        );
     }
 }
