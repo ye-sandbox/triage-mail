@@ -3,8 +3,10 @@
 //! 3-Tier Local-First Triage & AI Pipeline contracts:
 //! - Tier 1 (Deterministic, Zero Cost): Regex/heuristics for 2FA/OTP, FEBRABAN Boletos (exact BRL
 //!   amount + due date), Pix EMV/keys, NF-e metadata, package tracking, and RFC 8058 One-Click Unsubscribe.
-//! - Tier 2 (Local CPU Embeddings): Quantized ONNX embeddings (`all-MiniLM-L6-v2` / `bge-small`)
-//!   cached on demand in the user's local data directory (`$XDG_DATA_HOME/triage-mail/models`).
+//! - Tier 2 (Experimental Local CPU Semantic Projection): Deterministic token/n-gram feature-hash
+//!   projection (`int8[384]`) seeded from cached model headers or offline fallback.
+//!   NOTE: v0.1 does not execute neural ONNX weights; true learned ONNX inference (`ort` / `fastembed-rs`)
+//!   is scheduled for v0.2.
 //! - Tier 3 (Optional Generative LLM): Local Ollama (`http://127.0.0.1:11434`) or explicit BYOK.
 
 pub mod boleto;

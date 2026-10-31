@@ -48,6 +48,20 @@
 			if (active) busy = false;
 		}
 	}
+	async function toggleSemanticSearch(event: Event) {
+		if (busy || !settings) return;
+		const target = event.currentTarget as HTMLInputElement;
+		const enabled = target.checked;
+		busy = true;
+		try {
+			await transport.setExperimentalSemanticSearch(enabled);
+			await load();
+		} catch {
+			if (active) error = 'Could not update semantic search setting.';
+		} finally {
+			if (active) busy = false;
+		}
+	}
 </script>
 
 <main class="h-dvh overflow-y-auto bg-[var(--reader)] px-4 py-8 text-[var(--text)]">
@@ -69,6 +83,26 @@
 			/>
 			<hr class="border-[var(--separator)]" />
 			<ModelSettings cached={settings.model_cached} {transport} changed={() => void load()} />
+			<hr class="border-[var(--separator)]" />
+			<section class="space-y-4" aria-label="Experimental semantic search">
+				<h2 class="text-lg font-semibold">Semantic search (Experimental)</h2>
+				<p class="text-sm text-[var(--secondary)]">
+					Uses deterministic token and character n-gram feature-hash projections (not learned neural
+					ONNX models) to generate 384-dimensional vectors for sqlite-vec. When enabled, Semantic and
+					Hybrid search options are available in the inbox. Learned ONNX neural embeddings are
+					planned for v0.2.
+				</p>
+				<label class="flex items-center gap-3 text-sm">
+					<input
+						type="checkbox"
+						checked={settings.experimental_semantic_search}
+						disabled={busy}
+						onchange={toggleSemanticSearch}
+						class="h-4 w-4 rounded border-[var(--separator)]"
+					/>
+					Enable experimental semantic search
+				</label>
+			</section>
 			<hr class="border-[var(--separator)]" />
 			<form onsubmit={setTokenizer} class="space-y-4" aria-label="Search settings">
 				<h2 class="text-lg font-semibold">Word search</h2>

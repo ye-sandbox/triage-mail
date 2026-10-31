@@ -39,6 +39,7 @@ impl BatchEvents {
             state: SyncState::Idle,
             new_messages_count: 0,
             triage_alerts: Vec::new(),
+            embedding_errors_count: 0,
         };
         Self {
             account_id,
@@ -55,6 +56,12 @@ impl BatchEvents {
             let mut event = event.clone();
             event.state = state;
             self.bus.publish(event);
+        }
+    }
+
+    pub fn on_embedding_failed(&self, _message_id: &str, _error: &triage_ai::TriageError) {
+        if let Ok(mut event) = self.event.lock() {
+            event.embedding_errors_count = event.embedding_errors_count.saturating_add(1);
         }
     }
 }

@@ -38,12 +38,13 @@ impl Default for AiSettings {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SettingsDto {
     pub ai: AiSettings,
     pub tokenizer: FtsTokenizerMode,
     pub has_api_key: bool,
     pub model_cached: bool,
+    pub experimental_semantic_search: bool,
 }
 
 /// INVARIANT: Deserialize failures must not echo key material across IPC.
@@ -91,9 +92,11 @@ impl AiSettings {
 }
 
 #[derive(Serialize, Deserialize, Default)]
-struct StoredSettings {
-    ai: AiSettings,
-    api_key: String,
+pub(crate) struct StoredSettings {
+    pub(crate) ai: AiSettings,
+    pub(crate) api_key: String,
+    #[serde(default)]
+    pub(crate) experimental_semantic_search: bool,
 }
 impl Drop for StoredSettings {
     fn drop(&mut self) {
@@ -102,7 +105,7 @@ impl Drop for StoredSettings {
 }
 
 impl DesktopService {
-    fn read_stored_settings(&self) -> Result<StoredSettings, IpcError> {
+    pub(crate) fn read_stored_settings(&self) -> Result<StoredSettings, IpcError> {
         match self.vault.get_secret(&vault_key("ai-settings")?) {
             Ok(bytes) => serde_json::from_slice(&Zeroizing::new(bytes))
                 .map_err(|_| IpcError::VaultUnavailable),
@@ -124,14 +127,15 @@ impl DesktopService {
     pub async fn get_settings(self: &Arc<Self>) -> Result<SettingsDto, IpcError> {
         self.blocking(|s| {
             let _guard = s.settings_gate.lock().map_err(|_| IpcError::Internal)?;
-            let ai = s.read_ai_settings()?;
+            let stored = s.read_stored_settings()?;
             Ok(SettingsDto {
-                ai,
+                ai: stored.ai.clone(),
                 tokenizer: s.store.tokenizer_mode(),
-                has_api_key: !s.read_ai_key()?.is_empty(),
+                has_api_key: !stored.api_key.is_empty(),
                 model_cached: crate::model_download::model_config()
                     .map(|c| triage_ai::embeddings::ModelCacheManager::new(c).is_model_cached())
                     .unwrap_or(false),
+                experimental_semantic_search: stored.experimental_semantic_search,
             })
         })
         .await
@@ -144,10 +148,10 @@ impl DesktopService {
     ) -> Result<(), IpcError> {
         self.blocking(move |s| {
             let _guard = s.settings_gate.lock().map_err(|_| IpcError::Internal)?;
-            let old = s.read_ai_settings()?;
+            let old = s.read_stored_settings()?;
             let old_key = s.read_ai_key()?;
             // INVARIANT: A retained bearer key may only be reused at its original endpoint.
-            let same = old.endpoint == settings.endpoint && old.provider == settings.provider;
+            let same = old.ai.endpoint == settings.endpoint && old.ai.provider == settings.provider;
             let key = if settings.provider == AiProvider::Ollama {
                 Vec::new()
             } else if api_key.0.is_empty() && same {
@@ -171,7 +175,26 @@ impl DesktopService {
             let stored = StoredSettings {
                 ai: settings,
                 api_key: String::from_utf8(key.to_vec()).map_err(|_| IpcError::InvalidRequest)?,
+                experimental_semantic_search: old.experimental_semantic_search,
             };
+            let bytes =
+                Zeroizing::new(serde_json::to_vec(&stored).map_err(|_| IpcError::Internal)?);
+            s.vault
+                .set_secret(&vault_key("ai-settings")?, &bytes)
+                .map_err(|_| IpcError::VaultUnavailable)?;
+            Ok(())
+        })
+        .await
+    }
+
+    pub async fn set_experimental_semantic_search(
+        self: &Arc<Self>,
+        enabled: bool,
+    ) -> Result<(), IpcError> {
+        self.blocking(move |s| {
+            let _guard = s.settings_gate.lock().map_err(|_| IpcError::Internal)?;
+            let mut stored = s.read_stored_settings()?;
+            stored.experimental_semantic_search = enabled;
             let bytes =
                 Zeroizing::new(serde_json::to_vec(&stored).map_err(|_| IpcError::Internal)?);
             s.vault

@@ -139,6 +139,7 @@
 			toggleSidebar={() => (sidebarOpen = !sidebarOpen)}
 			refresh={() => void inbox.refresh()}
 			disabled={!connected || inbox.loading}
+			experimentalSemanticSearch={inbox.experimentalSemanticSearch}
 		/>
 		<div
 			class="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--separator)] bg-[var(--toolbar)] px-6 py-2"

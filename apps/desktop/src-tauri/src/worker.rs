@@ -81,6 +81,7 @@ fn status(service: &DesktopService, account: &str, state: SyncState) {
         state,
         new_messages_count: 0,
         triage_alerts: Vec::new(),
+        embedding_errors_count: 0,
     });
 }
 
@@ -225,10 +226,19 @@ pub async fn sync_account_once(
                                 record.subject,
                                 record.text_body.as_deref().unwrap_or_default()
                             );
-                            if let Ok(vector) = provider.embed_int8(&text) {
-                                s.store
-                                    .insert_message_embedding(&record.id, &vector)
-                                    .map_err(storage_error)?;
+                            match provider.embed_int8(&text) {
+                                Ok(vector) => {
+                                    s.store
+                                        .insert_message_embedding(&record.id, &vector)
+                                        .map_err(storage_error)?;
+                                }
+                                Err(err) => {
+                                    events.on_embedding_failed(&record.id, &err);
+                                    eprintln!(
+                                        "[worker] failed to generate embedding for message {}: {}",
+                                        record.id, err
+                                    );
+                                }
                             }
                         }
                     }

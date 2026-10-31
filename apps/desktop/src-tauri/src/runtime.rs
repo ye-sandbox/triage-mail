@@ -216,6 +216,18 @@ pub async fn cmd_set_tokenizer(
 }
 
 #[tauri::command]
+pub async fn cmd_set_experimental_semantic_search(
+    state: State<'_, RuntimeState>,
+    enabled: bool,
+) -> Result<(), IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .set_experimental_semantic_search(enabled)
+        .await
+}
+
+#[tauri::command]
 pub async fn cmd_download_model(
     state: State<'_, RuntimeState>,
     request: crate::model_download::ModelDownloadRequest,
@@ -302,6 +314,7 @@ pub async fn cmd_subscribe_sync(
                                 state: SyncState::ResyncRequired,
                                 new_messages_count: 0,
                                 triage_alerts: Vec::new(),
+                                embedding_errors_count: 0,
                             };
                             if on_progress.send(event).is_err() {
                                 return;
@@ -330,6 +343,7 @@ pub fn run() {
             cmd_get_settings,
             cmd_save_settings,
             cmd_set_tokenizer,
+            cmd_set_experimental_semantic_search,
             cmd_download_model,
             cmd_summarize_message,
             cmd_unlock_vault,
@@ -432,6 +446,7 @@ mod tests {
                 cmd_get_settings,
                 cmd_save_settings,
                 cmd_set_tokenizer,
+                cmd_set_experimental_semantic_search,
                 cmd_download_model,
                 cmd_summarize_message
             ])

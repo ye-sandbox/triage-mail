@@ -28,7 +28,7 @@ All core domain crates MUST remain pure Rust (zero dependency on `tauri`) so the
 | `cmd_triage_action` | UI $\rightarrow$ Rust | `TriageMutationDto { message_ids, action: MarkRead \| Archive \| Trash \| Tag(String) \| OneClickUnsubscribe }` | Optimistic local SQLite update + queued async IMAP `STORE FLAGS` sync (or RFC 8058 HTTP POST on explicit unsubscribe) |
 | `cmd_get_message_body` | UI $\rightarrow$ Rust | `MessageId` $\rightarrow$ `MessageDetailDto { headers, text_plain, html_raw, triage_badges, attachments_meta }` | HTML sanitized in UI with `DOMPurify` + `<iframe sandbox="">` + normalized base dark-mode CSS |
 | `cmd_fetch_attachment` | UI $\rightarrow$ Rust | `AttachmentRequestDto { account_id, folder, uid, part_id }` $\rightarrow$ `AttachmentBytesDto` | **Lazy Attachment Invariant:** Fetched on-demand via `IMAP BODY.PEEK[section]` |
-| `Channel<SyncProgressEvent>` | Rust $\rightarrow$ UI | `SyncProgressEvent { account_id, state, new_messages_count, triage_alerts }` | Non-blocking streaming updates from `tokio` IMAP `IDLE` workers |
+| `Channel<SyncProgressEvent>` | Rust $\rightarrow$ UI | `SyncProgressEvent { account_id, state, new_messages_count, triage_alerts, embedding_errors_count }` | Non-blocking streaming updates from `tokio` IMAP `IDLE` workers |
 
 ### 3. Extensibility Trait Boundary
 
@@ -185,11 +185,19 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 ## Settings and AI Consent IPC ([04.7])
 
 - Add `cmd_get_settings()` -> `SettingsDto { ai: { enabled, provider: Ollama | Byok,
-  endpoint, model }, tokenizer, has_api_key, model_cached }` and
+  endpoint, model }, tokenizer, has_api_key, model_cached, experimental_semantic_search }` and
   `cmd_save_settings(settings: AiSettings, apiKey)` -> `()`. Native vault atomically stores
   AI metadata with its endpoint-bound API key; responses contain only secret-free metadata.
   Empty key preserves an existing key only for the same provider/endpoint; saving Ollama
   clears it. Saving performs no network request. A disabled setting revokes future dispatch.
+- Add `cmd_set_experimental_semantic_search(enabled: bool)` -> `()` to enable/disable
+  Tier 2 feature-hash semantic projection search.
+- When `experimental_semantic_search` is false (default), `cmd_search_messages` rejects
+  `Semantic` and `Hybrid` queries with `IpcError::InvalidRequest`.
+- In UI, match options are hidden by default and, when enabled, honestly labeled as
+  "Words", "Semantic projection (Experimental)", and "Words + semantic projection (Experimental)".
+- In sync worker, `SyncProgressEvent.embedding_errors_count: usize` exposes failed embedding telemetry
+  instead of silently discarding errors.
 - Add `cmd_set_tokenizer(tokenizer: FtsTokenizerMode)` -> `()` as a separate explicit rebuild
   action. AI configuration and search changes have independent persistence/error boundaries.
 - Add `cmd_download_model(request: { model_url, tokenizer_url, consent })` -> `()`.
