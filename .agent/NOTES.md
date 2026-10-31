@@ -116,7 +116,7 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - All motion is CSS-owned. `prefers-reduced-motion: reduce` disables spatial, repetitive and
   feedback animation/transition rules, including when the preference changes mid-animation.
 
-## Secure Message Reader ([04.3], Validation Pending)
+## Secure Message Reader ([04.3])
 
 - `reader/transport.ts` adapts existing body/attachment commands; invocation uses `messageId`
   for details and `{ request }` with snake_case attachment identity. No backend changes.
@@ -129,5 +129,5 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - Attachment bytes are requested only on a user click, saved via an outer-webview Blob download
   with an octet-stream MIME type and normalized basename, and never rendered. Duplicate clicks
   are guarded. Object URLs expire after 60 seconds and are also released on teardown.
-- Synthetic browser QA verified the save flow and compact navigation. Native WebKit saving
-  and the required Cargo checks remain unverified in the current environment.
+- Synthetic browser QA verified the save flow and compact navigation; Cargo workspace check/test/
+  fmt/clippy and Prettier (`prettier-plugin-svelte`) passed.
