@@ -7,25 +7,54 @@
 
 ## Active Task
 
-### 📌 Task [03.4]: Tier 2 Honest Labeling (Experimental Semantic Search)
+### 📌 Task [01.3]: Pre-Release Schema Consolidation & Persisted Triage
 
-- **Description:** `LocalCpuEmbeddingProvider` uses hashed feature projections, not ONNX inference.
-  "Meaning" and "Words + meaning" search modes and documentation imply learned semantics. Mark Tier 2
-  experimental, hide Semantic/Hybrid modes behind an explicit setting, correct UI copy, and expose
-  embedding failure telemetry in the sync worker instead of silently discarding errors.
-- **Systems Involved:** `crates/triage-ai`, `apps/desktop` (settings, inbox search modes, sync worker).
+- **Description:** ADR-006 duplicated the vector index solely to preserve an unreleased v4 schema.
+  Triage results are recomputed per detail request; list badges transfer full bodies over IPC.
+  Collapse migrations v1–v5 into a single clean v1 schema with one account-partitioned
+  `vec_messages` (`account_id` PARTITION KEY); drop the derived table, reconciliation triggers and
+  backfill. Persist triage category/badges at ingestion and expose them in `MessageRowDto`.
+  Verify global (unfiltered) vec0 KNN over partitions at 100k against the exact reference oracle.
+- **Systems Involved:** `crates/storage` (migrations, schema, search), `crates/mail-engine` (ingestion),
+  `apps/desktop` (DTOs, triage persistence, list badges).
 - **Action Type:** Implementation; requires an approved plan.
 - **Status:** READY FOR PLANNING
 - **Scope:**
-  - Add explicit setting to enable experimental semantic search (default disabled/hidden in search dropdown).
-  - Correct UI search copy to honestly label feature-hash semantic projection vs learned ONNX models.
-  - Sync worker: expose embedding failure telemetry rather than silent omission.
-- **Constraints:** P0 secrets isolation, strict typing, Svelte 5 Runes invariant.
-- **Origin:** v0.1.0 readiness review (2026-10-31), findings C2 and I3.
+  - Collapse migrations v1–v5 into a single canonical v1 schema with one account-partitioned vector index.
+  - Drop derived table, reconciliation triggers, and migration backfill logic.
+  - Persist triage category and badges at ingestion in SQLCipher; expose additively in `MessageRowDto`.
+  - Validate 100k global and filtered search against the exact reference oracle.
+- **Governance:** ADR-007 supersedes ADR-006. P1 schema immutability applies to released schemas; from tag `v0.1.0` migrations are append-only.
+- **Constraints:** P0 secrets isolation, strict typing, P1 IPC additive backwards-compatibility. Dev databases recreated from IMAP sync.
+- **Origin:** v0.1.0 readiness review (2026-10-31), findings C1 and I2.
 
 ---
 
 ## Completed Tasks
+
+### 📌 Task [03.4]: Tier 2 Honest Labeling (Experimental Semantic Search)
+
+- **Description:** Mark Tier 2 experimental; hide Semantic/Hybrid modes behind an explicit setting;
+  correct UI search copy to honestly label feature-hash semantic projection vs learned ONNX models;
+  and expose embedding failure telemetry in the sync worker instead of silently discarding errors.
+- **Systems Involved:** `crates/triage-ai`, `apps/desktop` (settings, inbox search modes, sync worker).
+- **Action Type:** Implementation.
+- **Status:** DONE
+- **Plan:** Approved by the user on 2026-10-31; implementation and validation complete.
+- **Commit:** `96c52a9` (`feat(triage-ai): label experimental semantic search and expose sync embedding telemetry`).
+- **Next Task:** [01.3] Pre-Release Schema Consolidation & Persisted Triage (`READY FOR PLANNING`).
+- **Acceptance:**
+  - [x] Honest doc comments and module definitions in `crates/triage-ai/src/embeddings.rs` and `lib.rs` explicitly labeling Tier 2 as experimental deterministic feature-hash projections into `int8[384]` (not neural ONNX inference; learned ONNX deferred to v0.2).
+  - [x] Stored settings and `SettingsDto` in `apps/desktop/src-tauri/src/settings.rs` include `experimental_semantic_search: bool` (default disabled/false), persisted atomically in vault under `ai-settings`.
+  - [x] Added `cmd_set_experimental_semantic_search(enabled: bool)` IPC command and registered in Tauri command handlers.
+  - [x] Backend guard in `DesktopService::search_messages` rejects `Semantic` and `Hybrid` queries with `IpcError::InvalidRequest` when `experimental_semantic_search` is disabled.
+  - [x] `SyncProgressEvent` includes `#[serde(default)] pub embedding_errors_count: usize` and `BatchEvents::on_embedding_failed` tracks batch embedding error counts.
+  - [x] Sync worker in `worker.rs` matches `provider.embed_int8(&text)` errors, invokes `events.on_embedding_failed`, and logs non-silent diagnostics instead of silently swallowing errors.
+  - [x] Settings UI (`SettingsView.svelte`) provides an "Experimental Semantic Search" toggle with explicit honest disclosures regarding feature-hash projections vs learned neural ONNX models.
+  - [x] Search toolbar (`SearchToolbar.svelte`) hides match dropdown by default and, when enabled, displays honest labels: `Words`, `Semantic projection (Experimental)`, `Words + semantic projection (Experimental)`.
+  - [x] `InboxController` clamps search mode to `Lexical` when disabled, surfaces indexing warning telemetry when `embedding_errors_count > 0`, and updates error messaging.
+  - [x] Both `README.md` and `README.pt-br.md` synchronized following `readme-standard` skill to reflect experimental feature-hash semantic projection.
+  - [x] Full test suite passes: 169 Rust workspace tests, 58 Vitest tests, `svelte-check` 0 errors/0 warnings, `cargo clippy` 0 warnings, formatting checks, policy scanner (176 text files, 0 findings), `git diff --check`.
 
 ### 📌 Task [02.5]: OAuth Token Refresh
 
@@ -898,15 +927,11 @@ Active task: [02.5] (see above). Proposed defaults marked *(confirm at plan appr
 - **Commit:** `d65416d` (`feat(mail-engine): handle oauth token refresh and clean orphaned staging`).
 - **Outcome:** Pure-Rust `TokenRefresher` and `HttpTokenRefreshTransport` with strict P0 policy; SASL challenge abort in `protocol.rs`; transparent refresh & retry in `DefaultImapConnector`; `token_endpoint` persisted in vault; orphaned staging entries cleared at startup (`k-010`).
 
-### [03.4] Tier 2 Honest Labeling (Experimental Semantic Search) — `READY FOR PLANNING`
-- **Gap (C2):** `LocalCpuEmbeddingProvider` uses hashed feature projections, not ONNX inference;
-  "Meaning"/"Words + meaning" modes and README imply learned semantics.
-- **Proposed default (option B):** Mark Tier 2 experimental; hide Semantic/Hybrid modes by default
-  behind an explicit setting; correct UI copy. Real `fastembed`/`ort` inference deferred to v0.2.
-  Alternative (option A): integrate ONNX inference now *(confirm at plan approval)*.
-- **Also (I3):** Stop silently discarding embedding failures in the sync worker; expose a count/state.
+### [03.4] Tier 2 Honest Labeling (Experimental Semantic Search) — `DONE`
+- **Commit:** `96c52a9` (`feat(triage-ai): label experimental semantic search and expose sync embedding telemetry`).
+- **Outcome:** Marked Tier 2 experimental; hidden Semantic/Hybrid modes behind an explicit setting; honestly labeled feature-hash semantic projection in UI; exposed embedding failure telemetry in the sync worker (`SyncProgressEvent.embedding_errors_count`).
 
-### [01.3] Pre-Release Schema Consolidation & Persisted Triage — `PENDING`
+### [01.3] Pre-Release Schema Consolidation & Persisted Triage — `READY FOR PLANNING`
 - **Gap:** ADR-006 duplicated the vector index solely to preserve an unreleased v4 schema.
   Triage results are recomputed per detail request; list badges transfer full bodies over IPC.
 - **Scope:** Collapse migrations v1–v5 into a single clean v1 schema with one account-partitioned
