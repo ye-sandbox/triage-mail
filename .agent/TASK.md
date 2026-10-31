@@ -7,17 +7,46 @@
 
 ## Active Task
 
-### 📌 Task [99.1]: Public Transition Audit & Secret Scrubbing Verification
+### 📌 Task [02.5]: OAuth Token Refresh
 
-- **Description:** Perform full public repository transition audit, verify zero PII, secret, token,
-  or non-reserved mailbox leaks across git history and tracked files, verify AGPLv3 licensing
-  headers/notices and reproducible packaging readiness.
-- **Systems Involved:** Repository governance, CI tooling, licensing, documentation.
-- **Action Type:** Audit and documentation; requires an approved plan.
+- **Description:** Handle expired OAuth access tokens gracefully. Currently only `refresh_token` is
+  stored and access tokens expire (~1h), causing background sync workers to loop indefinitely in
+  `Retrying` state.
+- **Systems Involved:** `crates/mail-engine` (auth, protocol, refresh transport); `crates/vault` (atomic update); desktop sync worker.
+- **Action Type:** Implementation; requires an approved plan.
 - **Status:** READY FOR PLANNING
-- **Plan:** Not yet proposed or approved. No [99.1] implementation has started.
-- **Constraints:** Must verify whole git history and tracked tree with zero token or PII exposure;
-  RFC 2606 reserved domains only; AGPLv3 compliance.
+- **Scope:** Pure-Rust `TokenRefresher` in `crates/mail-engine`, triggered on expired/failed SASL
+  auth; refresh against the user-configured HTTPS token endpoint (no discovery, redirects, inherited
+  proxies or automatic retry loops); atomic vault update; fixed redacted `IpcError`. Clean orphaned
+  OAuth staging entries in vault at startup (k-010).
+- **Constraints:** P0 network policy identical to [04.6] onboarding; no secrets in events/logs.
+- **Origin:** v0.1.0 readiness review (2026-10-31), finding C3.
+
+---
+
+## Completed Tasks
+
+### 📌 Task [02.4]: Lazy Body Fetch via BODYSTRUCTURE & Batched Initial Sync
+
+- **Description:** Fix the Lazy Attachment invariant violation in bulk sync. `fetch_new_messages`
+  (`crates/mail-engine/src/protocol.rs`) requested `BODY.PEEK[TEXT]`, fetching full MIME with base64
+  attachments, and issued unbounded `UID FETCH 1:*` buffering entire mailboxes in memory.
+- **Systems Involved:** `crates/mail-engine` (protocol, sync, MIME assembly); desktop worker batching.
+- **Action Type:** Source code changes.
+- **Status:** DONE
+- **Plan:** Approved by the user on 2026-10-31; implementation and validation complete.
+- **Commit:** `5124327` (`feat(mail-engine): lazy body fetch via bodystructure and batched sync`).
+- **Next Task:** [02.5] OAuth Token Refresh (`READY FOR PLANNING`).
+- **Acceptance:**
+  - [x] Zero-unsafe RFC 3501 `BODYSTRUCTURE` parser (`crates/mail-engine/src/bodystructure.rs`) extracts `AttachmentMeta` without downloading payload bytes and identifies non-attachment leaf text parts (`text/plain`, `text/html` $\le 2\text{ MiB}$).
+  - [x] Two-Phase fetch in `protocol.rs` and `sync.rs`: Phase 1 (`UID FETCH ... BODYSTRUCTURE BODY.PEEK[HEADER]`) and Phase 2 (`UID FETCH ... BODY.PEEK[1]` or `BODY.PEEK[<sec>.MIME] BODY.PEEK[<sec>]`). Wire command strictly never contains `BODY.PEEK[TEXT]`, `BODY[]`, or `RFC822`.
+  - [x] Initial sync batched with `DEFAULT_SYNC_UID_BATCH_SIZE: u32 = 300` in `connector.rs` and `worker.rs`.
+  - [x] Each batch commits messages and watermark (`FolderSyncState.uidnext`) sequentially to SQLCipher before requesting next batch, surviving process interruption.
+  - [x] Replaced `literal.clone()` in `parse_fetch_response_line` with buffer moves.
+  - [x] Misleading invariant comments corrected in `protocol.rs` and `lib.rs`.
+  - [x] Integration tests pass: `lazy_bodystructure_sync_test.rs` verifies wire command and 50MB attachment bypass; worker batching tests verify sequential commit and interruption resumption.
+  - [x] Full workspace test suite passes (58 mail-engine tests, 18 desktop tests, 168+ total tests).
+
 
 ---
 
@@ -823,7 +852,7 @@ Registered 2026-10-31 from post-[04.5] gap analysis. Each task requires its own 
 - **Outcome:** Warm filtered semantic p50/p95 is 12.041/12.928ms; hybrid-filtered p50 is 37.482ms.
   Other/reopened cases still miss <15ms; migration took 1296.317ms and added 44.11MiB in the fixture.
 
-### [90.4] Remaining Exact Search Latency — `READY FOR PLANNING`
+### [90.4] Remaining Exact Search Latency — `DONE`
 - **Evidence:** [90.3] global semantic-common/hybrid-common warm p50 is 43.650/77.060ms;
   common lexical is 33.704ms. Filtered second semantic page is 16.099ms warm median.
 - **Scope:** Profile global vector and FTS ranking costs, exact hybrid latency and remaining
@@ -833,6 +862,63 @@ Registered 2026-10-31 from post-[04.5] gap analysis. Each task requires its own 
   remain separate; no automatic push, release or tag.
 
 ---
+
+## v0.1.0 Readiness Backlog (in execution order)
+
+Registered 2026-10-31 from the v0.1.0 readiness review. Each task requires its own plan approval.
+Active task: [02.5] (see above). Proposed defaults marked *(confirm at plan approval)*.
+
+### [02.4] Lazy Body Fetch via BODYSTRUCTURE & Batched Initial Sync — `DONE`
+- **Commit:** `5124327` (`feat(mail-engine): lazy body fetch via bodystructure and batched sync`).
+- **Outcome:** RFC 3501 `BODYSTRUCTURE` parser extracts attachments lazily without payload downloads; two-phase fetch queries leaf text bodies only; initial sync batched to 300 messages with durable sequential commit per batch.
+
+### [02.5] OAuth Token Refresh — `READY FOR PLANNING`
+- **Gap (C3):** Only `refresh_token` is stored; access tokens expire (~1h) and workers loop in
+  `Retrying` indefinitely for OAuth accounts.
+- **Scope:** Pure-Rust `TokenRefresher` in `crates/mail-engine`, triggered on expired/failed
+  SASL auth; refresh against the user-configured HTTPS token endpoint (no discovery, redirects,
+  inherited proxies or automatic retry loops); atomic vault update; fixed redacted `IpcError`.
+  Clean orphaned OAuth staging entries in vault at startup (k-010).
+- **Constraints:** P0 network policy identical to [04.6] onboarding; no secrets in events/logs.
+
+### [03.4] Tier 2 Honest Labeling (Experimental Semantic Search) — `PENDING`
+- **Gap (C2):** `LocalCpuEmbeddingProvider` uses hashed feature projections, not ONNX inference;
+  "Meaning"/"Words + meaning" modes and README imply learned semantics.
+- **Proposed default (option B):** Mark Tier 2 experimental; hide Semantic/Hybrid modes by default
+  behind an explicit setting; correct UI copy. Real `fastembed`/`ort` inference deferred to v0.2.
+  Alternative (option A): integrate ONNX inference now *(confirm at plan approval)*.
+- **Also (I3):** Stop silently discarding embedding failures in the sync worker; expose a count/state.
+
+### [01.3] Pre-Release Schema Consolidation & Persisted Triage — `PENDING`
+- **Gap:** ADR-006 duplicated the vector index solely to preserve an unreleased v4 schema.
+  Triage results are recomputed per detail request; list badges transfer full bodies over IPC.
+- **Scope:** Collapse migrations v1–v5 into a single clean v1 schema with one account-partitioned
+  `vec_messages` (`account_id` PARTITION KEY); drop the derived table, reconciliation triggers and
+  backfill. Persist triage category/badges at ingestion and expose them in `MessageRowDto`.
+  Verify global (unfiltered) vec0 KNN over partitions at 100k against the exact reference oracle.
+- **Governance:** ADR-007 supersedes ADR-006. Record policy: P1 schema immutability applies to
+  released schemas; from tag `v0.1.0` migrations are append-only. Update NOTES.md contracts first.
+- **Constraints:** P1 IPC change is additive. Dev databases must be recreated (re-sync from IMAP).
+
+### [90.5] Parallel Read Pool & Latency Target ADR — `PENDING`
+- **Gap:** Hybrid search runs lexical and semantic branches sequentially (~75ms warm p50).
+  The [90.4] rationale (pooling unsafe for ACID) is incorrect: WAL read-only connections are safe.
+  Global exact <15ms is physically infeasible (~42ms vector scan at 100k).
+- **Scope:** Two read-only SQLCipher connections executing branches concurrently; measure memory
+  cost of per-connection page cache. ADR redefining targets *(confirm at plan approval)*:
+  p95 warm @100k — filtered semantic ≤15ms, lexical ≤40ms, global semantic ≤50ms, hybrid ≤60ms,
+  UI first page incl. IPC ≤100ms. No approximate (ANN) search in v0.1; binary-quantized
+  candidate + int8 rerank evaluated for v0.2.
+- **Depends on:** [01.3] (final schema).
+
+### [99.1] Public Transition Audit & Secret Scrubbing Verification — `PENDING`
+- **Description:** Full public repository transition audit: zero PII/secret/token/non-reserved
+  mailbox leaks across git history and tracked files; AGPLv3 notices; reproducible packaging.
+- **Additional scope (C4, I6, I7):** "Status & Known Limitations" section in both READMEs
+  (readme-standard) removing unmet claims (sub-15ms, 60fps native, ONNX, `async-imap`, TLS 1.3-only,
+  INBOX-only sync). ADR documenting the in-house IMAP client choice. Measure real-account-free
+  production idle memory baseline. Verify a hosted CI run (requires explicit push authorization).
+- **Constraints:** RFC 2606 reserved domains only; no push/tag without explicit request.
 
 ---
 
@@ -849,3 +935,7 @@ Release/tag only with explicit human request. When triggered, the ID is `[99.1]`
 - Headless CLI / Docker daemon runner consuming `crates/*` without GUI
 - Post-triage webhook & automation consumers implementing `TriageEventHook`
 - Outbound SMTP & lightweight Markdown/Plain-text reply composer (`v0.2+`)
+- Multi-folder sync (Archive/All Mail with Gmail dedup, Sent read-only); v0.1 syncs INBOX only (`v0.2`)
+- Real Tier 2 ONNX inference via `fastembed`/`ort` if [03.4] keeps option B (`v0.2`)
+- Fuzz/property tests for the in-house IMAP FETCH/literal parser (`v0.2`)
+- Optional binary-quantized ANN candidate stage + exact int8 rerank (`v0.2`)
