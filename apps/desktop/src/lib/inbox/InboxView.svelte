@@ -2,11 +2,20 @@
 	import { tick, untrack } from 'svelte';
 	import type { InboxController } from './controller.svelte';
 	import type { SearchMode } from './types';
+	import type { ReaderTransport } from '../reader/types';
 	import Sidebar from './Sidebar.svelte';
 	import SearchToolbar from './SearchToolbar.svelte';
 	import MessageList from './MessageList.svelte';
 	import SelectionOverview from './SelectionOverview.svelte';
-	let { inbox, connected }: { inbox: InboxController; connected: boolean } = $props();
+	let {
+		inbox,
+		connected,
+		readerTransport
+	}: {
+		inbox: InboxController;
+		connected: boolean;
+		readerTransport?: ReaderTransport;
+	} = $props();
 	let query = $state('');
 	let mode = $state<SearchMode>('Lexical');
 	let sidebarOpen = $state(true);
@@ -82,7 +91,7 @@
 						class="self-start px-6 py-3 text-sm text-[var(--accent)] md:hidden"
 						onclick={backToList}>‹ All Mail</button
 					>{/if}
-				<SelectionOverview message={selected} />
+				<SelectionOverview message={selected} transport={readerTransport} />
 			</div>
 		</div>
 		<footer
