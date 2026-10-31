@@ -7,14 +7,32 @@
 
 ## Active Task
 
+### 📌 Task [90.2]: Search Correctness and Performance
+
+- **Description:** Restore ordinary persisted-inbox retrieval, correct account-aware vector
+  candidate selection and address measured search latency at 100,000 messages.
+- **Systems Involved:** Storage/search and the existing desktop search adapter.
+- **Action Type:** Implementation; requires a separately approved plan.
+- **Status:** READY FOR PLANNING
+- **Plan:** Not yet proposed or approved. No [90.2] implementation has started.
+- **Evidence:** [90.1] report in `docs/performance/native-validation.md`; raw samples included.
+- **Constraints:** Preserve existing IPC/schema/core trait contracts unless an explicit plan
+  approves an additive change. Separate correctness assertions from timing observations.
+
+---
+
+## Completed Performance Task Evidence
+
 ### 📌 Task [90.1]: Native Performance Validation
 
 - **Description:** Measure native inbox scrolling, search latency, memory and binary footprint
   with synthetic local data; identify evidence-backed gaps against MVP performance targets.
 - **Systems Involved:** Native desktop, storage/search and performance tooling.
 - **Action Type:** Validation; implementation scope requires an approved plan.
-- **Status:** RUNNING
-- **Plan:** Approved by the user on 2026-10-31; validation in progress.
+- **Status:** DONE
+- **Plan:** Approved by the user on 2026-10-31; validation complete.
+- **Commit:** `98ed221` (`test(perf): measure native inbox and encrypted search at 100k rows`).
+- **Next Task:** [90.2] Search Correctness and Performance (`READY FOR PLANNING`).
 
 ### Approved Plan ([90.1])
 1. Inspect cached native build/runtime tooling and establish an isolated synthetic profile.
@@ -63,7 +81,8 @@
 - [x] Both READMEs link the reproducible methodology using readme-standard. Native extracted
   helper paths/static route handling are preserved in k-014. Runtime IPC/schema/core traits
   remain unchanged. Temporary fixture sources/assets are absent from the ordinary SPA.
-- [ ] Atomic Conventional Commit recorded; next task promoted after the implementation commit.
+- [x] Atomic implementation commit `98ed221` recorded; [90.2] promoted to READY FOR PLANNING.
+  Final Rust suite rerun passed all 159 tests; policy scan covered 167 text files with zero findings.
 
 ### Remaining Limits ([90.1])
 
@@ -447,6 +466,7 @@ User subsequently authorized native build dependency downloads into a temporary 
 | [04.6] | Vault Unlock & Account Onboarding UI | `79ebb4c` | 2026-10-31 |
 | [04.7] | Settings & AI Opt-in UI | `3686430` | 2026-10-31 |
 | [04.8] | Persist Tag & Folder Override Rehydration | `2f14690` | 2026-10-31 |
+| [90.1] | Native Performance Validation | `98ed221` | 2026-10-31 |
 
 
 ### Validation ([04.1])
@@ -554,10 +574,19 @@ Registered 2026-10-31 from post-[04.5] gap analysis. Each task requires its own 
 - **Constraints:** No secrets in workflow; pinned action versions; GTK/WebKitGTK deps documented
   (see `k-006`); resolve offline frozen pnpm install question (`k-008`).
 
-### [90.1] Native Performance Validation — `RUNNING`
+### [90.1] Native Performance Validation — `DONE`
 - **Gap:** 60fps evidence is browser-fixture only; no native WebKitGTK measurement.
 - **Scope:** Native WebKitGTK frame timing with 100k messages; hybrid search `<15ms` benchmark
   at 100k rows over SQLCipher; release binary size and idle RAM baseline.
+
+### [90.2] Search Correctness and Performance — `READY FOR PLANNING`
+- **Evidence:** [90.1] measured hybrid p50 117–193ms, semantic account-filter underfill (41/200),
+  and zero rows for blank lexical inbox queries. See the committed methodology/raw samples.
+- **Scope:** Plan ordinary inbox listing, account-aware KNN selection and evidence-backed
+  latency improvements; rerun the same 100k SQLCipher benchmark with correctness checks.
+- **Constraints:** Approval required before implementation. Preserve P1 contracts; do not
+  weaken tests or report partial/empty results as a performance improvement. Native accelerated
+  frame/presentation and real-account memory validation remain separate future work.
 
 ---
 
