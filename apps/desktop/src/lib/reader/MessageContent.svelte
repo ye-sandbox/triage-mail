@@ -64,9 +64,8 @@
 				></iframe>
 			{:else}
 				<pre
-					class="px-8 py-4 font-sans text-sm leading-relaxed whitespace-pre-wrap break-words"
-				>{detail.text_plain || 'This message has no displayable content.'}</pre
-				>
+					class="px-8 py-4 font-sans text-sm leading-relaxed whitespace-pre-wrap break-words">{detail.text_plain ||
+						'This message has no displayable content.'}</pre>
 			{/if}
 			{#if detail.attachments_meta.length}
 				<section class="border-t border-[var(--separator)] px-8 py-4" aria-label="Attachments">

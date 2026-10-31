@@ -11,7 +11,7 @@
 </script>
 
 <section class="flex min-h-0 flex-1 flex-col bg-[var(--reader)]" aria-label="Message reader">
-	{#key message ? JSON.stringify([message.id, message.account_id, message.folder, message.uid]) : ''}
+	{#key message ? JSON.stringify( [message.id, message.account_id, message.folder, message.uid] ) : ''}
 		<div class="overview-content flex min-h-0 flex-1 flex-col" data-message={!!message}>
 			{#if message}
 				<div class="shrink-0 border-b border-[var(--separator)] px-8 py-4">
