@@ -360,3 +360,249 @@ fn persisted_triage_metadata_rehydrates_ranked_pages_after_reopen() {
         }
     }
 }
+
+#[test]
+fn blank_inbox_pages_are_stable_filtered_and_persisted() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("inbox.db");
+    let key = DatabaseKey::from_bytes([76; 32]);
+    let store = SqliteMailStore::open(&path, &key, Default::default()).unwrap();
+    for account in ["a", "b"] {
+        store
+            .insert_account(&create_sample_account(
+                account,
+                &format!("{account}@example.com"),
+            ))
+            .unwrap();
+    }
+    for index in (0..6).rev() {
+        let mut message = create_sample_message(
+            &format!("inbox-{index}"),
+            if index % 2 == 0 { "a" } else { "b" },
+            "INBOX",
+            index + 1,
+            "Stored message",
+            "Stored body",
+        );
+        message.received_at_epoch_ms = i64::from(index / 2);
+        store.insert_message(&message).unwrap();
+    }
+    store
+        .apply_local_mutations(&[(
+            "inbox-4".into(),
+            storage::desktop::LocalMutation::Folder("Archive"),
+            None,
+        )])
+        .unwrap();
+    drop(store);
+    let store = SqliteMailStore::open(&path, &key, Default::default()).unwrap();
+    let query = HybridQuery {
+        query_text: " \n\t".into(),
+        query_embedding_int8: None,
+        account_filter: None,
+        mode: SearchMode::Lexical,
+        limit: 2,
+        offset: 0,
+    };
+    let mut ids = Vec::new();
+    for offset in [0, 2, 4, 6] {
+        let rows = store
+            .search(&HybridQuery {
+                offset,
+                ..query.clone()
+            })
+            .unwrap();
+        if offset == 0 {
+            assert_eq!(rows[0].folder, "INBOX");
+            assert_eq!(rows[0].folder_override.as_deref(), Some("Archive"));
+            assert_eq!(rows[0].tags, ["boleto", "priority"]);
+        }
+        ids.extend(rows.into_iter().map(|row| row.id));
+    }
+    assert_eq!(
+        ids,
+        ["inbox-4", "inbox-5", "inbox-2", "inbox-3", "inbox-0", "inbox-1"]
+    );
+    let filtered = store
+        .search(&HybridQuery {
+            query_text: String::new(),
+            account_filter: Some("a".into()),
+            offset: 1,
+            ..query.clone()
+        })
+        .unwrap();
+    assert_eq!(
+        filtered.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+        ["inbox-2", "inbox-0"]
+    );
+    assert!(store
+        .search(&HybridQuery {
+            offset: usize::MAX,
+            ..query
+        })
+        .is_err());
+}
+
+#[test]
+fn semantic_pages_match_exact_account_neighbors_with_missing_vectors_and_ties() {
+    let key = DatabaseKey::from_bytes([77; 32]);
+    let store = SqliteMailStore::open_in_memory(&key, Default::default()).unwrap();
+    for account in ["a", "b", "empty"] {
+        store
+            .insert_account(&create_sample_account(
+                account,
+                &format!("{account}@example.com"),
+            ))
+            .unwrap();
+    }
+    let mut reference = Vec::new();
+    for index in (0..36u32).rev() {
+        let account = if index < 12 { "a" } else { "b" };
+        let id = format!("vector-{index:02}");
+        store
+            .insert_message(&create_sample_message(
+                &id,
+                account,
+                "INBOX",
+                index + 1,
+                "shared",
+                "shared",
+            ))
+            .unwrap();
+        if index == 35 {
+            continue;
+        } // Eligible mail need not have an embedding.
+        let mut vector = vec![0i8; 384];
+        vector[0] = 100;
+        vector[1] = if account == "a" { 0 } else { (index / 3) as i8 };
+        store.insert_message_embedding(&id, &vector).unwrap();
+        if account == "b" {
+            let distance = 1.0 - 100.0 / (10000.0 + f64::from(vector[1]).powi(2)).sqrt();
+            reference.push((distance, id));
+        }
+    }
+    reference.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    let mut embedding = vec![0; 384];
+    embedding[0] = 100;
+    let query = HybridQuery {
+        query_text: String::new(),
+        query_embedding_int8: Some(embedding),
+        account_filter: Some("b".into()),
+        mode: SearchMode::Semantic,
+        limit: 4,
+        offset: 0,
+    };
+    for offset in [0, 4, 8, 20, 24, 4096] {
+        let rows = store
+            .search(&HybridQuery {
+                offset,
+                ..query.clone()
+            })
+            .unwrap();
+        let expected: Vec<_> = reference
+            .iter()
+            .skip(offset)
+            .take(4)
+            .map(|(_, id)| id.as_str())
+            .collect();
+        assert_eq!(
+            rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+            expected
+        );
+    }
+    assert!(store
+        .search(&HybridQuery {
+            account_filter: Some("empty".into()),
+            ..query.clone()
+        })
+        .unwrap()
+        .is_empty());
+    let tie_query = HybridQuery {
+        account_filter: Some("a".into()),
+        ..query.clone()
+    };
+    for offset in [0, 4, 8] {
+        let rows = store
+            .search(&HybridQuery {
+                offset,
+                ..tie_query.clone()
+            })
+            .unwrap();
+        assert_eq!(rows[0].id, format!("vector-{offset:02}"));
+        assert_eq!(rows.len(), 4);
+    }
+    // INVARIANT: Unfiltered vec0 pages must include the whole boundary tie before sorting IDs.
+    let unfiltered = HybridQuery {
+        account_filter: None,
+        ..query.clone()
+    };
+    for offset in [0, 4, 8] {
+        let rows = store
+            .search(&HybridQuery {
+                offset,
+                ..unfiltered.clone()
+            })
+            .unwrap();
+        assert_eq!(
+            rows.iter().map(|r| r.id.clone()).collect::<Vec<_>>(),
+            (offset..offset + 4)
+                .map(|id| format!("vector-{id:02}"))
+                .collect::<Vec<_>>()
+        );
+    }
+    store
+        .insert_message_embedding("orphan", &unfiltered.query_embedding_int8.clone().unwrap())
+        .unwrap();
+    let rows = store.search(&unfiltered).unwrap();
+    assert_eq!(rows[0].id, "vector-00");
+    assert_eq!(rows.len(), 4);
+    let hybrid = HybridQuery {
+        mode: SearchMode::Hybrid,
+        query_text: "shared".into(),
+        ..query
+    };
+    let first = store.search(&hybrid).unwrap();
+    for _ in 0..5 {
+        assert_eq!(store.search(&hybrid).unwrap(), first);
+    }
+}
+
+#[test]
+fn semantic_large_ties_and_deep_pages_survive_vec0_k_limit() {
+    let key = DatabaseKey::from_bytes([78; 32]);
+    let store = SqliteMailStore::open_in_memory(&key, Default::default()).unwrap();
+    store
+        .insert_account(&create_sample_account("a", "reader@example.com"))
+        .unwrap();
+    let embedding = vec![3; 384];
+    for index in (0..4100u32).rev() {
+        let id = format!("tie-{index:04}");
+        let mut message = create_sample_message(&id, "a", "INBOX", index + 1, "shared", "shared");
+        message.attachments.clear();
+        message.tags.clear();
+        store.insert_message(&message).unwrap();
+        store.insert_message_embedding(&id, &embedding).unwrap();
+    }
+    let query = HybridQuery {
+        query_text: String::new(),
+        query_embedding_int8: Some(embedding),
+        account_filter: None,
+        mode: SearchMode::Semantic,
+        limit: 4,
+        offset: 0,
+    };
+    for offset in [0, 4000, 4096] {
+        let rows = store
+            .search(&HybridQuery {
+                offset,
+                ..query.clone()
+            })
+            .unwrap();
+        assert_eq!(
+            rows.iter().map(|r| r.id.clone()).collect::<Vec<_>>(),
+            (offset..offset + 4)
+                .map(|id| format!("tie-{id:04}"))
+                .collect::<Vec<_>>()
+        );
+    }
+}

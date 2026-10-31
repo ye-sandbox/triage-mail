@@ -796,3 +796,22 @@ async fn credential_controls_are_rejected_before_any_vault_write() {
         Err(vault::VaultError::NotFound(_))
     ));
 }
+
+#[tokio::test]
+async fn blank_lexical_inbox_reads_persisted_mail_without_an_embedding_provider() {
+    let remote = Arc::new(FakeRemote::default());
+    let (service, store, vault) = setup(remote.clone());
+    seed(&service, &store).await;
+    let service = DesktopService::new(store, vault, remote, None);
+    let rows = service
+        .search_messages(SearchQueryDto {
+            query: " \t".into(),
+            mode: SearchMode::Lexical,
+            limit: 200,
+            offset: 0,
+        })
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, "m-1");
+}

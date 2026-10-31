@@ -43,3 +43,16 @@ symptoms:
   and synchronize the destination. Never infer the new UID or issue blanket EXPUNGE.
 - Detailed serde/provider errors may contain credential values. Deserialize the credential
   envelope with a fixed error and return only fixed `IpcError` variants over IPC.
+
+## Recreating an expired temporary sysroot
+
+A cached Cargo check may pass even after the sysroot used by previous build scripts has
+been removed: checking consumes Rust metadata and does not prove native linking works.
+If tests report missing GTK/WebKit libraries, inspect the cached build-script link paths
+before retrying. With explicit user authorization for build-package downloads, restore the
+disposable sysroot by downloading distribution packages and extracting them with `dpkg-deb`;
+do not install system packages. Set `PKG_CONFIG` to the extracted executable as well as the
+sysroot/path variables, so build scripts regenerate canonical GTK/WebKit link directives.
+Verify the emitted library flags, broken development symlinks and runtime `ldd` dependencies,
+and set `LD_LIBRARY_PATH` for the actual test process before rerunning. Package-download
+permission is an exception for build tooling only; it does not authorize provider or AI calls.
