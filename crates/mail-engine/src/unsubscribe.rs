@@ -8,6 +8,8 @@ use url::{Host, Url};
 
 use crate::{EngineError, UnsubscribeDescriptor};
 
+mod dns;
+
 /// Exact form body mandated by RFC 8058 Section 3.1.
 pub const RFC8058_POST_BODY: &str = "List-Unsubscribe=One-Click";
 
@@ -141,9 +143,19 @@ pub struct Rfc8058UnsubscribeClient {
 impl Rfc8058UnsubscribeClient {
     /// Builds a new `Rfc8058UnsubscribeClient` with redirects disabled and strict timeouts.
     pub fn new(config: Rfc8058ClientConfig) -> Result<Self, EngineError> {
+        Self::with_resolver(config, dns::resolver(config.allow_loopback_http_for_tests))
+    }
+
+    fn with_resolver(
+        config: Rfc8058ClientConfig,
+        resolver: impl reqwest::dns::Resolve + 'static,
+    ) -> Result<Self, EngineError> {
         let http = reqwest::Client::builder()
             .timeout(config.timeout)
             .redirect(reqwest::redirect::Policy::none())
+            // INVARIANT: Proxy DNS must not bypass the address policy or leak unsubscribe URLs.
+            .no_proxy()
+            .dns_resolver(std::sync::Arc::new(resolver))
             .build()
             .map_err(|e| {
                 EngineError::UnsubscribeFailed(format!("failed building HTTP client: {e}"))
@@ -189,8 +201,113 @@ impl Rfc8058UnsubscribeClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use reqwest::dns::{Addrs, Name, Resolve, Resolving};
+    use std::net::SocketAddr;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
+
+    struct FixedDns(Vec<SocketAddr>);
+
+    impl Resolve for FixedDns {
+        fn resolve(&self, _: Name) -> Resolving {
+            let addresses = self.0.clone();
+            Box::pin(async move { Ok(Box::new(addresses.into_iter()) as Addrs) })
+        }
+    }
+
+    fn guarded_dns(
+        addresses: &[&str],
+        allow_loopback_for_tests: bool,
+    ) -> dns::PublicResolver<FixedDns> {
+        dns::PublicResolver {
+            inner: FixedDns(addresses.iter().map(|a| a.parse().unwrap()).collect()),
+            allow_loopback_for_tests,
+        }
+    }
+
+    #[tokio::test]
+    async fn dns_rejects_empty_private_and_mixed_answers_without_a_second_lookup() {
+        for addresses in [
+            vec![],
+            vec!["127.0.0.1:0"],
+            vec!["10.0.0.1:0"],
+            vec!["[::ffff:127.0.0.1]:0"],
+            vec!["8.8.8.8:0", "169.254.169.254:0"],
+            vec!["[2606:4700:4700::1111]:0", "[fc00::1]:0"],
+        ] {
+            for test_mode in [false, true] {
+                assert!(guarded_dns(&addresses, test_mode)
+                    .resolve("unsubscribe.example.org".parse().unwrap())
+                    .await
+                    .is_err());
+            }
+        }
+        let expected = vec![
+            "8.8.8.8:0".parse::<SocketAddr>().unwrap(),
+            "[2606:4700:4700::1111]:0".parse().unwrap(),
+        ];
+        let actual: Vec<_> = guarded_dns(&["8.8.8.8:0", "[2606:4700:4700::1111]:0"], false)
+            .resolve("unsubscribe.example.org".parse().unwrap())
+            .await
+            .unwrap()
+            .collect();
+        assert_eq!(actual, expected);
+    }
+
+    #[tokio::test]
+    async fn loopback_dns_exception_is_only_for_explicit_localhost_test_mode() {
+        for (host, enabled, allowed) in [
+            ("localhost", false, false),
+            ("localhost", true, true),
+            ("unsubscribe.example.org", true, false),
+        ] {
+            assert_eq!(
+                guarded_dns(&["127.0.0.1:0", "[::1]:0"], enabled)
+                    .resolve(host.parse().unwrap())
+                    .await
+                    .is_ok(),
+                allowed
+            );
+        }
+        assert!(guarded_dns(&["10.0.0.1:0"], true)
+            .resolve("localhost".parse().unwrap())
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn http_connector_rejects_public_hostname_resolving_to_loopback_before_connecting() {
+        let uri = "https://unsubscribe.example.org/one-click";
+        // Reproduces the gap: hostname syntax validation alone accepts this target.
+        assert!(validate_rfc8058_uri(uri, false).is_ok());
+        let client = Rfc8058UnsubscribeClient::with_resolver(
+            Default::default(),
+            guarded_dns(&["127.0.0.1:0"], false),
+        )
+        .unwrap();
+        let error = client
+            .http
+            .post(uri)
+            .body(RFC8058_POST_BODY)
+            .send()
+            .await
+            .unwrap_err();
+        let mut source: &dyn std::error::Error = &error;
+        let mut blocked = false;
+        loop {
+            blocked |= source
+                .to_string()
+                .contains("unsubscribe DNS returned a non-public");
+            match source.source() {
+                Some(next) => source = next,
+                None => break,
+            }
+        }
+        assert!(
+            blocked,
+            "request must fail at the DNS policy, before any socket connection"
+        );
+    }
 
     #[test]
     fn validates_rfc8058_uris_and_rejects_ssrf_or_insecure_schemes() {

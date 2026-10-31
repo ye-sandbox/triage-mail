@@ -89,6 +89,9 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   OAuth account registration accepts the existing vault auth material, including acquired tokens;
   a provider-specific authorization UI remains separate. Embeddings use the existing provider
   implementation and cached model configuration; IPC never downloads models or calls an LLM.
+- RFC 8058 requests validate the actual DNS address set supplied to the HTTP connector,
+  reject non-public/mixed answers, disable inherited proxies and redirects, and retain HTTPS
+  verification. Desktop production never enables the loopback test exception (see `k-009`).
 
 ## Unified Inbox UI ([04.2])
 
