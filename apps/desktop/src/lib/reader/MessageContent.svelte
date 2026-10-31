@@ -4,12 +4,20 @@
 	import { sanitizeEmailHtml } from '../security/sanitize';
 	import AttachmentDownload from './AttachmentDownload.svelte';
 	import TriageBadges from '../inbox/TriageBadges.svelte';
+	import MessageSummary from '../settings/MessageSummary.svelte';
 	let { message, transport }: { message: MessageRowDto; transport: ReaderTransport } = $props();
 	let detail = $state.raw<MessageDetailDto | null>(null);
 	let loading = $state(true);
 	let error = $state('');
 	let attempt = $state(0);
-	const safeHtml = $derived(detail?.html_raw ? sanitizeEmailHtml(detail.html_raw) : '');
+	let imagesFor = $state('');
+	const identity = $derived(
+		JSON.stringify([message.id, message.account_id, message.folder, message.uid])
+	);
+	const imagesAllowed = $derived(imagesFor === identity);
+	const safeHtml = $derived(
+		detail?.html_raw ? sanitizeEmailHtml(detail.html_raw, { allowRemoteImages: imagesAllowed }) : ''
+	);
 	$effect(() => {
 		const id = message.id;
 		attempt;
@@ -56,8 +64,17 @@
 				<TriageBadges badges={detail.triage_badges} />
 			</div>
 			<p class="px-8 py-4 text-xs text-[var(--secondary)]">
-				Remote images and external links are blocked for your privacy.
+				External links stay blocked. {imagesAllowed
+					? 'HTTPS images are allowed for this message.'
+					: 'Remote images are blocked. Loading images may reveal your IP and that you opened this message.'}
 			</p>
+			{#if detail.html_raw}<button
+					type="button"
+					class="self-start px-8 py-2 text-sm text-[var(--accent)]"
+					onclick={() => (imagesFor = imagesAllowed ? '' : identity)}
+					>{imagesAllowed ? 'Block images again' : 'Allow HTTPS images for this message'}</button
+				>{/if}
+			<MessageSummary messageId={message.id} />
 			{#if safeHtml}
 				<iframe
 					title="Email content"

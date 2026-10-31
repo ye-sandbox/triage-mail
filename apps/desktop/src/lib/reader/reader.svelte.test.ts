@@ -49,7 +49,10 @@ function deferred<T>() {
 function setup() {
 	const body = vi.fn<ReaderTransport['body']>();
 	const attachment = vi.fn<ReaderTransport['attachment']>().mockResolvedValue({ bytes: [1, 2, 3] });
-	const props = $state<{ message: MessageRowDto | undefined; transport: ReaderTransport }>({
+	const props = $state<{
+		message: MessageRowDto | undefined;
+		transport: ReaderTransport;
+	}>({
 		message: row('first'),
 		transport: { body, attachment }
 	});
@@ -69,6 +72,31 @@ afterEach(() => {
 });
 
 describe('message reader', () => {
+	it('allows images only after an explicit click and resets consent on message identity changes', async () => {
+		const { props, target, render, body } = setup();
+		body.mockImplementation(async (id) =>
+			detail(id, '<img src="https://images.example.com/pixel.png" onerror="alert(1)">')
+		);
+		const component = render();
+		await vi.waitFor(() => expect(target.querySelector('iframe')).not.toBeNull());
+		const frame = () => target.querySelector('iframe')!;
+		expect(frame().srcdoc).not.toContain('src="https://images.example.com');
+		const allow = Array.from(target.querySelectorAll('button')).find(
+			(button) => button.textContent === 'Allow HTTPS images for this message'
+		)!;
+		allow.click();
+		flushSync();
+		expect(frame().srcdoc).toContain('src="https://images.example.com/pixel.png"');
+		expect(frame().srcdoc).not.toContain('onerror');
+		expect(frame().getAttribute('sandbox')).toBe('');
+		props.message = row('second');
+		flushSync();
+		await vi.waitFor(() => expect(target.querySelector('iframe')).not.toBeNull());
+		expect(frame().srcdoc).not.toContain('src="https://images.example.com');
+		expect(frame().srcdoc).toContain("connect-src 'none'");
+		await unmount(component);
+		target.remove();
+	});
 	it('ignores stale success and clears previous content on selection changes', async () => {
 		const first = deferred<MessageDetailDto>();
 		const second = deferred<MessageDetailDto>();
@@ -138,7 +166,10 @@ describe('message reader', () => {
 		const revoke = vi.fn();
 		vi.stubGlobal(
 			'URL',
-			Object.assign(class extends URL {}, { createObjectURL: create, revokeObjectURL: revoke })
+			Object.assign(class extends URL {}, {
+				createObjectURL: create,
+				revokeObjectURL: revoke
+			})
 		);
 		const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 		const component = render();
@@ -146,7 +177,7 @@ describe('message reader', () => {
 			expect(target.querySelector('[aria-label="Download invoice.pdf"]')).not.toBeNull()
 		);
 		expect(attachment).not.toHaveBeenCalled();
-		const button = target.querySelector<HTMLButtonElement>('button')!;
+		const button = target.querySelector<HTMLButtonElement>('[aria-label="Download invoice.pdf"]')!;
 		button.click();
 		button.click();
 		flushSync();
@@ -170,11 +201,13 @@ describe('message reader', () => {
 		const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 		attachment.mockRejectedValueOnce('private error').mockReturnValueOnce(pending.promise);
 		const component = render();
-		await vi.waitFor(() => expect(target.querySelector('button')).not.toBeNull());
-		target.querySelector<HTMLButtonElement>('button')!.click();
+		await vi.waitFor(() =>
+			expect(target.querySelector('[aria-label="Download invoice.pdf"]')).not.toBeNull()
+		);
+		target.querySelector<HTMLButtonElement>('[aria-label="Download invoice.pdf"]')!.click();
 		await vi.waitFor(() => expect(target.textContent).toContain('Download failed'));
 		expect(target.textContent).not.toContain('private error');
-		target.querySelector<HTMLButtonElement>('button')!.click();
+		target.querySelector<HTMLButtonElement>('[aria-label="Download invoice.pdf"]')!.click();
 		props.message = undefined;
 		flushSync();
 		pending.resolve({ bytes: [1] });

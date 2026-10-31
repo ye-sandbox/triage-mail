@@ -17,6 +17,7 @@ pub mod migrations;
 pub mod models;
 pub mod repository;
 pub mod search;
+pub mod settings;
 pub mod vec_ext;
 
 pub use connection::DatabaseKey;

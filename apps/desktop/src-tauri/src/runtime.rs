@@ -188,6 +188,56 @@ pub fn cmd_cancel_authorization(state: State<'_, RuntimeState>, window: tauri::W
 }
 
 #[tauri::command]
+pub async fn cmd_get_settings(
+    state: State<'_, RuntimeState>,
+) -> Result<crate::settings::SettingsDto, IpcError> {
+    state.initialize(None).await?.get_settings().await
+}
+
+#[tauri::command]
+pub async fn cmd_save_settings(
+    state: State<'_, RuntimeState>,
+    settings: crate::settings::AiSettings,
+    api_key: crate::settings::IncomingApiKey,
+) -> Result<(), IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .save_settings(settings, api_key)
+        .await
+}
+
+#[tauri::command]
+pub async fn cmd_set_tokenizer(
+    state: State<'_, RuntimeState>,
+    tokenizer: storage::FtsTokenizerMode,
+) -> Result<(), IpcError> {
+    state.initialize(None).await?.set_tokenizer(tokenizer).await
+}
+
+#[tauri::command]
+pub async fn cmd_download_model(
+    state: State<'_, RuntimeState>,
+    request: crate::model_download::ModelDownloadRequest,
+) -> Result<(), IpcError> {
+    state.initialize(None).await?.download_model(request).await
+}
+
+#[tauri::command]
+pub async fn cmd_summarize_message(
+    state: State<'_, RuntimeState>,
+    message_id: String,
+    consent: bool,
+    expected: crate::settings::AiSettings,
+) -> Result<String, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .summarize_message(message_id, consent, expected)
+        .await
+}
+
+#[tauri::command]
 pub async fn cmd_search_messages(
     state: State<'_, RuntimeState>,
     query: SearchQueryDto,
@@ -277,6 +327,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            cmd_get_settings,
+            cmd_save_settings,
+            cmd_set_tokenizer,
+            cmd_download_model,
+            cmd_summarize_message,
             cmd_unlock_vault,
             cmd_list_accounts,
             cmd_add_account,
@@ -373,13 +428,46 @@ mod tests {
                 cmd_search_messages,
                 cmd_get_message_body,
                 cmd_triage_action,
-                cmd_fetch_attachment
+                cmd_fetch_attachment,
+                cmd_get_settings,
+                cmd_save_settings,
+                cmd_set_tokenizer,
+                cmd_download_model,
+                cmd_summarize_message
             ])
             .build(mock_context(noop_assets()))
             .unwrap();
         let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()
             .unwrap();
+        let settings = invoke(&window, "cmd_get_settings", json!({})).unwrap();
+        assert_eq!(settings["ai"]["enabled"], false);
+        assert_eq!(settings["has_api_key"], false);
+        assert_eq!(
+            invoke(&window, "cmd_set_tokenizer", json!({"tokenizer":"Trigram"})),
+            Ok(json!(null))
+        );
+        assert_eq!(
+            invoke(&window, "cmd_get_settings", json!({})).unwrap()["tokenizer"],
+            "Trigram"
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_summarize_message",
+                json!({"messageId":"missing", "consent":false, "expected":settings["ai"]})
+            ),
+            Err(json!("InvalidRequest"))
+        );
+        let error = invoke(
+            &window,
+            "cmd_save_settings",
+            json!({"settings":settings["ai"], "apiKey":{"synthetic-private-value":1}}),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("invalid API key material"));
+        assert!(!error.contains("synthetic-private-value"));
         assert_eq!(
             invoke(&window, "cmd_list_accounts", json!({})),
             Ok(json!([]))

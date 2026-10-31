@@ -393,6 +393,7 @@ impl HttpLlmSummarizer {
             validate_llm_endpoint(&config.provider, config.allow_loopback_http_for_byok_tests)?;
 
         let http = reqwest::Client::builder()
+            .no_proxy()
             .timeout(config.timeout)
             .redirect(reqwest::redirect::Policy::none())
             .pool_max_idle_per_host(0)

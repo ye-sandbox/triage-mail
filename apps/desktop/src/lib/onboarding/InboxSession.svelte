@@ -2,7 +2,15 @@
 	import { InboxController } from '$lib/inbox/controller.svelte';
 	import { nativeTransport } from '$lib/inbox/transport';
 	import InboxView from '$lib/inbox/InboxView.svelte';
-	let { connected, manageAccounts }: { connected: boolean; manageAccounts?: () => void } = $props();
+	let {
+		connected,
+		manageAccounts,
+		openSettings
+	}: {
+		connected: boolean;
+		manageAccounts?: () => void;
+		openSettings?: () => void;
+	} = $props();
 	const inbox = new InboxController(nativeTransport);
 	$effect(() => {
 		if (!connected) {
@@ -14,4 +22,4 @@
 	});
 </script>
 
-<InboxView {inbox} {connected} {manageAccounts} />
+<InboxView {inbox} {connected} {manageAccounts} {openSettings} />
