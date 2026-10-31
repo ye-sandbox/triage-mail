@@ -4,6 +4,7 @@
 
 **[English](README.md)** | **[Português (Brasil)](README.pt-br.md)**
 
+[![CI](https://github.com/ye-sandbox/triage-mail/actions/workflows/ci.yml/badge.svg)](https://github.com/ye-sandbox/triage-mail/actions/workflows/ci.yml)
 ![License: AGPLv3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)
 ![Stack: Tauri v2 + Rust](https://img.shields.io/badge/Stack-Tauri_v2_%7C_Rust-orange.svg)
 ![Frontend: Svelte 5](https://img.shields.io/badge/Frontend-Svelte_5-ff3e00.svg)
@@ -48,7 +49,16 @@ flowchart TD
 ### Prerequisites
 
 - **Rust Toolchain:** `rustup` (`stable`, Rust 2021/2024 edition) + platform system libraries for Tauri v2 (`libwebkit2gtk-4.1-dev`, `libsecret-1-dev` on Linux).
-- **Node.js & Package Manager:** Node.js `>= 20` and `pnpm >= 9`.
+- **Node.js & Package Manager:** Node.js `24.19.0` and `pnpm 11.25.0` (matching CI).
+
+On Ubuntu 24.04, install the native build prerequisites (also used by CI):
+
+```bash
+sudo apt-get update
+sudo apt-get install --no-install-recommends -y \
+  build-essential pkg-config perl libssl-dev libwebkit2gtk-4.1-dev \
+  libgtk-3-dev libsecret-1-dev libayatana-appindicator3-dev librsvg2-dev
+```
 
 ### Setup & Verification
 
@@ -57,13 +67,13 @@ flowchart TD
 cp .env.example .env
 
 # 2. Install frontend dependencies
-pnpm install
+pnpm install --frozen-lockfile
 
 # 3. Verify Rust workspace compilation and unit tests
 cargo test --workspace
 
-# 4. Launch Tauri v2 desktop application in development mode
-pnpm --filter desktop tauri dev
+# 4. Start the frontend; in another terminal run cargo run --package triage-mail-desktop
+pnpm --filter desktop dev --port 1420
 ```
 
 ## Configuration
@@ -86,8 +96,9 @@ Runtime credentials and database encryption keys are stored strictly in the oper
 # Run headless core crate tests (MIME parsing, deterministic 2FA/Boleto triage, storage)
 cargo test --workspace
 
-# Build production native desktop bundle
-pnpm --filter desktop tauri build
+# Build the SPA, then the native desktop binary (no installer packaging)
+pnpm --filter desktop build
+cargo build --release --package triage-mail-desktop
 ```
 
 ## Development
@@ -113,6 +124,19 @@ pnpm --filter desktop tauri build
 
 ### Validation Commands
 
+The [CI workflow](.github/workflows/ci.yml) runs on pull requests, pushes to `main`,
+and manual dispatch, using Ubuntu 24.04, Rust 1.99.0 with rustfmt/Clippy, Node.js 24.19.0
+and pnpm 11.25.0. Actions are pinned to commit hashes; checkout credentials are not persisted.
+Dependency installation needs package/toolchain registries and Ubuntu repositories. Rust
+validation runs offline after `cargo fetch --locked`; tests use synthetic fixtures and local
+loopback servers without provider credentials or model downloads. CI does not publish artifacts.
+
+The dependency-free policy scanner reads tracked working-tree text files, permits reserved
+example/test domains, rejects other mailbox addresses and selected high-signal secret formats,
+and checks Svelte components/rune modules for legacy syntax. It prints locations and rule names
+without matched values. It is a bounded guard, not an exhaustive secret or Git-history audit;
+review credential changes manually. New files must be staged before a local scan.
+
 ```bash
 # Rust Workspace checks
 cargo check --workspace
@@ -124,6 +148,10 @@ cargo clippy --workspace --all-targets -- -D warnings
 pnpm --filter desktop check
 pnpm --filter desktop test
 pnpm --filter desktop build
+
+node --test scripts/ci-guard.test.mjs
+node scripts/ci-guard.mjs
+git diff --check
 ```
 
 ## License
