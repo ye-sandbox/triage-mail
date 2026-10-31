@@ -184,10 +184,22 @@ async fn test_incremental_sync_ingests_lightweight_messages_with_rfc8058_unsubsc
             .await
             .unwrap();
 
-        // 2. UID FETCH 101:* (UID MODSEQ FLAGS BODY.PEEK[HEADER] BODY.PEEK[TEXT])
+        // 2a. UID SEARCH UID 101:*
+        let n = server_stream.read(&mut buf).await.unwrap();
+        let cmd = String::from_utf8_lossy(&buf[..n]);
+        assert!(cmd.contains("UID SEARCH"));
+        server_stream
+            .write_all(b"* SEARCH 105\r\nA0002 OK UID SEARCH completed\r\n")
+            .await
+            .unwrap();
+
+        // 2b. Phase 1: UID FETCH 105 (UID MODSEQ FLAGS BODYSTRUCTURE BODY.PEEK[HEADER])
         let n = server_stream.read(&mut buf).await.unwrap();
         let cmd = String::from_utf8_lossy(&buf[..n]);
         assert!(cmd.contains("BODY.PEEK[HEADER]"));
+        assert!(cmd.contains("BODYSTRUCTURE"));
+        assert!(!cmd.contains("BODY.PEEK[TEXT]"));
+        assert!(!cmd.contains("RFC822"));
 
         let synthetic_headers = concat!(
             "From: newsletter@example.com\r\n",
@@ -199,16 +211,33 @@ async fn test_incremental_sync_ingests_lightweight_messages_with_rfc8058_unsubsc
             "Content-Type: text/plain; charset=utf-8\r\n\r\n"
         );
         let synthetic_body = "Here is your monthly technical digest with triage tips.";
+        let bs = r#"("TEXT" "PLAIN" ("CHARSET" "UTF-8") NIL NIL "7BIT" 55 1 NIL NIL NIL NIL)"#;
 
-        let fetch_resp = format!(
-            "* 1 FETCH (UID 105 MODSEQ (888) FLAGS (\\Seen) BODY[HEADER] {{{}}}\r\n{} BODY[TEXT] {{{}}}\r\n{})\r\nA0002 OK UID FETCH completed\r\n",
+        let fetch_phase1 = format!(
+            "* 1 FETCH (UID 105 MODSEQ (888) FLAGS (\\Seen) BODYSTRUCTURE {} BODY[HEADER] {{{}}}\r\n{})\r\nA0003 OK UID FETCH completed\r\n",
+            bs,
             synthetic_headers.len(),
-            synthetic_headers,
+            synthetic_headers
+        );
+        server_stream
+            .write_all(fetch_phase1.as_bytes())
+            .await
+            .unwrap();
+
+        // 2c. Phase 2: UID FETCH 105 (BODY.PEEK[1])
+        let n = server_stream.read(&mut buf).await.unwrap();
+        let cmd = String::from_utf8_lossy(&buf[..n]);
+        assert!(cmd.contains("BODY.PEEK[1]"));
+        assert!(!cmd.contains("BODY.PEEK[TEXT]"));
+        assert!(!cmd.contains("RFC822"));
+
+        let fetch_phase2 = format!(
+            "* 1 FETCH (UID 105 BODY[1] {{{}}}\r\n{})\r\nA0004 OK UID FETCH completed\r\n",
             synthetic_body.len(),
             synthetic_body
         );
         server_stream
-            .write_all(fetch_resp.as_bytes())
+            .write_all(fetch_phase2.as_bytes())
             .await
             .unwrap();
 
@@ -217,7 +246,7 @@ async fn test_incremental_sync_ingests_lightweight_messages_with_rfc8058_unsubsc
         let cmd = String::from_utf8_lossy(&buf[..n]);
         assert!(cmd.contains("CHANGEDSINCE 800"));
 
-        let modseq_resp = "A0003 OK UID FETCH completed\r\n";
+        let modseq_resp = "A0005 OK UID FETCH completed\r\n";
         server_stream
             .write_all(modseq_resp.as_bytes())
             .await

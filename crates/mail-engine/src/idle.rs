@@ -505,31 +505,51 @@ mod tests {
                 .await
                 .unwrap();
 
-            // 5. Incremental sync UID FETCH 11:*
+            // 5. Incremental sync two-phase Lazy Attachment fetch
+            // 5a. UID SEARCH UID 11:*
+            let _ = server_stream.read(&mut buf).await.unwrap();
+            server_stream
+                .write_all(b"* SEARCH 11\r\nA0004 OK SEARCH completed\r\n")
+                .await
+                .unwrap();
+
+            // 5b. Phase 1: UID FETCH 11 (UID MODSEQ FLAGS BODYSTRUCTURE BODY.PEEK[HEADER])
             let _ = server_stream.read(&mut buf).await.unwrap();
             let header = b"From: sender@example.com\r\nTo: recipient@example.org\r\nSubject: Real-time Alert\r\nMessage-ID: <msg-11@example.com>\r\n\r\n";
             let body = b"Hello from IDLE wakeup!\r\n";
-            let fetch_resp = format!(
-                "* 11 FETCH (UID 11 MODSEQ (55) FLAGS (\\Seen) BODY[HEADER] {{{}}}\r\n",
+            let bs = r#"("TEXT" "PLAIN" ("CHARSET" "UTF-8") NIL NIL "7BIT" 25 1 NIL NIL NIL NIL)"#;
+            let fetch_phase1 = format!(
+                "* 11 FETCH (UID 11 MODSEQ (55) FLAGS (\\Seen) BODYSTRUCTURE {} BODY[HEADER] {{{}}}\r\n",
+                bs,
                 header.len()
             );
             server_stream
-                .write_all(fetch_resp.as_bytes())
+                .write_all(fetch_phase1.as_bytes())
                 .await
                 .unwrap();
             server_stream.write_all(header).await.unwrap();
-            let text_part = format!(" BODY[TEXT] {{{}}}\r\n", body.len());
-            server_stream.write_all(text_part.as_bytes()).await.unwrap();
+            server_stream
+                .write_all(b")\r\nA0005 OK UID FETCH completed\r\n")
+                .await
+                .unwrap();
+
+            // 5c. Phase 2: UID FETCH 11 (BODY.PEEK[1])
+            let _ = server_stream.read(&mut buf).await.unwrap();
+            let fetch_phase2 = format!("* 11 FETCH (UID 11 BODY[1] {{{}}}\r\n", body.len());
+            server_stream
+                .write_all(fetch_phase2.as_bytes())
+                .await
+                .unwrap();
             server_stream.write_all(body).await.unwrap();
             server_stream
-                .write_all(b")\r\nA0004 OK UID FETCH completed\r\n")
+                .write_all(b")\r\nA0006 OK UID FETCH completed\r\n")
                 .await
                 .unwrap();
 
             // 6. CONDSTORE CHANGEDSINCE 50
             let _ = server_stream.read(&mut buf).await.unwrap();
             server_stream
-                .write_all(b"A0005 OK FETCH completed\r\n")
+                .write_all(b"A0007 OK FETCH completed\r\n")
                 .await
                 .unwrap();
         });

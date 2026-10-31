@@ -4,10 +4,9 @@
 
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::mime_parser::StalwartMimeParser;
 use crate::protocol::{ImapSession, UidFlags};
 use crate::provider::ServerCapabilities;
-use crate::{EngineError, MimeExtractor, ParsedInboundMessage, SyncEventSink, SyncProgressEvent};
+use crate::{EngineError, ParsedInboundMessage, SyncEventSink, SyncProgressEvent};
 
 /// Outcome of an incremental folder synchronization pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,12 +52,11 @@ pub async fn execute_incremental_sync<S: AsyncRead + AsyncWrite + Unpin + Send>(
         });
     }
 
-    let parser = StalwartMimeParser;
     let mut parsed_messages = Vec::new();
     let mut max_uid = query.local_last_uid;
     let mut fetched_flags = Vec::new();
 
-    // 2. Fetch new messages (Lightweight Invariant: headers + body text only)
+    // 2. Fetch new messages (Lightweight Invariant: headers + selective body text only)
     let has_new_messages = if folder_status.uidnext > 0 {
         folder_status.uidnext > query.local_last_uid.saturating_add(1) || query.local_last_uid == 0
     } else {
@@ -66,7 +64,9 @@ pub async fn execute_incremental_sync<S: AsyncRead + AsyncWrite + Unpin + Send>(
     };
 
     if has_new_messages {
-        let raw_messages = session.fetch_new_messages(query.local_last_uid).await?;
+        let raw_messages = session
+            .fetch_new_messages_two_phase(query.local_last_uid, crate::DEFAULT_SYNC_UID_BATCH_SIZE)
+            .await?;
 
         for raw in raw_messages {
             fetched_flags.push(UidFlags {
@@ -77,23 +77,30 @@ pub async fn execute_incremental_sync<S: AsyncRead + AsyncWrite + Unpin + Send>(
                 max_uid = raw.uid;
             }
 
-            let mut combined_rfc822 =
-                Vec::with_capacity(raw.header_bytes.len() + raw.text_bytes.len() + 4);
-            if !raw.header_bytes.is_empty() {
-                combined_rfc822.extend_from_slice(&raw.header_bytes);
-                if !raw.header_bytes.ends_with(b"\r\n\r\n") {
-                    combined_rfc822.extend_from_slice(b"\r\n");
-                }
-            }
-            if !raw.text_bytes.is_empty() {
-                combined_rfc822.extend_from_slice(&raw.text_bytes);
-            } else if !raw.raw_payload.is_empty() && combined_rfc822.is_empty() {
-                combined_rfc822.extend_from_slice(&raw.raw_payload);
-            }
+            let extracted_bs = raw
+                .bodystructure
+                .as_deref()
+                .and_then(|bs| crate::bodystructure::parse_bodystructure_str(bs).ok())
+                .map(|s| crate::bodystructure::extract_body_structure_metadata(&s));
 
-            if let Ok(mut parsed) = parser.parse_lightweight(&combined_rfc822) {
-                parsed.uid = raw.uid;
-                parsed.modseq = raw.modseq;
+            let fallback_body = if raw.text_bytes.is_empty() {
+                if raw.raw_payload.is_empty() {
+                    None
+                } else {
+                    Some(raw.raw_payload.as_slice())
+                }
+            } else {
+                Some(raw.text_bytes.as_slice())
+            };
+
+            if let Ok(parsed) = crate::bodystructure::assemble_parsed_inbound_message(
+                raw.uid,
+                raw.modseq,
+                &raw.header_bytes,
+                extracted_bs.as_ref(),
+                &raw.sections,
+                fallback_body,
+            ) {
                 parsed_messages.push(parsed);
             }
         }
