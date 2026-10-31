@@ -13,8 +13,69 @@
   with synthetic local data; identify evidence-backed gaps against MVP performance targets.
 - **Systems Involved:** Native desktop, storage/search and performance tooling.
 - **Action Type:** Validation; implementation scope requires an approved plan.
-- **Status:** READY FOR PLANNING
-- **Plan:** Not yet proposed or approved. No [90.1] implementation has started.
+- **Status:** RUNNING
+- **Plan:** Approved by the user on 2026-10-31; validation in progress.
+
+### Approved Plan ([90.1])
+1. Inspect cached native build/runtime tooling and establish an isolated synthetic profile.
+   Use no personal mailbox data, live providers, model downloads or external requests.
+2. Add a reproducible release-mode storage benchmark with 100,000 synthetic messages and
+   deterministic quantized vectors in SQLCipher. Record dataset/vector dimensions, query
+   cases, result correctness, warm/cold methodology and latency distributions against <15ms;
+   distinguish search execution from embedding generation and IPC overhead.
+3. Measure the actual native WebKitGTK inbox with 100,000 synthetic summaries using isolated
+   validation tooling. Record frame-time distributions, mounted row counts and paging behavior.
+   Clearly separate UI fixture results from database-backed end-to-end behavior; report native
+   display/tooling blockers without substituting browser results for native evidence.
+4. Build the release desktop binary from cached dependencies; record binary size and process-tree
+   idle/loaded memory with sampling method, host/build configuration and measurement limits.
+   Report evidence-backed gaps; performance fixes require a separately approved scope.
+5. Run the full repository Definition of Done and frontend build, respecting the two-failure
+   circuit breaker. Load required domain skills if applicable; synchronize both READMEs if
+   validation commands change. Preserve IPC, schema and core trait contracts.
+6. Save reproducible results and applicable knowledge, create an atomic Conventional Commit
+   and log its hash. Do not mark unmeasured targets verified or automatically start release
+   work. No push, release or tag.
+
+
+### Acceptance and Validation ([90.1])
+
+- [x] Added opt-in release benchmarks for 100,000 SQLCipher messages and int8[384] vectors,
+  with correctness assertions, warm/reopened samples and explicit result counts. Uses a
+  runtime-generated disposable key and reserved-domain fixtures. No production query changes.
+- [x] Native Tauri/WebKitGTK fixture completed at 1280x820, retaining at most 18 mounted rows
+  across 100,000 preloaded summaries. Raw frame intervals, paging and process-tree RSS/PSS
+  are committed with methodology. p95 preloaded intervals were 23ms; 60fps is not established.
+- [x] Measured the ordinary release ELF at 35,631,608 bytes (33.98 MiB), unstripped. Native
+  fixture median PSS was 374.21 MiB empty and 438.83 MiB loaded/scrolling. These exclude real
+  accounts/vault/workers; neither a production idle baseline nor a memory ceiling is claimed.
+- [x] Identified search gaps: hybrid/common lexical workloads exceed <15ms; account-filtered
+  semantic search returns 41/200 rows despite 25,000 eligible vectors; empty lexical inbox
+  queries return zero rows. Findings are recorded for a separately approved follow-up.
+- [x] Workspace compilation, 159 Rust tests, formatting and all-target Clippy with -D warnings
+  passed with offline cached dependencies and authorized loopback mocks. Feature-enabled
+  native example also passed Clippy and release compilation.
+- [x] Frontend check (zero errors/warnings), 56 tests, fixture check/build and restored ordinary
+  SPA build passed. New JS/TS/JSON and Svelte fixture passed matching-style Prettier; shell
+  and Node syntax checks, runes invariant and whitespace checks passed.
+- [x] Authorized policy scanner/test rerun passed after the sandbox circuit breaker; all five
+  regressions passed. Staged tracked-text scan covered 167 files with zero findings.
+- [x] Both READMEs link the reproducible methodology using readme-standard. Native extracted
+  helper paths/static route handling are preserved in k-014. Runtime IPC/schema/core traits
+  remain unchanged. Temporary fixture sources/assets are absent from the ordinary SPA.
+- [ ] Atomic Conventional Commit recorded; next task promoted after the implementation commit.
+
+### Remaining Limits ([90.1])
+
+- Frame callbacks do not prove GPU presentation or an all-hardware frame rate. WSL WebKit
+  warned about unavailable DRI3 acceleration and GStreamer appsink. Paged fixture loaded only
+  1,200 summaries; full database/IPC/embedding end-to-end latency remains unmeasured.
+- Reopened storage queries retain the OS page cache. Search observations exclude vector
+  generation, embedding inference, IPC and debounce; pseudorandom vectors do not test relevance.
+- Fixture memory labels include post-load scrolling, as documented; no real-account baseline,
+  native installer size, live-provider sync or release packaging was measured.
+- No external endpoint, dependency registry, provider, AI endpoint or model download was used.
+  No production performance fix, push, release or tag was authorized or performed.
 
 ---
 
@@ -487,13 +548,13 @@ Registered 2026-10-31 from post-[04.5] gap analysis. Each task requires its own 
 - **Scope:** Extend message summary DTOs and storage reads; rehydrate UI after restart.
 - **Constraints:** P1 IPC/schema change — record contract update in `NOTES.md` before implementing.
 
-### [00.2] CI Pipeline (GitHub Actions) — `READY FOR PLANNING`
+### [00.2] CI Pipeline (GitHub Actions) — `DONE`
 - **Scope:** Workflow running full DoD: cargo check/test/fmt/clippy (`-D warnings`), pnpm
   check/test/build, Svelte runes invariant, secret/PII scan, `git diff --check`.
 - **Constraints:** No secrets in workflow; pinned action versions; GTK/WebKitGTK deps documented
   (see `k-006`); resolve offline frozen pnpm install question (`k-008`).
 
-### [90.1] Native Performance Validation — `BACKLOG`
+### [90.1] Native Performance Validation — `RUNNING`
 - **Gap:** 60fps evidence is browser-fixture only; no native WebKitGTK measurement.
 - **Scope:** Native WebKitGTK frame timing with 100k messages; hybrid search `<15ms` benchmark
   at 100k rows over SQLCipher; release binary size and idle RAM baseline.

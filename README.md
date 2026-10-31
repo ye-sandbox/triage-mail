@@ -154,6 +154,12 @@ node scripts/ci-guard.mjs
 git diff --check
 ```
 
+Optional synthetic performance validation covers 100,000-row SQLCipher search and a separate
+native WebKitGTK inbox fixture, with frame timing and process-tree memory sampling. See
+[methodology, commands and measured limits](docs/performance/native-validation.md).
+These tools do not contact providers or download models; rebuild the ordinary SPA after the
+fixture build before producing an application binary.
+
 ## License
 
 Licensed under the **GNU Affero General Public License v3.0 (AGPLv3)** — see [`LICENSE`](LICENSE) for details.
