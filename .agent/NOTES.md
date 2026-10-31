@@ -93,6 +93,28 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   reject non-public/mixed answers, disable inherited proxies and redirects, and retain HTTPS
   verification. Desktop production never enables the loopback test exception (see `k-009`).
 
+## Account Onboarding IPC ([04.6])
+
+- Existing account/unlock commands and DTOs retain their wire representation.
+- Add `cmd_authorize_account(config, authorization, onReady: Channel<()>)` -> opaque account ID. Input-only
+  authorization is `{ authorization_endpoint, token_endpoint, scopes, client_id, client_secret? }`.
+  The command is explicitly initiated by the user, launches the system browser, binds an
+  ephemeral `127.0.0.1` PKCE callback, exchanges the code natively, and stores tokens in vault.
+  Only user-configured HTTPS authorization/token endpoints are contacted; no discovery,
+  redirects, inherited proxies, analytics, or automatic retries. Client credentials are
+  staged in vault during callback wait and removed on completion/cancellation/failure.
+- Add `cmd_cancel_authorization()` scoped to the invoking webview. One authorization runs
+  per webview, bounded to five minutes. Cancellation/window destruction drops the listener
+  and any pending exchange; once account persistence starts it completes atomically.
+  The UI refreshes accounts after cancellation to reconcile a concurrent successful commit.
+  Native `onReady` acknowledgement enables the cancel control only after session registration;
+  a disposed UI cancels on late acknowledgement, avoiding cancellation-before-registration races.
+- OAuth error/response payloads are fixed `IpcError` variants; no URL, code or token returns
+  to the UI. Endpoint settings are submitted explicitly with each authorization attempt.
+  Token refresh remains outside this onboarding command and is not performed automatically.
+- Frontend credentials live only in transient unbound form inputs and invoke arguments;
+  they are cleared on submission and teardown, never in Runes/controller state or storage.
+
 ## Unified Inbox UI ([04.2])
 
 - `src/lib/inbox/InboxController` owns paged rows, selection and sync refresh state behind an

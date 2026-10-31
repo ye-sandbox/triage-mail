@@ -89,7 +89,7 @@ impl Drop for IncomingCredentials {
 
 pub struct DesktopService {
     pub(crate) store: Arc<SqliteMailStore>,
-    vault: Arc<dyn SecretStore>,
+    pub(crate) vault: Arc<dyn SecretStore>,
     pub(crate) remote: Arc<dyn RemoteMail>,
     pub(crate) embedding: Option<Arc<dyn EmbeddingProvider>>,
     pub events: Arc<EventBus>,
@@ -489,12 +489,12 @@ fn valid_part(value: &str) -> bool {
             .split('.')
             .all(|n| n.parse::<u32>().is_ok_and(|n| n > 0))
 }
-fn opaque_id() -> Result<String, IpcError> {
+pub(crate) fn opaque_id() -> Result<String, IpcError> {
     let mut bytes = [0u8; 16];
     getrandom::getrandom(&mut bytes).map_err(|_| IpcError::Internal)?;
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
-fn validate_config(
+pub(crate) fn validate_config(
     config: &AccountConfigDto,
     material: &AccountAuthMaterial,
 ) -> Result<(), IpcError> {
