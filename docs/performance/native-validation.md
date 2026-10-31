@@ -358,3 +358,65 @@ fallback; their correctness is covered separately, without claiming these distri
 These timings still exclude embeddings, IPC and debounce; reopened is not OS-cold. Native
 frame timing and production memory were not remeasured. Further latency work requires a
 separately approved [90.4] plan rather than claiming the release performance target complete.
+
+
+## Remaining exact search latency follow-up ([90.4])
+
+Recorded on 2026-10-31 following the separately approved [90.4] plan. Raw samples:
+[search-100k-latency.csv](search-100k-latency.csv). Compiler/host, release profile, vector
+generator, SQLCipher/SQLite/sqlite-vec versions and the 100k equal-account fixture remain the
+same. Final samples were collected after compilation finished. The timing changes are sequential
+shared-host observations, not a randomized controlled experiment.
+
+This iteration profiled sub-query bottlenecks and streamlined query formulations across all
+modes while preserving exact eligible neighbors, deterministic fixed-request ranking, v5
+index consistency, durability, and full-database SQLCipher encryption:
+1. **Lexical ranking:** Removed `MATERIALIZED` from the CTE so SQLite flattens the query plan
+   without writing/reading temporary B-tree materialization pages. Separated query branches for
+   account-filtered vs global searches to eliminate dead parameter binding (`?2 IS NULL`) and
+   runtime boolean evaluation.
+2. **KNN candidate retrieval:** Removed dead branch constraints (`AND ?3 IS NULL` / `WHERE ?2 IS NULL`)
+   in both `knn_candidates` and `exact_semantic_ids`, using dedicated prepared statements.
+3. **Fusion & hydration:** Pre-allocated RRF candidate fusion maps and switched metadata join
+   statements to `prepare_cached`.
+
+Exact neighbor assertions check all 17 benchmark cases against the independent integer-dot-product
+reference ranks, verifying 100% neighbor identity and ordering with zero truncated or underfilled pages.
+
+| Case | Warm p50 ms | Warm p95 ms | Reopened p50 ms | Rows returned |
+|---|---:|---:|---:|---:|
+| Lexical-rare | 0.823 | 1.094 | 6.183 | 200 |
+| Lexical-common | 31.930 | 38.127 | 42.127 | 200 |
+| Lexical-filtered | 26.203 | 29.600 | 34.451 | 200 |
+| Lexical-page2 | 31.185 | 33.611 | 36.551 | 200 |
+| Semantic-rare | 42.638 | 44.095 | 112.310 | 200 |
+| Semantic-common | 42.697 | 45.949 | 113.591 | 200 |
+| Semantic-filtered | 11.822 | 12.176 | 33.950 | 200 |
+| Semantic-page2 | 58.408 | 60.156 | 131.082 | 200 |
+| Hybrid-rare | 47.218 | 58.974 | 117.952 | 200 |
+| Hybrid-common | 75.447 | 85.465 | 172.405 | 200 |
+| Hybrid-filtered | 37.632 | 43.632 | 66.576 | 200 |
+| Hybrid-page2 | 91.767 | 96.117 | 171.800 | 200 |
+| Lexical-empty-inbox | 0.564 | 0.605 | 0.933 | 200 |
+| Semantic-filtered-page2 | 16.848 | 26.356 | 40.953 | 200 |
+| Semantic-sparse | 0.155 | 0.194 | 1.061 | 20 |
+| Semantic-sparse-page2 | 0.140 | 0.195 | 1.036 | 11 |
+| Semantic-empty-account | 0.012 | 0.015 | 0.127 | 0 |
+
+Common lexical warm p50 improved from 33.704ms to **31.930ms**; lexical page2 from 33.571ms to **31.185ms**;
+global semantic common from 43.650ms to **42.697ms**; filtered semantic warm p50/p95 improved to
+**11.822 / 12.176ms** (within the <15ms target).
+
+### Performance Limits and Architectural Observations ([90.4])
+
+- **Filtered Semantic:** The first account-partitioned semantic page firmly meets the `<15ms` target
+  at warm p50 **11.822ms** and p95 **12.176ms**. Second-page filtered semantic measures warm p50 16.848ms.
+- **Global & Hybrid Limits:** Complete global vector queries over 100,000 int8[384] embeddings require
+  ~42ms warm due to the physical linear scan across 38.4MB of vector data and encrypted page decryption.
+  High-match lexical queries require ~30ms in SQLite FTS5 for BM25 ranking across 99,000 matching rows.
+  Because hybrid search fuses complete candidate sets from both branches sequentially on a single
+  connection, hybrid latency reflects their additive total (~75ms).
+- Sub-15ms for *global* 100k vector scans or 100k-match FTS5 ranking would require either approximate
+  ANN indexing (which sacrifices exact neighbor recall), aggressive candidate truncation, or separate
+  concurrent reader connections in a multi-threaded pool. These trade-offs were deliberately excluded
+  to preserve exact correctness, zero data loss, and single-file SQLCipher ACID consistency.

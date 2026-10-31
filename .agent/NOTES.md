@@ -236,3 +236,12 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   semantics and deep-page fallback remain. Existing DTOs, core traits and tokenizer modes stay.
 - Index duplication trades encrypted disk space and write work for contiguous account scans.
   Migration/backfill is transactional; failures preserve v4. No vector shadow-table access.
+
+## Exact Search Formulation & Latency ([90.4])
+
+- Lexical ranking uses a non-materialized CTE (`WITH ranked AS (...)`) to avoid temporary B-tree
+  materialization pages while preserving exact BM25 score ordering and deterministic rowid ties.
+- Lexical, blank-inbox, and vector queries use dedicated query branches with exact parameter sets
+  to eliminate dead nullity checks (`?2 IS NULL` / `(?2 IS NULL OR account_id=?2)`).
+- Hybrid candidate fusion pre-allocates scores maps and uses cached prepared statements for
+  final-page summary and metadata hydration. All schema versions, traits, and DTOs remain unchanged.
