@@ -7,18 +7,82 @@
 
 ## Active Task
 
+### 📌 Task [99.1]: Public Transition Audit & Secret Scrubbing Verification
+
+- **Description:** Perform full public repository transition audit, verify zero PII, secret, token,
+  or non-reserved mailbox leaks across git history and tracked files, verify AGPLv3 licensing
+  headers/notices and reproducible packaging readiness.
+- **Systems Involved:** Repository governance, CI tooling, licensing, documentation.
+- **Action Type:** Audit and documentation; requires an approved plan.
+- **Status:** READY FOR PLANNING
+- **Plan:** Not yet proposed or approved. No [99.1] implementation has started.
+- **Constraints:** Must verify whole git history and tracked tree with zero token or PII exposure;
+  RFC 2606 reserved domains only; AGPLv3 compliance.
+
+---
+
+## Completed Search Latency Evidence
+
 ### 📌 Task [90.4]: Remaining Exact Search Latency
 
 - **Description:** Profile and reduce remaining global vector/FTS ranking and hybrid latency
   while preserving exact eligible neighbors and deterministic fixed-request ranking.
 - **Systems Involved:** Storage/search; headless core boundaries remain unchanged.
 - **Action Type:** Implementation; requires a separately approved plan.
-- **Status:** READY FOR PLANNING
-- **Plan:** Not yet proposed or approved. No [90.4] implementation has started.
-- **Evidence:** [90.3] report and raw samples in `docs/performance/native-validation.md`.
+- **Status:** DONE
+- **Plan:** Approved by the user on 2026-10-31; implementation and validation complete.
+- **Commit:** `8482a78` (`perf(search): streamline ranking CTEs and eliminate dead query parameters`).
+- **Next Task:** [99.1] Public Transition Audit & Secret Scrubbing Verification (`READY FOR PLANNING`).
+- **Evidence:** [90.4] report and raw samples in `docs/performance/native-validation.md` and `docs/performance/search-100k-latency.csv`.
 - **Constraints:** Preserve v5 index consistency, encryption/durability, exact coverage and
   tie/deep-page behavior. No approximations, stale-result caches or unsafe-code expansion.
   Distinguish warm/reopened results and account for memory and migration costs.
+
+### Approved Plan ([90.4])
+
+1. Measure fine-grained breakdown of FTS5 ranking, global vector search, and hybrid pipeline.
+2. Remove unused dead parameters/constraints in `knn_candidates`, `exact_semantic_ids`, and `lexical_ids`.
+   Drop `MATERIALIZED` from the lexical ranking CTE to avoid intermediate temp-table writing while
+   preserving deterministic BM25 score and rowid tie-breakers. Pre-allocate RRF fusion maps and
+   switch summary metadata joins to `prepare_cached`.
+3. Validate exact neighbor fidelity and ordering against the independent integer-dot-product reference
+   oracle, ensuring 100% complete pages (200 rows) with zero underfilled or truncated results.
+4. Rerun the 100k SQLCipher benchmark (`search_performance`) measuring warm and reopened distributions
+   across all 17 cases.
+5. Run full workspace check, tests, fmt, clippy, and frontend check, test, and build.
+6. Record knowledge card k-017, update NOTES.md, create atomic Conventional Commit, and log hash.
+
+### Acceptance and Validation ([90.4])
+
+- [x] Streamlined lexical CTE drops `MATERIALIZED`, saving ~2-3ms of temp-table materialization.
+  Dedicated query branches for account-filtered vs global queries eliminate dead parameter binding
+  (`?2 IS NULL` and `(?2 IS NULL OR account_id=?2)`).
+- [x] Dedicated prepared statements in `knn_candidates` and `exact_semantic_ids` eliminate dead
+  nullity constraints and parameters while preserving exact partition pruning and cross-join semantics.
+- [x] Pre-allocated RRF candidate maps (`HashMap::with_capacity(candidates.limit * 2)`) and cached
+  prepared statements in `hydrate_metadata`.
+- [x] 100k release benchmark passed all 595 samples across all 17 cases with 100% exact result counts.
+  Every semantic page matches the independent integer-dot-product reference ranks with zero ordering
+  or candidate divergence.
+- [x] Warm filtered semantic p50/p95 improved to **11.822 / 12.176ms** (within <15ms target).
+  Common lexical warm p50 improved from 33.704ms to **31.930ms** (-5.3%); lexical page2 from
+  33.571ms to **31.185ms** (-7.1%); global semantic common from 43.650ms to **42.697ms** (-2.2%).
+- [x] Full workspace check, 168 Rust tests (including native IPC and storage suites), format check,
+  and Clippy with `-D warnings` passed with 0 warnings.
+- [x] Frontend check (0 errors, 0 warnings), 56 unit/component tests, and static SPA build passed.
+- [x] Svelte runes invariant, 5 policy scanner regressions, 172 tracked text files secret scan,
+  and `git diff --check` passed with 0 findings.
+- [x] Knowledge card `k-017` and `NOTES.md` updated with exact search formulation contracts.
+- [x] Atomic implementation commit `8482a78` recorded; [99.1] promoted to READY FOR PLANNING.
+
+### Remaining Limits ([90.4])
+
+- Complete global vector scans over 100,000 int8[384] embeddings physically require ~42ms warm on a
+  single thread due to 38.4MB linear memory scanning and page decryption.
+- 99,000-match lexical queries require ~30ms in SQLite FTS5 for BM25 calculation and sorting.
+- Hybrid search executes lexical and semantic branches sequentially on a single SQLite connection,
+  resulting in ~75ms warm p50. Sub-15ms global search would require approximate ANN indexing or
+  multi-threaded connection pooling, which were excluded to preserve exact correctness and ACID safety.
 
 ---
 
@@ -630,6 +694,7 @@ User subsequently authorized native build dependency downloads into a temporary 
 | [90.1] | Native Performance Validation | `98ed221` | 2026-10-31 |
 | [90.2] | Search Correctness and Performance | `c14f6fa` | 2026-10-31 |
 | [90.3] | Account-Partitioned Search Optimization | `e40056a` | 2026-10-31 |
+| [90.4] | Remaining Exact Search Latency | `8482a78` | 2026-10-31 |
 
 
 ### Validation ([04.1])
