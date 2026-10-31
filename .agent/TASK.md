@@ -7,14 +7,28 @@
 
 ## Active Task
 
+### 📌 Task [04.7]: Settings & AI Opt-in UI
+
+- **Description:** Add explicit settings and consent for local model download, optional AI
+  endpoints, search tokenizer selection and per-message remote images.
+- **Systems Involved:** Desktop UI and explicitly documented additive IPC as needed.
+- **Action Type:** Source code changes.
+- **Status:** READY FOR PLANNING
+- **Next Task:** [04.8] Persist Tag & Folder Override Rehydration (`BACKLOG`).
+- **Plan:** Not yet proposed or approved. No [04.7] implementation has started.
+
+---
+
+## Completed Task Evidence
+
 ### 📌 Task [04.6]: Vault Unlock & Account Onboarding UI
 
 - **Description:** Make desktop startup usable end-to-end with vault unlock, account listing,
   and explicit account onboarding for App Password, Public PKCE, BYO OAuth, and Proton Bridge.
 - **Systems Involved:** Desktop Svelte UI and native IPC; existing headless authentication helpers.
 - **Action Type:** Source code changes.
-- **Status:** RUNNING
-- **Next Task:** [04.7] Settings & AI Opt-in UI (`BACKLOG`).
+- **Status:** DONE
+- **Next Task:** [04.7] Settings & AI Opt-in UI (`READY FOR PLANNING`).
 
 ### Approved Plan
 User approved on 2026-10-31. The required skill was located and read at
@@ -65,7 +79,7 @@ User approved on 2026-10-31. The required skill was located and read at
 - Live-provider authorization and native visual QA remain unverified. Automatic OAuth token
   refresh remains unimplemented and is disclosed in the onboarding UI. Abrupt process exit can
   leave an unused encrypted staging entry in vault (see `k-010`). No push, release or tag.
-- Implementation commit and final task promotion are pending.
+- Implementation committed as `79ebb4c`. Task complete; [04.7] promoted to `READY FOR PLANNING`.
 
 ---
 
@@ -154,6 +168,7 @@ User subsequently authorized native build dependency downloads into a temporary 
 | [04.3] | Sandboxed Email Viewer & On-Demand Attachment Downloader (`apps/desktop`) | `8164ca2`, `2142c9e` | 2026-10-30 |
 | [04.4] | Keyboard-driven Command Palette & Triage Badges UI (`apps/desktop`) | `78016a4` | 2026-10-30 |
 | [04.5] | Desktop Security Boundary Audit and Targeted Hardening | `75599f1` | 2026-10-30 |
+| [04.6] | Vault Unlock & Account Onboarding UI | `79ebb4c` | 2026-10-31 |
 
 
 ### Validation ([04.1])
@@ -243,15 +258,7 @@ User subsequently authorized native build dependency downloads into a temporary 
 
 Registered 2026-10-31 from post-[04.5] gap analysis. Each task requires its own plan approval.
 
-### [04.6] Vault Unlock & Account Onboarding UI — `READY FOR PLANNING`
-- **Gap:** `cmd_unlock_vault`, `cmd_add_account`, `cmd_list_accounts` exist in
-  `apps/desktop/src-tauri/src/runtime.rs` but no frontend caller exists; app is not usable end-to-end.
-- **Scope:** Vault unlock screen; account list; add-account flows for App Password, OAuth2 Public
-  PKCE (`127.0.0.1` loopback), BYO-OAuth (`client_id`/`client_secret` → `vault` only), Proton Bridge.
-- **Constraints:** Secrets never persisted in frontend state/storage; fixed redacted error strings;
-  reuse existing IPC contracts (extend only with recorded `NOTES.md` contract update).
-
-### [04.7] Settings & AI Opt-in UI — `BACKLOG`
+### [04.7] Settings & AI Opt-in UI — `READY FOR PLANNING`
 - **Gap:** Tier 3 LLM summarizer has no IPC surface; Tier 2 model download has no consent UI.
 - **Scope:** Explicit opt-in for embedding model download (`$XDG_DATA_HOME/triage-mail/models`);
   Ollama/BYOK endpoint config (keys → `vault`); FTS5 tokenizer choice (`unicode61`/`trigram`);
