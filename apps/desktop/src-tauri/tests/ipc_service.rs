@@ -230,6 +230,7 @@ async fn validates_all_auth_variants_and_rejects_mode_mismatch_and_remote_proton
                 client_id: "synthetic-public".into(),
                 access_token: "synthetic-access".into(),
                 refresh_token: None,
+                token_endpoint: None,
             },
         ),
         (
@@ -240,6 +241,7 @@ async fn validates_all_auth_variants_and_rejects_mode_mismatch_and_remote_proton
                 client_secret: "synthetic-secret".into(),
                 access_token: "synthetic-access".into(),
                 refresh_token: None,
+                token_endpoint: None,
             },
         ),
         (

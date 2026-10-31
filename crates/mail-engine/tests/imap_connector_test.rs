@@ -337,6 +337,7 @@ fn test_default_connector_vault_integration_and_auth_material_roundtrip() {
         client_id: "synthetic-client-id-pkce".to_string(),
         access_token: "ya29.synthetic-access-token-999".to_string(),
         refresh_token: Some("1//synthetic-refresh-token-888".to_string()),
+        token_endpoint: Some("https://auth.example.com/oauth/token".to_string()),
     };
     let key = vault::VaultKey::for_account("acct-pkce", "imap-auth").unwrap();
     store_arc
@@ -417,4 +418,107 @@ fn test_loopback_tls_policy_strictly_guards_proton_mail_bridge() {
         err,
         EngineError::InsecureTlsRejected("imap.evil-mitm.example.org".to_string())
     );
+}
+
+#[tokio::test]
+async fn test_sasl_xoauth2_challenge_abort_emits_authentication_failed() {
+    let (client_stream, mut server_stream) = duplex(8192);
+    let mut session = ImapSession::new(client_stream);
+
+    tokio::spawn(async move {
+        // Read AUTHENTICATE XOAUTH2
+        let mut buf = [0u8; 1024];
+        let n = server_stream.read(&mut buf).await.unwrap();
+        let cmd = String::from_utf8_lossy(&buf[..n]).to_string();
+        assert!(cmd.contains("AUTHENTICATE XOAUTH2"));
+
+        // Server challenges with base64 HTTP 401 error
+        let challenge = "+ eyJzdGF0dXMiOiI0MDEiLCJzY2hlbWVzIjoiYmVhcmVyIn0=\r\n";
+        server_stream.write_all(challenge.as_bytes()).await.unwrap();
+
+        // Extract tag before next read
+        let tag = cmd.split_whitespace().next().unwrap().to_string();
+
+        // Client must send empty line CRLF to abort the SASL handshake
+        let n = server_stream.read(&mut buf).await.unwrap();
+        assert_eq!(&buf[..n], b"\r\n");
+
+        // Server returns tagged NO
+        let no_resp = format!("{tag} NO [AUTHENTICATIONFAILED] Invalid credentials (Failure)\r\n");
+        server_stream.write_all(no_resp.as_bytes()).await.unwrap();
+    });
+
+    let res = session
+        .authenticate_xoauth2("user@example.com", "expired-synthetic-token")
+        .await;
+
+    assert!(matches!(res, Err(EngineError::AuthenticationFailed(_))));
+}
+
+#[tokio::test]
+async fn test_token_refresher_integration_with_vault() {
+    use async_trait::async_trait;
+    use mail_engine::auth::{
+        RefreshTokenRequest, RefreshedTokens, TokenRefreshTransport, TokenRefresher,
+    };
+    use std::sync::Arc;
+
+    struct TestRefreshTransport;
+    #[async_trait]
+    impl TokenRefreshTransport for TestRefreshTransport {
+        async fn refresh_token(
+            &self,
+            req: RefreshTokenRequest<'_>,
+        ) -> Result<RefreshedTokens, EngineError> {
+            assert_eq!(req.token_endpoint, "https://auth.example.com/oauth/token");
+            assert_eq!(req.client_id, "test-client");
+            assert_eq!(req.refresh_token, "test-refresh-1");
+            Ok(RefreshedTokens {
+                access_token: "new-access-token-999".to_string(),
+                refresh_token: Some("rotated-refresh-token-000".to_string()),
+                expires_in: Some(3600),
+            })
+        }
+    }
+
+    let cipher = std::sync::Arc::new(vault::Argon2AesGcmCipher::from_passphrase(
+        b"synthetic-passphrase-vault",
+    ));
+    let fallback = std::sync::Arc::new(vault::EncryptedFallbackStore::in_memory(cipher));
+    let store = Arc::new(vault::AutoSecretStore::with_service(
+        "triage-mail-refresh-test",
+        fallback,
+    ));
+
+    let initial_auth = vault::AccountAuthMaterial::OAuth2PublicPkce {
+        client_id: "test-client".into(),
+        access_token: "expired-access".into(),
+        refresh_token: Some("test-refresh-1".into()),
+        token_endpoint: Some("https://auth.example.com/oauth/token".into()),
+    };
+    let key = vault::VaultKey::for_account("acct-refresh-test", "imap-auth").unwrap();
+    store
+        .set_secret(&key, &initial_auth.to_bytes().unwrap())
+        .unwrap();
+
+    let refresher = TokenRefresher::new(Arc::new(TestRefreshTransport));
+    let updated = refresher
+        .refresh_and_update_vault(store.as_ref(), "acct-refresh-test", &initial_auth)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        updated,
+        vault::AccountAuthMaterial::OAuth2PublicPkce {
+            client_id: "test-client".into(),
+            access_token: "new-access-token-999".into(),
+            refresh_token: Some("rotated-refresh-token-000".into()),
+            token_endpoint: Some("https://auth.example.com/oauth/token".into()),
+        }
+    );
+
+    // Verify persisted in vault
+    let reloaded_bytes = store.get_secret(&key).unwrap();
+    let reloaded = vault::AccountAuthMaterial::from_bytes(&reloaded_bytes).unwrap();
+    assert_eq!(reloaded, updated);
 }

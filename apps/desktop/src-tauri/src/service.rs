@@ -67,6 +67,7 @@ impl Drop for IncomingCredentials {
                 client_id,
                 access_token,
                 refresh_token,
+                ..
             } => {
                 client_id.zeroize();
                 access_token.zeroize();
@@ -77,6 +78,7 @@ impl Drop for IncomingCredentials {
                 client_secret,
                 access_token,
                 refresh_token,
+                ..
             } => {
                 client_id.zeroize();
                 client_secret.zeroize();
@@ -107,6 +109,7 @@ impl DesktopService {
         remote: Arc<dyn RemoteMail>,
         embedding: Option<Arc<dyn EmbeddingProvider>>,
     ) -> Arc<Self> {
+        crate::onboarding::clean_orphaned_staging(vault.as_ref());
         Arc::new(Self {
             store,
             vault,

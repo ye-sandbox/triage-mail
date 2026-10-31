@@ -28,6 +28,10 @@ pub mod unsubscribe;
 
 pub const DEFAULT_SYNC_UID_BATCH_SIZE: u32 = 300;
 
+pub use auth::{
+    validate_token_endpoint, HttpTokenRefreshTransport, RefreshTokenRequest, RefreshedTokens,
+    TokenRefreshTransport, TokenRefresher,
+};
 pub use bodystructure::{
     extract_body_structure_metadata, extract_bodystructure_sexpr, parse_bodystructure_str,
     BodyPartStructure, ExtractedBodyStructure, MultipartStructure, SinglePartStructure,
@@ -52,6 +56,10 @@ pub enum EngineError {
     InsecureTlsRejected(String),
     #[error("IMAP protocol error: {0}")]
     ImapProtocol(String),
+    #[error("IMAP authentication failed: {0}")]
+    AuthenticationFailed(String),
+    #[error("OAuth token refresh failed: {0}")]
+    TokenRefresh(String),
     #[error("MIME parsing error: {0}")]
     MimeParse(String),
     #[error("RFC 8058 One-Click Unsubscribe failed: {0}")]

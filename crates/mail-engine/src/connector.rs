@@ -9,8 +9,9 @@ use tokio::net::TcpStream;
 use tokio_rustls::client::TlsStream;
 use vault::{AccountAuthMaterial, SecretStore, VaultKey};
 
+use crate::auth::{HttpTokenRefreshTransport, TokenRefreshTransport, TokenRefresher};
 use crate::protocol::ImapSession;
-use crate::provider::{ProviderKind, ServerCapabilities};
+use crate::provider::ServerCapabilities;
 use crate::sync::{execute_incremental_sync, IncrementalSyncQuery};
 use crate::tls::create_tls_connector;
 use crate::{EngineError, ImapConnector, ImapEndpointConfig, ParsedInboundMessage, SyncEventSink};
@@ -18,12 +19,21 @@ use crate::{EngineError, ImapConnector, ImapEndpointConfig, ParsedInboundMessage
 /// Default production IMAP connector backed by `tokio-rustls` and `crates/vault`.
 pub struct DefaultImapConnector {
     vault: Arc<dyn SecretStore>,
+    refresher: Arc<dyn TokenRefreshTransport>,
 }
 
 impl DefaultImapConnector {
-    /// Creates a new connector with access to encrypted secret storage.
+    /// Creates a new connector with access to encrypted secret storage and default HTTPS refresh transport.
     pub fn new(vault: Arc<dyn SecretStore>) -> Self {
-        Self { vault }
+        Self::with_refresher(vault, Arc::new(HttpTokenRefreshTransport))
+    }
+
+    /// Creates a new connector with a custom token refresh transport (useful for testing).
+    pub fn with_refresher(
+        vault: Arc<dyn SecretStore>,
+        refresher: Arc<dyn TokenRefreshTransport>,
+    ) -> Self {
+        Self { vault, refresher }
     }
 
     /// Retrieves stored authentication material for an account from the vault.
@@ -43,19 +53,10 @@ impl DefaultImapConnector {
             .await
     }
 
-    /// Authenticates with a login independent of the opaque account identifier.
-    pub async fn connect_and_authenticate_as(
+    async fn open_raw_session(
         &self,
         endpoint: &ImapEndpointConfig,
-        username: &str,
-        auth: &AccountAuthMaterial,
     ) -> Result<(ImapSession<TlsStream<TcpStream>>, ServerCapabilities), EngineError> {
-        // INVARIANT: Account IDs select vault entries; only the explicit username is sent as login.
-        if username.is_empty() || username.chars().any(char::is_control) {
-            return Err(EngineError::ImapProtocol("invalid IMAP username".into()));
-        }
-        endpoint.validate_tls_policy()?;
-
         let connector = create_tls_connector(endpoint)?;
         let addr = format!("{}:{}", endpoint.host, endpoint.port);
         let tcp_stream = TcpStream::connect((endpoint.host.as_str(), endpoint.port))
@@ -79,24 +80,66 @@ impl DefaultImapConnector {
 
         // Read server greeting banner
         let _greeting = session.read_greeting().await?;
-        let mut caps = session.capability().await.unwrap_or_default();
+        let caps = session.capability().await.unwrap_or_default();
 
-        let _provider = ProviderKind::detect(&endpoint.host, Some(&caps));
+        Ok((session, caps))
+    }
 
-        // Authenticate based on configured credential mode
+    async fn try_authenticate(
+        session: &mut ImapSession<TlsStream<TcpStream>>,
+        username: &str,
+        auth: &AccountAuthMaterial,
+    ) -> Result<(), EngineError> {
         match auth {
-            AccountAuthMaterial::AppPassword { secret } => {
-                session.login(username, secret).await?;
-            }
+            AccountAuthMaterial::AppPassword { secret } => session.login(username, secret).await,
             AccountAuthMaterial::OAuth2PublicPkce { access_token, .. } => {
-                session.authenticate_xoauth2(username, access_token).await?;
+                session.authenticate_xoauth2(username, access_token).await
             }
             AccountAuthMaterial::OAuth2ByoCredentials { access_token, .. } => {
-                session.authenticate_xoauth2(username, access_token).await?;
+                session.authenticate_xoauth2(username, access_token).await
             }
             AccountAuthMaterial::ProtonBridgeLocal { bridge_password } => {
-                session.login(username, bridge_password).await?;
+                session.login(username, bridge_password).await
             }
+        }
+    }
+
+    /// Authenticates with a login independent of the opaque account identifier.
+    /// Transparently refreshes expired OAuth2 access tokens and retries once if SASL authentication fails.
+    pub async fn connect_and_authenticate_as(
+        &self,
+        endpoint: &ImapEndpointConfig,
+        username: &str,
+        auth: &AccountAuthMaterial,
+    ) -> Result<(ImapSession<TlsStream<TcpStream>>, ServerCapabilities), EngineError> {
+        // INVARIANT: Account IDs select vault entries; only the explicit username is sent as login.
+        if username.is_empty() || username.chars().any(char::is_control) {
+            return Err(EngineError::ImapProtocol("invalid IMAP username".into()));
+        }
+        endpoint.validate_tls_policy()?;
+
+        let (mut session, mut caps) = self.open_raw_session(endpoint).await?;
+        let auth_res = Self::try_authenticate(&mut session, username, auth).await;
+
+        match auth_res {
+            Ok(()) => {}
+            Err(EngineError::AuthenticationFailed(ref _reason))
+                if auth.token_endpoint().is_some() && auth.refresh_token().is_some() =>
+            {
+                // INVARIANT: When SASL authentication fails on an OAuth account with a refresh token,
+                // refresh the access token against the configured token endpoint, update the vault atomically,
+                // and reconnect a fresh session to retry authentication once.
+                let refresher = TokenRefresher::new(self.refresher.clone());
+                let refreshed_auth = refresher
+                    .refresh_and_update_vault(self.vault.as_ref(), &endpoint.account_id, auth)
+                    .await?;
+
+                let (mut fresh_session, fresh_caps) = self.open_raw_session(endpoint).await?;
+                Self::try_authenticate(&mut fresh_session, username, &refreshed_auth).await?;
+                session = fresh_session;
+                caps = fresh_caps;
+            }
+            Err(e) => return Err(e),
         }
 
         // Re-read capabilities post-authentication
