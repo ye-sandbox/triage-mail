@@ -13,9 +13,55 @@
   overrides after restart.
 - **Systems Involved:** Storage, additive desktop DTOs and inbox UI.
 - **Action Type:** Source code changes.
-- **Status:** READY FOR PLANNING
+- **Status:** RUNNING
 - **Next Task:** [00.2] CI Pipeline (GitHub Actions) (`BACKLOG`).
-- **Plan:** Not yet proposed or approved. No [04.8] implementation has started.
+- **Plan:** Approved by the user on 2026-10-31; implementation in progress.
+
+### Approved Plan ([04.8])
+1. Document additive message summary fields for persisted tags and folder overrides. Preserve
+   canonical folder/UID identity, existing command envelopes, core traits and database schema.
+   Remove the desktop search adapter's substitution of the canonical folder with its override.
+2. Rehydrate metadata for all summary search paths from existing encrypted tables with bounded
+   reads that preserve ranking and pagination. Keep tags deterministic and duplicate-free.
+3. Read the required `svelte-dev` skill, then reconcile authoritative summary metadata with
+   optimistic inbox feedback on startup, pagination and sync refresh. Preserve mutation rollback,
+   stale-response protection and canonical identity for reader/attachment operations.
+4. Add synthetic storage reopen, search-mode, IPC identity and frontend refresh/rollback
+   regressions, including remote MOVE completion and override removal.
+5. Run the full repository Definition of Done plus frontend formatting/build checks using
+   cached dependencies. Respect the two-failure circuit breaker; record any verification limits.
+6. Record contracts/evidence and applicable knowledge, create an atomic Conventional Commit,
+   log its hash and promote [00.2] to READY FOR PLANNING. No push, release or tag.
+
+### Acceptance and Validation ([04.8])
+
+- [x] Additive `tags` and nullable `folder_override` summary fields rehydrate from existing
+  encrypted tables in lexical, semantic and hybrid search. Existing payloads deserialize
+  with defaults; command envelopes, schema version and headless core traits are unchanged.
+- [x] Parameterized metadata reads batch at most 500 candidate IDs after ranking/pagination.
+  Tags remain sorted/unique; tag fan-out cannot duplicate summaries or change page boundaries.
+- [x] Desktop search preserves canonical folder/UID. Inbox startup, pagination and accepted
+  refreshes restore persisted feedback, while MOVE completion clears obsolete overrides.
+  Optimistic changes update row metadata; generation-guarded rollback cannot resurrect old state.
+- [x] `cargo check --workspace`, `cargo test --workspace` (159 passed), `cargo fmt --all -- --check`
+  and `cargo clippy --workspace --all-targets -- -D warnings` passed with offline dependencies
+  and the existing temporary native sysroot. Synthetic socket tests required loopback access.
+  Initial sandbox run stopped on denied loopback sockets; a new semantic IPC regression then
+  exposed a missing test embedding, which was added before the successful full-suite rerun.
+- [x] Frontend check (zero errors/warnings), tests (56 passed), matching-style Prettier and SPA
+  build passed. Tests cover visible persisted tags/folder feedback, pagination, override clearing,
+  rejected-write rollback, stale reads and search replacement. No component layout changes.
+- [x] Tracked text secret/PII scan found zero candidates; Svelte runes/unchecked-any scans and
+  `git diff --check` passed. Contracts updated in `NOTES.md`; identity/ranking constraints in
+  `k-012`. No CLI flags, environment variables or validation commands changed; no README update.
+- [ ] Atomic implementation commit and completion-log hash recorded; next task promoted.
+
+### Remaining Limits ([04.8])
+
+- Verification used synthetic messages, encrypted local storage and injected transports;
+  live-provider MOVE and native WebKit visual QA were not exercised. Existing blank-query search
+  behavior and folder navigation remain outside this task. No external endpoint, push, release
+  or tag was requested or performed.
 
 ---
 

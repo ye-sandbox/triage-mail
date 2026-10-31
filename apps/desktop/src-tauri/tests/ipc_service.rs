@@ -329,6 +329,9 @@ async fn triage_is_atomic_durable_and_preserves_original_server_identity() {
     let remote = Arc::new(FakeRemote::default());
     let (service, store, _) = setup(remote.clone());
     seed(&service, &store).await;
+    store
+        .insert_message_embedding("m-1", &vec![3; 384])
+        .unwrap();
     let invalid = TriageMutationDto {
         message_ids: vec!["m-1".into(), "missing".into()],
         action: TriageActionDto::MarkRead,
@@ -370,14 +373,26 @@ async fn triage_is_atomic_durable_and_preserves_original_server_identity() {
         .triage_action(mutation(TriageActionDto::Archive))
         .await
         .unwrap();
-    assert_eq!(
-        service
-            .search_messages(query(SearchMode::Lexical))
-            .await
-            .unwrap()[0]
-            .folder,
-        "Archive"
-    );
+    for mode in [
+        SearchMode::Lexical,
+        SearchMode::Semantic,
+        SearchMode::Hybrid,
+    ] {
+        let rows = service.search_messages(query(mode)).await.unwrap();
+        assert_eq!(rows[0].folder, "INBOX");
+        assert_eq!(rows[0].uid, 1);
+        assert_eq!(rows[0].folder_override.as_deref(), Some("Archive"));
+        assert_eq!(rows[0].tags, vec!["Finance"]);
+        let wire = serde_json::to_value(&rows[0]).unwrap();
+        assert_eq!(wire["folder_override"], "Archive");
+        assert_eq!(wire["tags"][0], "Finance");
+        let mut legacy = wire;
+        legacy.as_object_mut().unwrap().remove("tags");
+        legacy.as_object_mut().unwrap().remove("folder_override");
+        let decoded: storage::MessageRowSummary = serde_json::from_value(legacy).unwrap();
+        assert!(decoded.tags.is_empty());
+        assert_eq!(decoded.folder_override, None);
+    }
     assert_eq!(
         store.get_message_by_id("m-1").unwrap().unwrap().folder,
         "INBOX"
@@ -724,6 +739,14 @@ async fn move_acknowledgement_rebases_later_actions_and_preserves_tags_and_attac
     assert_eq!(moved.folder, "Archive");
     assert_eq!(moved.uid, 77);
     assert_eq!(moved.tags, vec!["Keep"]);
+    let summaries = service
+        .search_messages(query(SearchMode::Lexical))
+        .await
+        .unwrap();
+    assert_eq!(summaries[0].folder, "Archive");
+    assert_eq!(summaries[0].uid, 77);
+    assert_eq!(summaries[0].folder_override, None);
+    assert_eq!(summaries[0].tags, vec!["Keep"]);
     let mut refreshed = moved.clone();
     refreshed.id = "server-generated-destination-id".into();
     refreshed.attachments[0].message_id = refreshed.id.clone();

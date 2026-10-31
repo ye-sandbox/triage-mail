@@ -17,6 +17,8 @@ function row(index: number): MessageRowDto {
 		received_at_epoch_ms: 1700000000000,
 		is_read: false,
 		has_attachments: false,
+		tags: [],
+		folder_override: null,
 		category_badge: null
 	};
 }
@@ -86,7 +88,12 @@ describe('inbox requests and synchronization', () => {
 	it('paginates without duplicates and retains selection on authoritative refresh', async () => {
 		const { inbox, search } = setup();
 		const page = Array.from({ length: PAGE_SIZE }, (_, i) => row(i));
-		search.mockResolvedValueOnce(page).mockResolvedValueOnce([row(199), row(200)]);
+		search
+			.mockResolvedValueOnce(page)
+			.mockResolvedValueOnce([
+				row(199),
+				{ ...row(200), tags: ['Paged'], folder_override: 'Archive' }
+			]);
 		await inbox.search('', 'Lexical');
 		inbox.selectedId = row(50).id;
 		await inbox.loadMore();
@@ -97,12 +104,16 @@ describe('inbox requests and synchronization', () => {
 			offset: PAGE_SIZE
 		});
 		expect(inbox.rows).toHaveLength(201);
+		expect(inbox.localTags['message-200']).toEqual(['Paged']);
+		expect(inbox.folderLabels['message-200']).toBe('Archive');
 		search
 			.mockResolvedValueOnce([row(999), ...page.slice(0, 199)])
 			.mockResolvedValueOnce([row(199), row(200)]);
 		await inbox.refresh();
 		expect(inbox.selectedId).toBe('message-50');
 		expect(inbox.rows[0].id).toBe('message-999');
+		expect(inbox.localTags['message-200']).toEqual([]);
+		expect(inbox.folderLabels['message-200']).toBeUndefined();
 		expect(inbox.hasMore).toBe(false);
 		inbox.dispose();
 	});
@@ -173,12 +184,33 @@ describe('virtualized message list', () => {
 });
 
 describe('inbox toolbar', () => {
+	it('renders persisted local metadata when the inbox is opened', async () => {
+		const { inbox, search } = setup();
+		search.mockResolvedValueOnce([{ ...row(0), tags: ['Keep'], folder_override: 'Archive' }]);
+		await inbox.search('', 'Lexical');
+		inbox.selectedId = 'message-0';
+		const target = document.createElement('div');
+		document.body.append(target);
+		const component = mount(InboxView, {
+			target,
+			props: { inbox, connected: true }
+		});
+		flushSync();
+		expect(target.querySelector('[aria-label="Message state"]')?.textContent).toContain('Archive');
+		expect(target.querySelector('[aria-label="Message state"]')?.textContent).toContain('#Keep');
+		await unmount(component);
+		inbox.dispose();
+		target.remove();
+	});
 	it('debounces search text and applies the selected matching mode', async () => {
 		vi.useFakeTimers();
 		const { inbox, search } = setup();
 		const target = document.createElement('div');
 		document.body.append(target);
-		const component = mount(InboxView, { target, props: { inbox, connected: true } });
+		const component = mount(InboxView, {
+			target,
+			props: { inbox, connected: true }
+		});
 		flushSync();
 		const input = target.querySelector<HTMLInputElement>('input[type=search]')!;
 		input.value = 'invoice';
@@ -215,7 +247,10 @@ describe('inbox motion interactions', () => {
 		const { inbox } = setup();
 		const target = document.createElement('div');
 		document.body.append(target);
-		const component = mount(InboxView, { target, props: { inbox, connected: true } });
+		const component = mount(InboxView, {
+			target,
+			props: { inbox, connected: true }
+		});
 		flushSync();
 		const toggle = target.querySelector<HTMLButtonElement>('[aria-label="Toggle sidebar"]')!;
 		const sidebar = target.querySelector<HTMLElement>('.inbox-sidebar')!;
@@ -237,7 +272,10 @@ describe('inbox motion interactions', () => {
 		inbox.rows = [row(0), row(1)];
 		const target = document.createElement('div');
 		document.body.append(target);
-		const component = mount(InboxView, { target, props: { inbox, connected: true } });
+		const component = mount(InboxView, {
+			target,
+			props: { inbox, connected: true }
+		});
 		flushSync();
 		inbox.selectedId = 'message-0';
 		flushSync();

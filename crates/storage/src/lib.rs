@@ -109,6 +109,11 @@ pub struct MessageRowSummary {
     pub is_read: bool,
     pub has_attachments: bool,
     pub category_badge: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Display-only local move intent; folder/UID remain canonical server identity.
+    #[serde(default)]
+    pub folder_override: Option<String>,
 }
 
 /// Schema migration runner contract.

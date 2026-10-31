@@ -14,6 +14,8 @@ const row: MessageRowDto = {
 	received_at_epoch_ms: 0,
 	is_read: false,
 	has_attachments: false,
+	tags: [],
+	folder_override: null,
 	category_badge: null
 };
 function deferred<T>() {
@@ -56,7 +58,7 @@ describe('triage mutations', () => {
 	it('keeps canonical attachment identity while providing folder and tag feedback', async () => {
 		const { inbox, triage } = setup();
 		await inbox.mutate(row.id, 'Archive');
-		expect(inbox.rows[0]).toEqual(row);
+		expect(inbox.rows[0]).toEqual({ ...row, folder_override: 'Archive' });
 		expect(inbox.folderLabels[row.id]).toBe('Archive');
 		await inbox.mutate(row.id, { Tag: 'Receipts' });
 		expect(inbox.localTags[row.id]).toEqual(['Receipts']);
@@ -64,6 +66,30 @@ describe('triage mutations', () => {
 			message_ids: [row.id],
 			action: { Tag: 'Receipts' }
 		});
+		inbox.dispose();
+	});
+	it('rehydrates persisted metadata and clears overrides after remote MOVE refresh', async () => {
+		const { inbox, search, triage } = setup();
+		const saved = { ...row, tags: ['Keep'], folder_override: 'Trash' };
+		search.mockResolvedValueOnce([saved]);
+		await inbox.search('', 'Lexical');
+		expect(inbox.localTags[row.id]).toEqual(['Keep']);
+		expect(inbox.folderLabels[row.id]).toBe('Trash');
+		triage.mockRejectedValueOnce('private');
+		await inbox.mutate(row.id, { Tag: 'Rejected' });
+		expect(inbox.localTags[row.id]).toEqual(['Keep']);
+		triage.mockRejectedValueOnce('private');
+		await inbox.mutate(row.id, 'Archive');
+		expect(inbox.folderLabels[row.id]).toBe('Trash');
+		search.mockResolvedValueOnce([{ ...saved, folder: 'Deleted', uid: 77, folder_override: null }]);
+		await inbox.refresh();
+		expect(inbox.folderLabels[row.id]).toBeUndefined();
+		expect(inbox.rows[0].folder).toBe('Deleted');
+		expect(inbox.rows[0].uid).toBe(77);
+		expect(inbox.localTags[row.id]).toEqual(['Keep']);
+		search.mockResolvedValueOnce([]);
+		await inbox.search('other', 'Lexical');
+		expect(inbox.localTags).toEqual({});
 		inbox.dispose();
 	});
 	it('rejects invalid tags using the backend UTF-8 byte limit', async () => {
@@ -104,6 +130,8 @@ describe('triage mutations', () => {
 		pending.reject('private');
 		await saving;
 		expect(inbox.rows).toEqual([]);
+		expect(inbox.localTags).toEqual({});
+		expect(inbox.folderLabels).toEqual({});
 		inbox.dispose();
 	});
 });

@@ -32,8 +32,6 @@ export class InboxController {
 		if (!original || (typeof action === 'object' && !validTag(action.Tag))) return;
 		// INVARIANT: Invalidate reads begun before this optimistic write; defer sync until it settles.
 		const generation = ++this.generation;
-		const oldFolder = this.folderLabels[id];
-		const oldTags = this.localTags[id] ?? [];
 		this.mutating = true;
 		this.mutationError = '';
 		this.mutationNotice = '';
@@ -50,13 +48,9 @@ export class InboxController {
 		} catch {
 			if (this.disposed) return;
 			if (generation === this.generation) {
-				this.rows = this.rows.map((row) =>
-					row.id === id ? { ...row, is_read: original.is_read } : row
-				);
+				this.rows = this.rows.map((row) => (row.id === id ? original : row));
+				this.rehydrateFeedback();
 			}
-			if (oldFolder === undefined) delete this.folderLabels[id];
-			else this.folderLabels[id] = oldFolder;
-			this.localTags[id] = oldTags;
 			this.mutationError =
 				action === 'OneClickUnsubscribe'
 					? 'Unsubscribe could not be confirmed. Check before trying again.'
@@ -68,14 +62,17 @@ export class InboxController {
 	}
 
 	private applyOptimistic(id: string, action: TriageAction) {
-		if (action === 'MarkRead' || action === 'MarkUnread')
-			this.rows = this.rows.map((row) =>
-				row.id === id ? { ...row, is_read: action === 'MarkRead' } : row
-			);
-		// INVARIANT: Folder labels must never overwrite canonical IMAP attachment identity.
-		if (action === 'Archive' || action === 'Trash') this.folderLabels[id] = action;
-		if (typeof action === 'object')
-			this.localTags[id] = [...new Set([...(this.localTags[id] ?? []), action.Tag])];
+		// INVARIANT: Display metadata never overwrites canonical IMAP attachment identity.
+		this.rows = this.rows.map((row) => {
+			if (row.id !== id) return row;
+			if (action === 'MarkRead' || action === 'MarkUnread')
+				return { ...row, is_read: action === 'MarkRead' };
+			if (action === 'Archive' || action === 'Trash') return { ...row, folder_override: action };
+			if (typeof action === 'object')
+				return { ...row, tags: [...new Set([...row.tags, action.Tag])].sort() };
+			return row;
+		});
+		this.rehydrateFeedback();
 	}
 
 	async connect() {
@@ -97,6 +94,7 @@ export class InboxController {
 		this.query = query;
 		this.mode = mode;
 		this.rows = [];
+		this.rehydrateFeedback();
 		this.selectedId = null;
 		this.hasMore = true;
 		this.error = '';
@@ -111,6 +109,7 @@ export class InboxController {
 			});
 			if (generation !== this.generation || this.disposed) return;
 			this.rows = rows;
+			this.rehydrateFeedback();
 			this.hasMore = rows.length === PAGE_SIZE;
 		} catch (error) {
 			if (generation === this.generation && !this.disposed) this.error = this.errorMessage(error);
@@ -147,6 +146,7 @@ export class InboxController {
 			const known = new Set(this.rows.map((row) => row.id));
 			// INVARIANT: Overlapping pages during sync never create duplicate keyed DOM nodes.
 			this.rows = [...this.rows, ...next.filter((row) => !known.has(row.id))];
+			this.rehydrateFeedback();
 			this.hasMore = next.length === PAGE_SIZE && this.rows.length > offset;
 		} catch (error) {
 			if (generation === this.generation && !this.disposed) this.error = this.errorMessage(error);
@@ -186,6 +186,7 @@ export class InboxController {
 			if (generation !== this.generation || this.disposed) return;
 			const unique = new Map(rows.map((row) => [row.id, row]));
 			this.rows = [...unique.values()];
+			this.rehydrateFeedback();
 			this.badgeRevision++;
 			this.hasMore = hasMore;
 			if (this.selectedId && !unique.has(this.selectedId)) this.selectedId = null;
@@ -199,6 +200,16 @@ export class InboxController {
 				this.scheduleRefresh();
 			}
 		}
+	}
+
+	private rehydrateFeedback() {
+		// INVARIANT: Only accepted authoritative pages replace optimistic display metadata.
+		this.localTags = Object.fromEntries(this.rows.map((row) => [row.id, [...row.tags]]));
+		this.folderLabels = Object.fromEntries(
+			this.rows.flatMap((row) =>
+				row.folder_override === null ? [] : [[row.id, row.folder_override]]
+			)
+		);
 	}
 
 	private onSync(event: SyncProgressEvent) {
