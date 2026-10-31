@@ -221,3 +221,18 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   hydrated once after fusion. IPC DTOs, schema versions and trait signatures are unchanged.
 - Storage rejects pagination beyond SQLite integer bounds before query execution. Details and
   query-plan constraints live in k-015; target latency remains subject to measured evidence.
+
+
+## Account-Partitioned Vector Index ([90.3], approved before implementation)
+
+- Add migration v5: `vec_messages_by_account` is a derived vec0 table with
+  `message_id TEXT PRIMARY KEY`, `account_id TEXT PARTITION KEY` and
+  `embedding_int8 int8[384] distance_metric=cosine`. Existing `vec_messages` remains
+  authoritative and its schema is unchanged. Backfill only vectors joined to live messages.
+- Embedding replacements update both tables atomically. Message insert/account-identity
+  changes reconcile derived membership from the authoritative table; deletion removes derived
+  membership, including cascades and UIDVALIDITY invalidation. Orphans remain unindexed.
+- Filtered top-k constrains the opaque account partition before ranking. Exact cosine/ID tie
+  semantics and deep-page fallback remain. Existing DTOs, core traits and tokenizer modes stay.
+- Index duplication trades encrypted disk space and write work for contiguous account scans.
+  Migration/backfill is transactional; failures preserve v4. No vector shadow-table access.

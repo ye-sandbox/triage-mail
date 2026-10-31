@@ -74,7 +74,9 @@ fn configure_connection(conn: &Connection, key: &DatabaseKey) -> Result<(), Stor
             ))
         })?;
 
-    // INVARIANT: WAL mode + MEMORY temp_store + foreign keys + busy_timeout
+    // INVARIANT: Keep encrypted WAL/durability settings. A 64 MiB per-connection page-cache
+    // target avoids repeated vector-page decryption; this is a soft budget, not an RSS cap.
+    // No plaintext disk cache or unbounded query-result cache is introduced.
     conn.execute_batch(
         "
         PRAGMA journal_mode = WAL;
@@ -82,6 +84,7 @@ fn configure_connection(conn: &Connection, key: &DatabaseKey) -> Result<(), Stor
         PRAGMA foreign_keys = ON;
         PRAGMA temp_store = MEMORY;
         PRAGMA busy_timeout = 5000;
+        PRAGMA cache_size = -65536;
         ",
     )
     .map_err(|e| StorageError::Query(format!("failed to configure SQLite pragmas: {e}")))?;

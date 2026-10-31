@@ -13,12 +13,82 @@
   ranking costs to pursue <15ms search at 100,000 messages with complete, exact results.
 - **Systems Involved:** Storage/search; desktop adapter only if an approved plan requires it.
 - **Action Type:** Implementation; requires a separately approved plan.
-- **Status:** READY FOR PLANNING
-- **Plan:** Not yet proposed or approved. No [90.3] implementation has started.
+- **Status:** RUNNING
+- **Plan:** Approved by the user on 2026-10-31; implementation in progress.
 - **Evidence:** [90.2] corrected samples/report in `docs/performance/native-validation.md`.
 - **Constraints:** Any additive schema migration needs explicit plan approval and contract
   documentation. Preserve account isolation, exact neighbor coverage, stable tie boundaries
   and metadata hydration. No approximate/empty/underfilled-result substitution.
+
+### Approved Plan ([90.3])
+
+1. Profile the corrected 100k workloads with synthetic local data. Separate encrypted page
+   reads/cache misses, vector computation/top-k, FTS ranking and final-page hydration. Compare
+   bounded connection-local page-cache sizes and record memory costs; do not weaken encryption,
+   durability, exact ranking or result coverage to improve timing.
+2. Authorize additive migration v5: create `vec_messages_by_account` with a text message-ID
+   primary key, opaque account-ID partition key and int8[384] cosine vectors. Preserve existing
+   `vec_messages` as the authoritative compatible source; backfill only vectors joined to live
+   messages in the migration transaction. Do not alter existing tables, DTOs or trait signatures.
+   Record the contract in NOTES.md before implementation, and the decision/trade-off in ADRs.
+3. Maintain the derived partition index transactionally with embedding writes and message
+   insertion/deletion/invalidation paths. Keep orphan vectors out of the index. Verify migration
+   from v4, idempotence, rollback, reopen, replacement, missing embeddings and folder/UIDVALIDITY
+   purges. Update synthetic benchmark seeding to populate the same index faithfully.
+4. Use partition-constrained vec0 KNN for account-filtered search, retaining exact tie-boundary
+   expansion and scalar fallback for oversized ties/deep pages. Preserve fixed-request ID ties,
+   RRF formula/candidate windows, global search semantics and final-page metadata hydration.
+5. Apply measured, bounded page-cache/query-plan improvements to global vector and lexical
+   paths. Keep tokenizer semantics, ranking and tie membership unchanged; preserve both supported
+   FTS tokenizers. If the measured target remains unmet, disclose the gap rather than substituting
+   approximate, cached-stale, empty or underfilled results.
+6. Repeat comparable 100k SQLCipher benchmarks with full counts and independent exact-neighbor
+   checks. Include skewed/sparse accounts, second pages and migration/index-growth measurements;
+   separate new cases from existing baseline comparisons. Record p50/p95, memory/cache settings,
+   database growth and migration cost; distinguish warm from reopened (not OS-cold) samples.
+7. Run the full repository Definition of Done and frontend build using cached dependencies and
+   authorized local mock/subprocess access. Existing permission covers restoring Linux build
+   packages only if needed; no registry/provider/AI/model requests. Respect the circuit breaker.
+   Synchronize READMEs via readme-standard if documented commands/configuration change.
+8. Save raw results and applicable knowledge, make an atomic Conventional Commit and log its
+   hash. Promote remaining work explicitly; no push, release or tag, and no unrelated UI changes.
+
+### Acceptance and Validation ([90.3])
+
+- [x] Approved additive v5 contract was recorded before implementation. Migration preserves
+  authoritative vec_messages, backfills live vectors only, and rolls back index/schema changes
+  together. Existing DTOs, trait signatures, tokenizer semantics and unsafe-code boundary remain.
+- [x] Embedding replacement maintains both indexes atomically; invalid dimensions preserve prior
+  vectors. Message insert/account-change/delete triggers reconcile partition membership, including
+  late vectors, UIDVALIDITY reset and account cascades. Encrypted v4 upgrade survives reopen.
+- [x] Account KNN constrains partitions before top-k; exact reference ordering, missing/orphan
+  vectors, 4100-way ties and deep pages are preserved. RRF windows/formula and hydration remain.
+- [x] Measured cache component queries at 2/16/64MiB; selected a 64MiB soft connection target.
+  Recorded process RSS with allocator-retention limits; no unsupported isolated-memory claim.
+- [x] Final release benchmark passed 595 complete-page/reference samples, including original
+  comparable cases, second filtered pages, 31-vector sparse and empty accounts. Cache profiling,
+  migration time, database growth and all raw samples are committed with methodology.
+- [x] Warm semantic-filtered p50/p95 is 12.041/12.928ms versus 380.273/391.899ms; hybrid-filtered
+  p50 is 37.482ms versus 426.470ms. Global/lexical/hybrid and reopened targets still miss <15ms.
+  Backfill took 1296.317ms in one sample and added 44.11MiB to the encrypted fixture.
+- [x] Workspace check, 168 Rust tests, format check and all-target Clippy with -D warnings passed.
+  Frontend check had zero errors/warnings; all 56 tests and the ordinary SPA build passed.
+- [x] Five policy regressions, tracked-text/runes scans and whitespace checks passed with local
+  authorized subprocess/mock access. No external requests or new dependencies were needed.
+  k-016 preserves partition/subtype pitfalls; ADR-006 records the approved trade-off. No CLI flags,
+  environment settings or validation commands changed, so README perimeter remains unchanged.
+- [ ] Record the atomic implementation commit and promote remaining latency work for planning.
+
+### Remaining Limits ([90.3])
+
+- Only the observed warm first filtered semantic page meets <15ms among substantive vector cases.
+  Its reopened median is 34.848ms; second filtered page warm median is 16.099ms. Global semantic,
+  FTS ranking and hybrid calls still miss the target. Exact tie/deep-page fallback remains slower.
+- The duplicate index costs encrypted disk and ingestion work; peak migration WAL/disk usage and
+  production ingestion/memory were not measured. Older writers must not write the v5 database.
+- RSS measurements include allocator retention after synthetic seeding; cache_size is a soft
+  per-connection target. No resident-cache bound, OS-cold measurement or UI/IPC performance claim.
+- No push, release/tag, hosted CI, real accounts/providers, AI calls or model downloads occurred.
 
 ---
 
@@ -660,7 +730,7 @@ Registered 2026-10-31 from post-[04.5] gap analysis. Each task requires its own 
 - **Outcome:** All cases return 200 rows; lexical-common/filter warm p50 is 39.950/34.502ms.
   The <15ms target remains unmet, and corrected account-vector ranking is slower. See [90.3].
 
-### [90.3] Account-Partitioned Search Optimization — `READY FOR PLANNING`
+### [90.3] Account-Partitioned Search Optimization — `RUNNING`
 - **Evidence:** [90.2] semantic-filtered/hybrid-filtered warm p50 is 380.273/426.470ms with
   complete 200-row pages; common lexical remains above <15ms.
 - **Scope:** Evaluate account partitioning/indexing and remaining FTS ranking cost, with

@@ -256,3 +256,105 @@ reopened connections retain the OS cache. Native frame timing and production mem
 not remeasured in [90.2]. No real accounts, providers, model downloads or AI calls were used.
 The user explicitly permitted build-package downloads to restore a missing disposable Linux
 sysroot; these were extracted locally without installing system packages.
+
+
+## Account-partitioned index follow-up ([90.3])
+
+Recorded on 2026-10-31 following the separately approved v5 migration plan. Raw samples:
+[search-100k-partitioned.csv](search-100k-partitioned.csv). The existing reproduction command
+runs the expanded benchmark; no new flags, environment variables or dependencies are needed.
+Compiler/host, release profile, vector generator, SQLCipher/SQLite/sqlite-vec versions and the
+original 100k equal-account fixture remain the same. Final samples were collected after Rust
+and frontend compilation finished. The timing changes are sequential shared-host observations,
+not a randomized controlled experiment.
+
+Migration v5 retains authoritative `vec_messages` and adds derived `vec_messages_by_account`
+with an opaque text account partition key. Backfill only live messages; maintain replacements
+and membership changes transactionally. Filtered vec0 KNN prunes partitions before top-k and
+retains the existing exact ID tie/deep-page fallback. Global search still uses the original
+table. RRF formula/window sizes, tokenizer semantics, IPC and core traits are unchanged.
+No approximate neighbors, result cache or reduced candidate coverage was introduced. Older
+writers must not write a v5 database because they do not maintain its derived index.
+
+The fixture constructs a synthetic v4 database by removing v5 additions from an otherwise
+empty new database, then populating the original messages/vectors. It never downgrades a user
+database. The timed migration transaction (including commit, excluding the subsequent WAL
+checkpoint) indexed 100,000 vectors in **1296.317ms** in one observed run. After checkpoints,
+the main file grew from 216,391,680 to 262,643,712 bytes: **44.11MiB additional space** (about
+21.4%). The v4 fixture is one 4096-byte page larger than the [90.2] fixture due to construction
+metadata. Peak migration WAL/disk usage, real-mail ingestion overhead and startup distributions
+were not measured. Regression tests force a failure after backfill to verify schema/data rollback.
+
+### Cache and query-component profile
+
+`PRAGMA cache_size=-65536` now sets a **64MiB soft target per connection**, replacing SQLite's
+usual 2MiB target. This does not cap process RSS. Encrypted WAL, synchronous NORMAL, foreign
+keys, busy timeout and in-memory temporary storage retain their prior settings. There is no
+plaintext disk cache, extra unsafe code, new FFI or change to the SQLCipher key boundary.
+
+The benchmark records eight component queries per size (first query, two warmups, five samples)
+on a fresh connection; the table below uses the last five medians. Global vector SQL requests
+201 candidates directly from vec0; FTS ranks 200 rowids with deterministic ties; hydration reads
+200 summaries without full metadata fusion. Components are isolated lower-level work, not
+an additive decomposition of the complete repository call. Raw profile rows are CSV comments.
+
+| Cache target | Global vector top-k median ms | FTS ranking median ms | Summary read median ms |
+|---|---:|---:|---:|
+| 2MiB | 105.391 | 30.491 | 0.015 |
+| 16MiB | 107.362 | 33.526 | 0.014 |
+| 64MiB | 42.751 | 30.280 | 0.014 |
+
+This controlled cache-size comparison is consistent with avoiding repeated encrypted vector
+page reads; page-cache miss counters and hardware/crypto counters were not measured. FTS
+ranking remains substantial CPU/query work; cached summary reads alone do not explain it.
+The 64MiB target increases the available page-cache budget by 62MiB per connection. RSS was
+about 79.5–79.6MiB across profile phases and 79.62MiB at benchmark completion. These process
+observations include fixture seeding, migration, allocator retention and oracle construction;
+sequential RSS staying flat **does not establish zero incremental cache memory cost** for a
+fresh application. No isolated per-connection resident-cache or production memory claim is made.
+
+### Complete search calls
+
+Original cases retain five reopened queries, five warmups and 30 timed warm queries with
+200-row pages. The independent exact-neighbor oracle, lexical content checks, account
+isolation, uniqueness and complete-result assertions remain outside the timer. The original
+13 cases are comparable with [90.2]. Four additional cases follow them: a second account page,
+then a separate sparse phase adding 31 vectors/messages and an empty account. That phase has
+100,031 messages, with 31 versus 25,000 vectors per sparse/large account (about 806:1).
+The sparse first page returns 20, the second returns all 11 remaining rows and the empty
+account returns zero; those smaller complete results are **not** 200-row latency improvements.
+This tests account-size skew, not a realistic dominant-mailbox distribution.
+
+| Case | Warm p50 ms | Warm p95 ms | Reopened p50 ms | Rows returned |
+|---|---:|---:|---:|---:|
+| Lexical-rare | 0.902 | 1.016 | 5.736 | 200 |
+| Lexical-common | 33.704 | 36.114 | 38.276 | 200 |
+| Lexical-filtered | 25.718 | 26.569 | 34.917 | 200 |
+| Lexical-page2 | 33.571 | 35.004 | 39.064 | 200 |
+| Semantic-rare | 45.435 | 50.075 | 127.099 | 200 |
+| Semantic-common | 43.650 | 46.313 | 113.012 | 200 |
+| Semantic-filtered | 12.041 | 12.928 | 34.848 | 200 |
+| Semantic-page2 | 60.230 | 64.414 | 155.202 | 200 |
+| Hybrid-rare | 44.129 | 47.184 | 119.919 | 200 |
+| Hybrid-common | 77.060 | 83.450 | 150.338 | 200 |
+| Hybrid-filtered | 37.482 | 38.495 | 65.696 | 200 |
+| Hybrid-page2 | 92.601 | 97.397 | 167.118 | 200 |
+| Lexical-empty-inbox | 0.354 | 0.408 | 0.981 | 200 |
+| Semantic-filtered-page2 | 16.099 | 16.983 | 39.280 | 200 |
+| Semantic-sparse | 0.145 | 0.335 | 1.048 | 20 |
+| Semantic-sparse-page2 | 0.152 | 0.190 | 1.105 | 11 |
+| Semantic-empty-account | 0.012 | 0.017 | 0.152 | 0 |
+
+Warm filtered semantic p50/p95 improved from 380.273/391.899ms to **12.041/12.928ms** with
+the same exact 200 neighbors. Filtered hybrid p50 improved from 426.470ms to **37.482ms**;
+global semantic-common from 109.576ms to 43.650ms; hybrid-common from 153.382ms to 77.060ms.
+Common/filter lexical p50 changed from 39.950/34.502ms to 33.704/25.718ms.
+
+**The full <15ms target is still unmet.** Only the observed warm first filtered semantic
+page meets it among the substantive vector workloads. Its reopened median is 34.848ms and
+the second filtered page warm median is 16.099ms. Global scans, FTS ranking and complete hybrid
+queries need further work. Oversized ties and deep pages intentionally use the slower exact
+fallback; their correctness is covered separately, without claiming these distributions apply.
+These timings still exclude embeddings, IPC and debounce; reopened is not OS-cold. Native
+frame timing and production memory were not remeasured. Further latency work requires a
+separately approved [90.4] plan rather than claiming the release performance target complete.

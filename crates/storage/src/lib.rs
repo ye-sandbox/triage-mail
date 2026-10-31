@@ -194,3 +194,6 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod partition_tests;

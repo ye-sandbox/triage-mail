@@ -591,18 +591,21 @@ fn semantic_large_ties_and_deep_pages_survive_vec0_k_limit() {
         limit: 4,
         offset: 0,
     };
-    for offset in [0, 4000, 4096] {
-        let rows = store
-            .search(&HybridQuery {
-                offset,
-                ..query.clone()
-            })
-            .unwrap();
-        assert_eq!(
-            rows.iter().map(|r| r.id.clone()).collect::<Vec<_>>(),
-            (offset..offset + 4)
-                .map(|id| format!("tie-{id:04}"))
-                .collect::<Vec<_>>()
-        );
+    for account in [None, Some("a".to_string())] {
+        for offset in [0, 4000, 4096] {
+            let rows = store
+                .search(&HybridQuery {
+                    offset,
+                    account_filter: account.clone(),
+                    ..query.clone()
+                })
+                .unwrap();
+            assert_eq!(
+                rows.iter().map(|r| r.id.clone()).collect::<Vec<_>>(),
+                (offset..offset + 4)
+                    .map(|id| format!("tie-{id:04}"))
+                    .collect::<Vec<_>>()
+            );
+        }
     }
 }

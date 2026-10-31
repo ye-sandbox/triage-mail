@@ -91,12 +91,12 @@ fn semantic_ids(conn: &Connection, query: &HybridQuery) -> Result<Vec<String>, S
     let end = query.limit + query.offset;
     // INVARIANT: vec0 0.1.9 caps k at 4096. Exact ranking also handles arbitrarily
     // large distance-tie groups, so page membership never depends on a truncated tie.
-    if query.account_filter.is_some() || end >= 4096 {
+    if end >= 4096 {
         return exact_semantic_ids(conn, query, &bytes);
     }
     let mut k = end + 1;
     loop {
-        let mut rows = knn_candidates(conn, &bytes, k)?;
+        let mut rows = knn_candidates(conn, &bytes, k, query.account_filter.as_deref())?;
         rows.sort_by(|a, b| a.1.total_cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
         let complete = rows.len() < k || rows[end - 1].1 < rows[k - 1].1;
         if complete {
@@ -129,15 +129,19 @@ fn knn_candidates(
     conn: &Connection,
     bytes: &[u8],
     k: usize,
+    account: Option<&str>,
 ) -> Result<Vec<(String, f64)>, StorageError> {
-    let mut stmt = conn
-        .prepare_cached(
-            "SELECT message_id, distance FROM vec_messages
-         WHERE embedding_int8 MATCH vec_int8(?1) AND k=?2",
-        )
-        .map_err(query_error)?;
+    // INVARIANT: vec0 prunes account partitions before top-k, never after truncation.
+    let sql = if account.is_some() {
+        "SELECT message_id,distance FROM vec_messages_by_account
+         WHERE embedding_int8 MATCH vec_int8(?1) AND k=?2 AND account_id=?3"
+    } else {
+        "SELECT message_id,distance FROM vec_messages
+         WHERE embedding_int8 MATCH vec_int8(?1) AND k=?2 AND ?3 IS NULL"
+    };
+    let mut stmt = conn.prepare_cached(sql).map_err(query_error)?;
     let rows = stmt
-        .query_map(rusqlite::params![bytes, k as i64], |row| {
+        .query_map(rusqlite::params![bytes, k as i64, account], |row| {
             Ok((row.get(0)?, row.get(1)?))
         })
         .map_err(query_error)?;

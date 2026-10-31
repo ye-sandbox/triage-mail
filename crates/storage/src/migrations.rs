@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use crate::{FtsTokenizerMode, StorageError};
 
 /// Current database schema version.
-pub const CURRENT_SCHEMA_VERSION: u32 = 4;
+pub const CURRENT_SCHEMA_VERSION: u32 = 5;
 
 /// Executes database schema migrations idempotently.
 pub struct SchemaMigrator {
@@ -65,6 +65,11 @@ impl SchemaMigrator {
             applied_count += 1;
         }
 
+        if current_version < 5 {
+            self.apply_v5(&tx)?;
+            applied_count += 1;
+        }
+
         tx.commit()
             .map_err(|e| StorageError::Migration(format!("failed to commit migration tx: {e}")))?;
 
@@ -89,6 +94,48 @@ impl SchemaMigrator {
         .map_err(|e| StorageError::Migration(format!("failed to record migration v{version}: {e}")))?;
 
         Ok(())
+    }
+
+    fn apply_v5(&self, tx: &rusqlite::Transaction<'_>) -> Result<(), StorageError> {
+        // INVARIANT: This is a derived index, not a replacement for authoritative vec_messages.
+        // Backfill and membership triggers commit with the schema version or roll back together.
+        // INVARIANT: Trigger VALUES wraps the scalar subquery in vec_int8 so SQLite's
+        // UPDATE materialization cannot strip the int8 subtype. Partition keys require
+        // delete/reinsert; sqlite-vec 0.1.9 does not support updating them in place.
+        tx.execute_batch(
+            "CREATE VIRTUAL TABLE vec_messages_by_account USING vec0(
+                message_id TEXT PRIMARY KEY,
+                account_id TEXT PARTITION KEY,
+                embedding_int8 int8[384] distance_metric=cosine
+             );
+             INSERT INTO vec_messages_by_account(message_id,account_id,embedding_int8)
+                SELECT v.message_id,m.account_id,vec_int8(v.embedding_int8)
+                FROM vec_messages v JOIN messages m ON m.id=v.message_id;
+             CREATE TRIGGER messages_vector_insert AFTER INSERT ON messages
+             WHEN EXISTS (SELECT 1 FROM vec_messages WHERE message_id=new.id) BEGIN
+                INSERT INTO vec_messages_by_account(message_id,account_id,embedding_int8)
+                VALUES(new.id,new.account_id,vec_int8((SELECT embedding_int8
+                    FROM vec_messages WHERE message_id=new.id)));
+             END;
+             CREATE TRIGGER messages_vector_delete AFTER DELETE ON messages BEGIN
+                DELETE FROM vec_messages_by_account WHERE message_id=old.id;
+             END;
+             CREATE TRIGGER messages_vector_account BEFORE UPDATE OF account_id ON messages
+             WHEN old.account_id != new.account_id BEGIN
+                DELETE FROM vec_messages_by_account WHERE message_id=old.id;
+             END;
+             CREATE TRIGGER messages_vector_account_insert AFTER UPDATE OF account_id ON messages
+             WHEN old.account_id != new.account_id AND
+                 EXISTS (SELECT 1 FROM vec_messages WHERE message_id=new.id) BEGIN
+                INSERT INTO vec_messages_by_account(message_id,account_id,embedding_int8)
+                VALUES(new.id,new.account_id,vec_int8((SELECT embedding_int8
+                    FROM vec_messages WHERE message_id=new.id)));
+             END;",
+        )
+        .map_err(|e| {
+            StorageError::Migration(format!("failed to create account vector index: {e}"))
+        })?;
+        self.record_migration(tx, 5, "005_account_partitioned_vectors")
     }
 
     fn apply_v4(&self, tx: &rusqlite::Transaction<'_>) -> Result<(), StorageError> {
@@ -276,7 +323,7 @@ mod tests {
 
         let migrator = SchemaMigrator::new(FtsTokenizerMode::Unicode61RemoveDiacritics);
         let applied_first = migrator.migrate(&mut conn).expect("first migration");
-        assert_eq!(applied_first, 4);
+        assert_eq!(applied_first, 5);
 
         let applied_second = migrator.migrate(&mut conn).expect("second migration");
         assert_eq!(applied_second, 0, "subsequent migration must be a no-op");
@@ -297,5 +344,107 @@ mod tests {
         assert!(tables.contains(&"tags".to_string()));
         assert!(tables.contains(&"messages_fts".to_string()));
         assert!(tables.contains(&"vec_messages".to_string()));
+    }
+
+    fn v4_fixture() -> Connection {
+        let mut conn = open_in_memory_connection(&DatabaseKey::from_bytes([82; 32])).unwrap();
+        seed_v4(&mut conn);
+        conn
+    }
+
+    fn seed_v4(conn: &mut Connection) {
+        let tx = conn.transaction().unwrap();
+        let migrator = SchemaMigrator::new(Default::default());
+        tx.execute_batch(
+            "CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,applied_at_epoch_ms INTEGER NOT NULL);",
+        )
+        .unwrap();
+        migrator.apply_v1(&tx).unwrap();
+        migrator.apply_v2(&tx).unwrap();
+        migrator.apply_v3(&tx).unwrap();
+        migrator.apply_v4(&tx).unwrap();
+        tx.execute_batch("INSERT INTO accounts VALUES ('a','a@example.com','synthetic',0,0);
+          INSERT INTO messages(id,account_id,folder,uid,subject,sender,recipients,
+          received_at_epoch_ms,raw_headers,created_at_epoch_ms)
+          VALUES ('live','a','INBOX',1,'synthetic','sender@example.com','reader@example.com',0,'',0);").unwrap();
+        for id in ["live", "orphan"] {
+            tx.execute(
+                "INSERT INTO vec_messages VALUES (?1,vec_int8(?2))",
+                rusqlite::params![id, vec![3u8; 384]],
+            )
+            .unwrap();
+        }
+        tx.commit().unwrap();
+    }
+
+    #[test]
+    fn v5_backfills_only_live_vectors_and_is_idempotent() {
+        let mut conn = v4_fixture();
+        let migrator = SchemaMigrator::new(Default::default());
+        assert_eq!(migrator.migrate(&mut conn).unwrap(), 1);
+        let row: (String, String) = conn
+            .query_row(
+                "SELECT message_id,account_id FROM vec_messages_by_account",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(row, ("live".into(), "a".into()));
+        assert_eq!(migrator.migrate(&mut conn).unwrap(), 0);
+    }
+
+    #[test]
+    fn failed_v5_rolls_back_backfill_and_schema_version() {
+        let mut conn = v4_fixture();
+        conn.execute_batch(
+            "CREATE TRIGGER messages_vector_account AFTER UPDATE ON messages BEGIN SELECT 1; END;",
+        )
+        .unwrap();
+        let migrator = SchemaMigrator::new(Default::default());
+        assert!(migrator.migrate(&mut conn).is_err());
+        let version: u32 = conn
+            .query_row("SELECT max(version) FROM schema_migrations", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 4);
+        let tables: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE name='vec_messages_by_account'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(tables, 0);
+        conn.execute_batch("DROP TRIGGER messages_vector_account")
+            .unwrap();
+        assert_eq!(migrator.migrate(&mut conn).unwrap(), 1);
+    }
+
+    #[test]
+    fn encrypted_v4_upgrade_retains_partition_search_after_reopen() {
+        use crate::{HybridQuery, MigrationRunner, SearchEngine, SearchMode, SqliteMailStore};
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("upgrade.db");
+        let key = DatabaseKey::from_bytes([83; 32]);
+        let mut conn = crate::connection::open_encrypted_connection(&path, &key).unwrap();
+        seed_v4(&mut conn);
+        drop(conn);
+        let query = HybridQuery {
+            query_text: String::new(),
+            query_embedding_int8: Some(vec![3; 384]),
+            account_filter: Some("a".into()),
+            mode: SearchMode::Semantic,
+            limit: 10,
+            offset: 0,
+        };
+        for _ in 0..2 {
+            let store = SqliteMailStore::open(&path, &key, Default::default()).unwrap();
+            let rows = store.search(&query).unwrap();
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].id, "live");
+            assert_eq!(store.run_migrations().unwrap(), 0);
+        }
     }
 }

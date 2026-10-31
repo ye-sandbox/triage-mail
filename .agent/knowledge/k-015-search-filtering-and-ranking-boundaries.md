@@ -23,10 +23,10 @@ can instead cause repeated FTS MATCH point scans, which is substantially worse.
 
 ## Approved Solution
 
-- For account-filtered semantic queries, enumerate eligible messages using the existing
-  account index, CROSS JOIN point lookups into vec0, then order by exact cosine distance
-  and message ID before pagination. Messages without embeddings do not join. CROSS JOIN
-  fixes loop nesting; this preserves correctness but remains expensive at 25k vectors.
+- [90.2] used account-index enumeration and CROSS JOIN vector point lookups before exact
+  cosine/ID pagination. [90.3] migration v5 adds a derived account-partitioned vec0 index:
+  constrain its opaque account partition before KNN. Retain the scalar CROSS JOIN path for
+  deep pages/oversized ties. Missing embeddings do not join. See k-016 for maintenance.
 - For ordinary unfiltered queries, request top-(offset+limit+1). Expand when the boundary
   distance ties; use exact scalar ranking when k reaches 4096 or for deeper pages. Check
   candidate identities so orphan vectors cannot consume page slots. Do not access vec0
