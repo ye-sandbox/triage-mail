@@ -9,6 +9,7 @@ use vault::{SecretStore, VaultKey};
 use zeroize::Zeroizing;
 
 use crate::dto::*;
+use crate::onboarding::{self, AuthorizationSessions, IncomingAuthorization, NativeTokenExchange};
 use crate::remote::NativeRemoteMail;
 use crate::service::{DesktopService, IncomingCredentials, IpcError};
 use crate::worker::WorkerSupervisor;
@@ -18,6 +19,7 @@ pub struct RuntimeState {
     service: OnceCell<Arc<DesktopService>>,
     workers: OnceCell<Arc<WorkerSupervisor>>,
     subscriptions: Mutex<HashMap<String, tokio::task::JoinHandle<()>>>,
+    authorizations: AuthorizationSessions,
 }
 
 impl RuntimeState {
@@ -27,6 +29,7 @@ impl RuntimeState {
             service: OnceCell::new(),
             workers: OnceCell::new(),
             subscriptions: Mutex::new(HashMap::new()),
+            authorizations: AuthorizationSessions::default(),
         }
     }
 
@@ -153,6 +156,38 @@ pub async fn cmd_add_account(
 }
 
 #[tauri::command]
+pub async fn cmd_authorize_account(
+    state: State<'_, RuntimeState>,
+    window: tauri::WebviewWindow,
+    config: AccountConfigDto,
+    authorization: IncomingAuthorization,
+    on_ready: Channel<()>,
+) -> Result<String, IpcError> {
+    let (_lease, cancel) = state.authorizations.begin(window.label())?;
+    // INVARIANT: Enable UI cancellation only after the native session exists.
+    on_ready.send(()).map_err(|_| IpcError::RemoteUnavailable)?;
+    let service = state.initialize(None).await?;
+    let id = onboarding::authorize(
+        service.clone(),
+        config,
+        authorization,
+        cancel,
+        onboarding::open_browser,
+        &NativeTokenExchange,
+    )
+    .await?;
+    if let Some(workers) = state.workers.get() {
+        workers.start_account(service.account(id.clone()).await?)?;
+    }
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn cmd_cancel_authorization(state: State<'_, RuntimeState>, window: tauri::WebviewWindow) {
+    state.authorizations.cancel(window.label());
+}
+
+#[tauri::command]
 pub async fn cmd_search_messages(
     state: State<'_, RuntimeState>,
     query: SearchQueryDto,
@@ -245,6 +280,8 @@ pub fn run() {
             cmd_unlock_vault,
             cmd_list_accounts,
             cmd_add_account,
+            cmd_authorize_account,
+            cmd_cancel_authorization,
             cmd_search_messages,
             cmd_triage_action,
             cmd_get_message_body,
@@ -254,6 +291,7 @@ pub fn run() {
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 let state = window.state::<RuntimeState>();
+                state.authorizations.cancel(window.label());
                 if let Ok(mut subscriptions) = state.subscriptions.lock() {
                     if let Some(task) = subscriptions.remove(window.label()) {
                         task.abort();

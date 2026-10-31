@@ -2,6 +2,7 @@
 //! Desktop-only orchestration. Core crates remain independent of Tauri.
 pub mod dto;
 pub mod events;
+pub mod onboarding;
 pub mod remote;
 #[cfg(feature = "native-runtime")]
 pub mod runtime;

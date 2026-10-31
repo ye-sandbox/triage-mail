@@ -7,6 +7,70 @@
 
 ## Active Task
 
+### 📌 Task [04.6]: Vault Unlock & Account Onboarding UI
+
+- **Description:** Make desktop startup usable end-to-end with vault unlock, account listing,
+  and explicit account onboarding for App Password, Public PKCE, BYO OAuth, and Proton Bridge.
+- **Systems Involved:** Desktop Svelte UI and native IPC; existing headless authentication helpers.
+- **Action Type:** Source code changes.
+- **Status:** RUNNING
+- **Next Task:** [04.7] Settings & AI Opt-in UI (`BACKLOG`).
+
+### Approved Plan
+User approved on 2026-10-31. The required skill was located and read at
+`/home/<user>/github/ye-sandbox/agent-skills/skills/svelte-dev/SKILL.md`.
+1. Trace startup, vault initialization, account DTOs and OAuth helpers; resolve the missing
+   mandatory `svelte-dev` skill before authoring components.
+2. Add accessible vault unlock, account listing and onboarding screens using typed IPC.
+   Keep credentials in transient form inputs only, clear them after submission/teardown,
+   and expose fixed redacted errors without browser persistence or logging.
+3. Reuse account IPC for App Password and loopback-only Proton Bridge. Complete Public PKCE
+   and BYO OAuth through native-owned authorization state, loopback callback and vault storage;
+   record any necessary additive IPC contract before implementation. Authorization and token
+   endpoint requests require explicit user initiation and configured provider endpoints.
+4. Add synthetic local regressions for startup states, credential cleanup, wire contracts,
+   OAuth cancellation/state validation and network consent. Run the full Definition of Done,
+   frontend formatting/build and UI verification, respecting the circuit breaker.
+5. Record evidence and relevant knowledge, create an atomic Conventional Commit, then promote
+   [04.7]. No push, release or tag.
+
+### Acceptance Criteria
+- [x] Startup resolves vault/account state before opening the inbox; locked and failed states
+  offer explicit recovery, and account management remains reachable from the inbox.
+- [x] App Password, loopback Proton Bridge, Public PKCE and BYO OAuth use typed native commands.
+  Credentials remain transient in UI inputs and are stored only through the native vault.
+- [x] Native OAuth owns PKCE, callback validation, token exchange and per-window cancellation;
+  a readiness acknowledgement prevents early cancellation races. Errors are fixed/redacted.
+- [x] Synthetic regression tests, full workspace validation and frontend validation pass.
+
+### Validation ([04.6])
+- Rust workspace compilation, tests (151 passed), formatting and Clippy (`-D warnings`): passed.
+- Frontend check (zero errors/warnings), tests (47 passed), Prettier and SPA build: passed.
+- Regressions cover startup races, vault recovery, duplicate submissions, transient credential
+  clearing on submit/mode change/teardown, all auth wire envelopes, native readiness, late
+  acknowledgements, cancellation reconciliation, OAuth state rejection, vault staging cleanup,
+  browser failures and both OAuth credential variants. Network fixtures are loopback-only.
+- Browser QA used a removed temporary fixture with the actual components. Verified unlock,
+  first-account confirmation, explicit OAuth pending/cancel states and cleared credential
+  inputs. At 390x844 the document had no horizontal overflow; desktop layout was also checked.
+- Restored the authorized temporary native sysroot from hash-verified Ubuntu packages without
+  installing system packages. Located the existing Rust toolchain/cache in the older profile;
+  Cargo stayed offline. No live mail provider, OAuth endpoint, model or AI service was contacted.
+- Added additive OAuth commands/readiness channel to `NOTES.md`; existing commands, core traits
+  and SQLCipher schema remain unchanged. Reused cached reqwest/url versions in the desktop crate.
+- Recorded Svelte cleanup/default-value and native readiness constraints in `k-010`.
+- Svelte runes invariant and tracked/new-file email/high-signal secret scan: passed with zero
+  candidates. `git diff --check` passed. No CLI flags, environment variables or documented
+  validation commands changed; README synchronization is not required.
+- Live-provider authorization and native visual QA remain unverified. Automatic OAuth token
+  refresh remains unimplemented and is disclosed in the onboarding UI. Abrupt process exit can
+  leave an unused encrypted staging entry in vault (see `k-010`). No push, release or tag.
+- Implementation commit and final task promotion are pending.
+
+---
+
+## Previous Task Evidence
+
 ### 📌 Task [04.5]: Desktop Security Boundary Audit and Targeted Hardening
 
 - **Description:** Audit email rendering, attachment downloads, native IPC input validation, credential isolation, and explicit network-action gating. Reproduce confirmed defects with synthetic local fixtures and apply narrowly scoped fixes preserving active contracts.

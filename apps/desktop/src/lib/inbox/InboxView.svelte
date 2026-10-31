@@ -15,11 +15,13 @@
 	let {
 		inbox,
 		connected,
-		readerTransport
+		readerTransport,
+		manageAccounts
 	}: {
 		inbox: InboxController;
 		connected: boolean;
 		readerTransport?: ReaderTransport;
+		manageAccounts?: () => void;
 	} = $props();
 	let query = $state('');
 	let mode = $state<SearchMode>('Lexical');
@@ -151,6 +153,11 @@
 			<span class="text-xs text-[var(--secondary)]"
 				>{inbox.mutating ? 'Saving…' : selected ? 'Selected message' : 'Select a message'}</span
 			>
+			{#if manageAccounts}<button
+					type="button"
+					class="rounded px-2 py-1 text-sm text-[var(--accent)]"
+					onclick={manageAccounts}>Accounts</button
+				>{/if}
 		</div>
 		{#if !connected}<div
 				class="border-b border-[var(--separator)] bg-[var(--surface)] px-6 py-3 text-sm text-[var(--secondary)]"
