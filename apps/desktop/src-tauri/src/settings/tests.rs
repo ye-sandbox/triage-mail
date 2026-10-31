@@ -216,3 +216,30 @@ async fn explicit_summary_sends_only_selected_stored_content_to_loopback() {
     assert!(!request.contains("private-header-not-for-summary"));
     assert!(!request.contains("html-not-for-summary"));
 }
+
+#[tokio::test]
+async fn experimental_semantic_search_persists_in_settings() {
+    let service = fixture();
+    let initial = service.get_settings().await.unwrap();
+    assert!(!initial.experimental_semantic_search);
+
+    service
+        .set_experimental_semantic_search(true)
+        .await
+        .unwrap();
+    let updated = service.get_settings().await.unwrap();
+    assert!(updated.experimental_semantic_search);
+
+    // Saving AI settings preserves the experimental toggle
+    let ai = AiSettings::default();
+    service.save_settings(ai, input("")).await.unwrap();
+    let preserved = service.get_settings().await.unwrap();
+    assert!(preserved.experimental_semantic_search);
+
+    service
+        .set_experimental_semantic_search(false)
+        .await
+        .unwrap();
+    let disabled = service.get_settings().await.unwrap();
+    assert!(!disabled.experimental_semantic_search);
+}

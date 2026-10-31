@@ -70,6 +70,7 @@ afterEach(() => vi.useRealTimers());
 describe('inbox requests and synchronization', () => {
 	it('ignores stale results and forwards the contracted search mode', async () => {
 		const { inbox, search } = setup();
+		inbox.setExperimentalSemanticSearch(true);
 		const old = deferred<MessageRowDto[]>();
 		search.mockReturnValueOnce(old.promise).mockResolvedValueOnce([row(2)]);
 		const first = inbox.search('old', 'Lexical');
@@ -141,6 +142,29 @@ describe('inbox requests and synchronization', () => {
 		search.mockRejectedValueOnce('sensitive provider response');
 		await inbox.search('test', 'Semantic');
 		expect(inbox.error).toBe('Mail could not be loaded. Please try again.');
+		inbox.dispose();
+	});
+	it('surfaces embedding failure telemetry in sync status', async () => {
+		let handler!: (event: SyncProgressEvent) => void;
+		const inbox = new InboxController({
+			triage: async () => {},
+			search: async () => [],
+			subscribe: async (cb) => {
+				handler = cb;
+				return () => {};
+			}
+		});
+		await inbox.connect();
+		expect(inbox.syncStatus).toBe('Up to date');
+		handler({
+			account_id: 'acct-1',
+			state: 'Idle',
+			new_messages_count: 5,
+			triage_alerts: [],
+			embedding_errors_count: 2
+		});
+		expect(inbox.totalEmbeddingErrors).toBe(2);
+		expect(inbox.syncStatus).toBe('Up to date (2 indexing warnings)');
 		inbox.dispose();
 	});
 });
@@ -225,7 +249,18 @@ describe('inbox toolbar', () => {
 			limit: PAGE_SIZE,
 			offset: 0
 		});
+		// Match selector is hidden by default when experimental semantic search is disabled
+		expect(target.querySelector('select')).toBeNull();
+		inbox.setExperimentalSemanticSearch(true);
+		flushSync();
 		const select = target.querySelector<HTMLSelectElement>('select')!;
+		expect(select).not.toBeNull();
+		const options = Array.from(select.options).map((opt) => opt.textContent);
+		expect(options).toEqual([
+			'Words',
+			'Semantic projection (Experimental)',
+			'Words + semantic projection (Experimental)'
+		]);
 		select.value = 'Hybrid';
 		select.dispatchEvent(new Event('change', { bubbles: true }));
 		flushSync();

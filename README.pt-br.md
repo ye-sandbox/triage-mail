@@ -23,7 +23,7 @@ Todas as credenciais, corpos de mensagens e índices vetoriais residem exclusiva
 - **Autenticação Multimodo Transparente:** Suporte a Senhas de App (*App Passwords*), OAuth2 PKCE público, credenciais BYO OAuth fornecidas pelo usuário (`client_id`/`client_secret` salvos no cofre do SO), IMAP TLS 1.3 padrão e Proton Mail Bridge local através de um conector `ImapConnector` agnóstico.
 - **Pipeline de IA Local-First em 3 Camadas:**
   - *Camada 1 (Determinística, Custo Zero):* Regex e heurísticas nativas em Rust para extração imediata de códigos 2FA/OTP, Boletos FEBRABAN (com extração determinística de valor em R\$ e data de vencimento), chaves/payloads Pix, metadados de NF-e, códigos de rastreio, `List-Unsubscribe` + cancelamento em 1 clique RFC 8058 (`List-Unsubscribe-Post`) e categorização automática (`Financeiro`, `Segurança`, `Newsletter`, `Pessoal`).
-  - *Camada 2 (Embeddings Locais em CPU):* Indexação semântica em background utilizando modelos ONNX quantizados (`all-MiniLM-L6-v2` / `bge-small`) via `fastembed-rs` / `ort` baixados sob demanda no diretório de dados do usuário.
+  - *Camada 2 (Projeção Semântica Experimental em CPU Local):* Projeções determinísticas de hash de tokens e n-grams (`int8[384]`) inicializadas a partir de cabeçalhos de modelos ou constantes offline para `sqlite-vec`; inferência neural com modelos ONNX está planejada para a v0.2.
   - *Camada 3 (LLM Generativo Opcional):* Resumos sob demanda via Ollama local (`http://127.0.0.1:11434`) ou provedores Cloud explícitos via BYOK (*Bring Your Own Key*).
 - **Segurança Zero-Knowledge & Renderização Isolada:** Cofre do sistema operacional (`keyring` + cofre fallback `argon2`), armazenamento completo em SQLCipher AES-256, política de anexos sob demanda (*Lazy Attachments* via `IMAP BODY.PEEK`) e sanitização estrita de HTML (`DOMPurify` em `<iframe sandbox="">` com CSS base normalizado para modo escuro e bloqueio padrão de pixels de rastreamento).
 
@@ -37,7 +37,7 @@ flowchart TD
     TauriCore --> MailEngine["crates/mail-engine (async-imap, TLS 1.3, OAuth2 PKCE, mail-parser)"]
     TauriCore --> Storage["crates/storage (SQLite WAL + SQLCipher + FTS5 + sqlite-vec)"]
     TauriCore --> Vault["crates/vault (OS Keyring + Argon2id + AES-GCM)"]
-    TauriCore --> TriageAI["crates/triage-ai (Tier 1 Regex, Tier 2 ONNX, Tier 3 Ollama/BYOK)"]
+    TauriCore --> TriageAI["crates/triage-ai (Camada 1 Regex, Camada 2 Projeção Semântica, Camada 3 Ollama/BYOK)"]
     MailEngine --> Vault
     Storage --> Vault
     MailEngine <-->|"IMAP IDLE / BODY.PEEK"| Providers["Servidores IMAP & Proton Bridge Local (127.0.0.1)"]
@@ -84,7 +84,7 @@ As credenciais de contas e chaves de criptografia do banco são armazenadas excl
 | :--- | :--- | :--- | :--- |
 | `RUST_LOG` | Diretivas de filtro de logs para as crates Rust | `info,triage_mail=debug,mail_engine=info,storage=info` | No |
 | `TRIAGE_DB_PATH` | Caminho alternativo do banco SQLCipher para desenvolvimento | `./.agent/scratch/dev-triage.db` | No |
-| `TRIAGE_EMBEDDING_MODEL` | Modelo ONNX local utilizado na Camada 2 de embeddings | `all-MiniLM-L6-v2` | No |
+| `TRIAGE_EMBEDDING_MODEL` | Identificador de modelo para cache de artefatos da Camada 2 e resolução de seed | `all-MiniLM-L6-v2` | No |
 | `OLLAMA_BASE_URL` | Endpoint HTTP do Ollama local para resumos sob demanda (Camada 3) | `http://127.0.0.1:11434` | No |
 | `OLLAMA_MODEL` | Modelo padrão do Ollama local | `qwen2.5:3b` | No |
 | `PROTON_BRIDGE_HOST` | Endereço de loopback local para o Proton Mail Bridge IMAP | `127.0.0.1` | No |
@@ -113,7 +113,7 @@ cargo build --release --package triage-mail-desktop
 ├── crates/
 │   ├── mail-engine/          # Conector IMAP assíncrono, OAuth2 PKCE, IDLE Manager e MIME Parser
 │   ├── storage/              # SQLite WAL + SQLCipher, migrations, FTS5 e sqlite-vec
-│   ├── triage-ai/            # Camada 1 Regex (2FA/Boletos/Rastreio), Camada 2 ONNX e Camada 3 LLM
+│   ├── triage-ai/            # Camada 1 Regex (2FA/Boletos/Rastreio), Camada 2 Projeção Semântica e Camada 3 LLM
 │   └── vault/                # Integração com OS Keyring e criptografia Argon2id + AES-GCM
 ├── docs/
 │   └── adr/                  # Registros de Decisões Arquiteturais (decisions.md)

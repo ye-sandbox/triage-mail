@@ -11,6 +11,8 @@ export class InboxController {
 	syncStatus = $state('Connecting…');
 	query = $state('');
 	mode = $state<SearchMode>('Lexical');
+	experimentalSemanticSearch = $state(false);
+	totalEmbeddingErrors = $state(0);
 	revision = $state(0);
 	badgeRevision = $state(0);
 	mutating = $state(false);
@@ -89,8 +91,19 @@ export class InboxController {
 		if (!this.disposed && this.generation === 0) await this.search('', 'Lexical');
 	}
 
+	setExperimentalSemanticSearch(enabled: boolean) {
+		this.experimentalSemanticSearch = enabled;
+		if (!enabled && this.mode !== 'Lexical') {
+			this.mode = 'Lexical';
+			void this.search(this.query, 'Lexical');
+		}
+	}
+
 	async search(query: string, mode: SearchMode) {
 		const generation = ++this.generation;
+		if (!this.experimentalSemanticSearch && mode !== 'Lexical') {
+			mode = 'Lexical';
+		}
 		this.query = query;
 		this.mode = mode;
 		this.rows = [];
@@ -214,9 +227,15 @@ export class InboxController {
 
 	private onSync(event: SyncProgressEvent) {
 		if (this.disposed) return;
+		if (event.embedding_errors_count && event.embedding_errors_count > 0) {
+			this.totalEmbeddingErrors += event.embedding_errors_count;
+		}
 		const labels = {
 			Syncing: 'Syncing mail…',
-			Idle: 'Up to date',
+			Idle:
+				this.totalEmbeddingErrors > 0
+					? `Up to date (${this.totalEmbeddingErrors} indexing warning${this.totalEmbeddingErrors > 1 ? 's' : ''})`
+					: 'Up to date',
 			Retrying: 'Reconnecting…',
 			MutationPending: 'Saving changes…',
 			MutationFailed: 'Some changes need attention',
@@ -232,7 +251,7 @@ export class InboxController {
 	private errorMessage(error: unknown) {
 		// INVARIANT: Never display arbitrary IPC errors that could contain private account data.
 		if (error === 'EmbeddingUnavailable')
-			return 'Meaning search needs a local model. Choose Words to search without it.';
+			return 'Experimental semantic search needs a local model. Choose Words to search without it.';
 		if (error === 'VaultUnavailable') return 'Unlock your local vault to access mail.';
 		return 'Mail could not be loaded. Please try again.';
 	}

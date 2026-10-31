@@ -1,5 +1,10 @@
-//! Tier 2 Local CPU Embeddings (`fastembed-rs` / `ort` compatible contract) with on-demand
-//! model cache rooted at `$XDG_DATA_HOME/triage-mail/models` and symmetric `int8` scalar quantization.
+//! Tier 2 Experimental Local CPU Semantic Projection (`int8[384]` vector space) with on-demand
+//! model artifact caching rooted at `$XDG_DATA_HOME/triage-mail/models` and symmetric `int8` scalar quantization.
+//!
+//! NOTE: In v0.1, `LocalCpuEmbeddingProvider` computes deterministic token and character n-gram
+//! feature-hash projections (FNV1a hash seeded by cached model headers or offline constant), rather
+//! than neural ONNX runtime inference. True learned ONNX inference via `ort` / `fastembed-rs` is
+//! scheduled for v0.2.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -248,7 +253,11 @@ pub fn cosine_similarity_int8(a: &[i8], b: &[i8]) -> f32 {
     }
 }
 
-/// Tier 2 local CPU embedding provider with lazy on-demand cache management and offline fallback.
+/// Tier 2 experimental local CPU semantic projection provider with lazy on-demand cache
+/// management and offline fallback.
+///
+/// INVARIANT: In v0.1, vectors are produced via deterministic token and n-gram feature hashing
+/// rather than learned neural ONNX evaluation. True ONNX model evaluation is deferred to v0.2.
 pub struct LocalCpuEmbeddingProvider {
     cache_manager: ModelCacheManager,
     dimensions: usize,

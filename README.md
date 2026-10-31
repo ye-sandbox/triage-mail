@@ -23,7 +23,7 @@ All credentials, message bodies, and semantic indices reside exclusively on the 
 - **Transparent Multi-Mode Authentication:** Supports App Passwords, OAuth2 Public PKCE, user-supplied BYO OAuth (`client_id`/`client_secret` stored in the OS vault), standard IMAP TLS 1.3, and local Proton Mail Bridge behind an agnostic `ImapConnector`.
 - **3-Tier Local-First AI Pipeline:**
   - *Tier 1 (Deterministic, Zero Cost):* Native Rust regex and heuristics for instant extraction of 2FA/OTP codes, FEBRABAN Boletos (with deterministic BRL amount and due date extraction), Pix EMV/keys, NF-e metadata, package tracking numbers, `List-Unsubscribe` + RFC 8058 One-Click Unsubscribe (`List-Unsubscribe-Post`), and automatic categorization (`Financial`, `Security`, `Newsletter`, `Personal`).
-  - *Tier 2 (Local CPU Embeddings):* Background semantic indexing using quantized ONNX models (`all-MiniLM-L6-v2` / `bge-small`) via `fastembed-rs` / `ort` cached on demand in the user's data directory.
+  - *Tier 2 (Experimental Local CPU Semantic Projection):* Deterministic token and n-gram feature-hash projections (`int8[384]`) seeded from model headers or offline constants for `sqlite-vec`; learned neural ONNX model inference is planned for v0.2.
   - *Tier 3 (Optional Generative LLM):* On-demand thread summarization via local Ollama (`http://127.0.0.1:11434`) or explicit BYOK cloud providers.
 - **Zero-Knowledge Security & Safe Rendering:** OS Keyring integration (`keyring` + `argon2` fallback vault), full-database SQLCipher AES-256 storage, lazy attachment fetching (`IMAP BODY.PEEK` on demand), and strict HTML sanitization (`DOMPurify` inside `<iframe sandbox="">` with normalized dark-mode CSS and remote tracking pixels blocked by default).
 
@@ -37,7 +37,7 @@ flowchart TD
     TauriCore --> MailEngine["crates/mail-engine (async-imap, TLS 1.3, OAuth2 PKCE, mail-parser)"]
     TauriCore --> Storage["crates/storage (SQLite WAL + SQLCipher + FTS5 + sqlite-vec)"]
     TauriCore --> Vault["crates/vault (OS Keyring + Argon2id + AES-GCM)"]
-    TauriCore --> TriageAI["crates/triage-ai (Tier 1 Regex, Tier 2 ONNX, Tier 3 Ollama/BYOK)"]
+    TauriCore --> TriageAI["crates/triage-ai (Tier 1 Regex, Tier 2 Semantic Projection, Tier 3 Ollama/BYOK)"]
     MailEngine --> Vault
     Storage --> Vault
     MailEngine <-->|"IMAP IDLE / BODY.PEEK"| Providers["IMAP Servers & Local Proton Bridge (127.0.0.1)"]
@@ -84,7 +84,7 @@ Runtime credentials and database encryption keys are stored strictly in the oper
 | :--- | :--- | :--- | :--- |
 | `RUST_LOG` | Tracing filter directives for Rust crates | `info,triage_mail=debug,mail_engine=info,storage=info` | No |
 | `TRIAGE_DB_PATH` | Development override path for local SQLCipher database | `./.agent/scratch/dev-triage.db` | No |
-| `TRIAGE_EMBEDDING_MODEL` | Local ONNX embedding model identifier for Tier 2 indexing | `all-MiniLM-L6-v2` | No |
+| `TRIAGE_EMBEDDING_MODEL` | Model identifier for Tier 2 artifact caching and seed resolution | `all-MiniLM-L6-v2` | No |
 | `OLLAMA_BASE_URL` | Local Ollama HTTP endpoint for Tier 3 on-demand summaries | `http://127.0.0.1:11434` | No |
 | `OLLAMA_MODEL` | Default local Ollama model tag | `qwen2.5:3b` | No |
 | `PROTON_BRIDGE_HOST` | Local loopback address for Proton Mail Bridge IMAP | `127.0.0.1` | No |
@@ -113,7 +113,7 @@ cargo build --release --package triage-mail-desktop
 ├── crates/
 │   ├── mail-engine/          # Async IMAP, OAuth2 PKCE loopback, IDLE manager, RFC 5322 MIME parser
 │   ├── storage/              # SQLite WAL + SQLCipher, migrations, FTS5, and sqlite-vec
-│   ├── triage-ai/            # Tier 1 Regex (2FA/Boletos/Tracking), Tier 2 ONNX, Tier 3 LLM client
+│   ├── triage-ai/            # Tier 1 Regex (2FA/Boletos/Tracking), Tier 2 Semantic Projection, Tier 3 LLM client
 │   └── vault/                # OS Keyring integration and Argon2id + AES-GCM cryptography
 ├── docs/
 │   └── adr/                  # Architectural Decision Records (decisions.md)

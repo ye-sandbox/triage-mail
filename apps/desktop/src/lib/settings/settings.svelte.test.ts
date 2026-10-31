@@ -15,13 +15,17 @@ const defaults = (): Settings => ({
 	},
 	tokenizer: 'Unicode61RemoveDiacritics',
 	has_api_key: false,
-	model_cached: false
+	model_cached: false,
+	experimental_semantic_search: false
 });
 function fixture() {
 	const transport = {
 		get: vi.fn<SettingsTransport['get']>().mockResolvedValue(defaults()),
 		save: vi.fn<SettingsTransport['save']>().mockResolvedValue(),
 		tokenizer: vi.fn<SettingsTransport['tokenizer']>().mockResolvedValue(),
+		setExperimentalSemanticSearch: vi
+			.fn<SettingsTransport['setExperimentalSemanticSearch']>()
+			.mockResolvedValue(),
 		download: vi.fn<SettingsTransport['download']>().mockResolvedValue(),
 		summarize: vi
 			.fn<SettingsTransport['summarize']>()
@@ -151,4 +155,27 @@ it('keeps disabled AI offline and ignores late preparation after teardown', asyn
 	await tick();
 	expect(target.querySelector('button')).toBeNull();
 	expect(transport.summarize).not.toHaveBeenCalled();
+});
+
+it('toggles experimental semantic search setting explicitly', async () => {
+	const { target, transport } = fixture();
+	const component = mount(SettingsView, {
+		target,
+		props: { close: vi.fn(), transport }
+	});
+	await vi.waitFor(() =>
+		expect(
+			target.querySelector('section[aria-label="Experimental semantic search"]')
+		).not.toBeNull()
+	);
+	const checkbox = target.querySelector<HTMLInputElement>(
+		'section[aria-label="Experimental semantic search"] input[type=checkbox]'
+	)!;
+	expect(checkbox.checked).toBe(false);
+	checkbox.checked = true;
+	checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+	await vi.waitFor(() =>
+		expect(transport.setExperimentalSemanticSearch).toHaveBeenCalledWith(true)
+	);
+	await unmount(component);
 });

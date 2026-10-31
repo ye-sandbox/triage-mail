@@ -27,6 +27,7 @@ export type SyncProgressEvent = {
 	state: SyncState;
 	new_messages_count: number;
 	triage_alerts: unknown[];
+	embedding_errors_count?: number;
 };
 export interface InboxTransport {
 	triage(mutation: import('./triage').TriageMutation): Promise<void>;

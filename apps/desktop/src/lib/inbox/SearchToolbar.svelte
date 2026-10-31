@@ -8,7 +8,8 @@
 		refresh,
 		sidebarOpen = true,
 		busy = false,
-		disabled = false
+		disabled = false,
+		experimentalSemanticSearch = false
 	}: {
 		query?: string;
 		mode?: SearchMode;
@@ -17,6 +18,7 @@
 		sidebarOpen?: boolean;
 		busy?: boolean;
 		disabled?: boolean;
+		experimentalSemanticSearch?: boolean;
 	} = $props();
 	let searchInput: HTMLInputElement;
 	function shortcut(event: KeyboardEvent) {
@@ -25,6 +27,11 @@
 			searchInput?.focus();
 		}
 	}
+	$effect(() => {
+		if (!experimentalSemanticSearch && mode !== 'Lexical') {
+			mode = 'Lexical';
+		}
+	});
 </script>
 
 <svelte:window onkeydown={shortcut} />
@@ -57,18 +64,20 @@
 			class="min-w-0 flex-1 bg-transparent text-sm outline-none"
 		/>
 	</div>
-	<label class="flex items-center gap-2 text-xs text-[var(--secondary)]"
-		>Match
-		<select
-			bind:value={mode}
-			aria-label="Search matching"
-			class="rounded-md border border-[var(--separator)] bg-[var(--field)] px-2 py-2 text-sm text-[var(--text)]"
-		>
-			<option value="Lexical">Words</option><option value="Semantic">Meaning</option><option
-				value="Hybrid">Words + meaning</option
+	{#if experimentalSemanticSearch}
+		<label class="flex items-center gap-2 text-xs text-[var(--secondary)]"
+			>Match
+			<select
+				bind:value={mode}
+				aria-label="Search matching"
+				class="rounded-md border border-[var(--separator)] bg-[var(--field)] px-2 py-2 text-sm text-[var(--text)]"
 			>
-		</select>
-	</label>
+				<option value="Lexical">Words</option>
+				<option value="Semantic">Semantic projection (Experimental)</option>
+				<option value="Hybrid">Words + semantic projection (Experimental)</option>
+			</select>
+		</label>
+	{/if}
 	<button
 		type="button"
 		class="icon-button"

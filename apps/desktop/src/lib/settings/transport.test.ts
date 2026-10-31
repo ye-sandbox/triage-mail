@@ -15,6 +15,7 @@ it('uses native settings wire names and explicit consent envelopes', async () =>
 	await nativeSettingsTransport.get();
 	await nativeSettingsTransport.save(ai, 'synthetic-private-value');
 	await nativeSettingsTransport.tokenizer('Trigram');
+	await nativeSettingsTransport.setExperimentalSemanticSearch(true);
 	await nativeSettingsTransport.download({
 		model_url: 'https://models.example.com/m',
 		tokenizer_url: 'https://models.example.com/t',
@@ -25,6 +26,7 @@ it('uses native settings wire names and explicit consent envelopes', async () =>
 		['cmd_get_settings'],
 		['cmd_save_settings', { settings: ai, apiKey: 'synthetic-private-value' }],
 		['cmd_set_tokenizer', { tokenizer: 'Trigram' }],
+		['cmd_set_experimental_semantic_search', { enabled: true }],
 		[
 			'cmd_download_model',
 			{

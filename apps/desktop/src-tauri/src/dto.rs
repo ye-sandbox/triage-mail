@@ -191,4 +191,6 @@ pub struct SyncProgressEvent {
     pub state: SyncState,
     pub new_messages_count: usize,
     pub triage_alerts: Vec<TriageBadge>,
+    #[serde(default)]
+    pub embedding_errors_count: usize,
 }

@@ -10,11 +10,13 @@ export interface Settings {
 	tokenizer: Tokenizer;
 	has_api_key: boolean;
 	model_cached: boolean;
+	experimental_semantic_search: boolean;
 }
 export interface SettingsTransport {
 	get(): Promise<Settings>;
 	save(settings: AiSettings, apiKey: string): Promise<void>;
 	tokenizer(tokenizer: Tokenizer): Promise<void>;
+	setExperimentalSemanticSearch(enabled: boolean): Promise<void>;
 	download(request: { model_url: string; tokenizer_url: string; consent: boolean }): Promise<void>;
 	summarize(messageId: string, consent: boolean, expected: AiSettings): Promise<string>;
 }

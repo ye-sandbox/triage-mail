@@ -303,6 +303,19 @@ async fn lexical_semantic_hybrid_and_details_map_existing_storage_contracts() {
     store
         .insert_message_embedding("m-1", &vec![3; 384])
         .unwrap();
+    // INVARIANT: Semantic and Hybrid search fail closed when experimental_semantic_search is disabled.
+    assert_eq!(
+        service.search_messages(query(SearchMode::Semantic)).await,
+        Err(IpcError::InvalidRequest)
+    );
+    assert_eq!(
+        service.search_messages(query(SearchMode::Hybrid)).await,
+        Err(IpcError::InvalidRequest)
+    );
+    service
+        .set_experimental_semantic_search(true)
+        .await
+        .unwrap();
     for mode in [
         SearchMode::Lexical,
         SearchMode::Semantic,
@@ -373,6 +386,10 @@ async fn triage_is_atomic_durable_and_preserves_original_server_identity() {
     );
     service
         .triage_action(mutation(TriageActionDto::Archive))
+        .await
+        .unwrap();
+    service
+        .set_experimental_semantic_search(true)
         .await
         .unwrap();
     for mode in [
@@ -589,6 +606,10 @@ async fn ingestion_persists_flags_checkpoint_and_embeddings_before_streaming_ale
             .uidnext,
         3
     );
+    service
+        .set_experimental_semantic_search(true)
+        .await
+        .unwrap();
     assert!(!service
         .search_messages(query(SearchMode::Semantic))
         .await
@@ -688,8 +709,9 @@ async fn typed_tauri_channel_carries_the_contracted_event_shape() {
     assert_eq!(event["new_messages_count"], 1);
     assert!(event.get("state").is_some());
     assert!(event.get("triage_alerts").is_some());
+    assert_eq!(event["embedding_errors_count"], 0);
     assert!(event.get("synced_count").is_none());
-    assert_eq!(event.as_object().unwrap().len(), 4);
+    assert_eq!(event.as_object().unwrap().len(), 5);
 }
 
 #[tokio::test]
@@ -1032,4 +1054,39 @@ async fn test_worker_sync_account_once_retains_committed_batches_on_interruption
         .unwrap()
         .unwrap();
     assert_eq!(state.uidnext, 301);
+}
+
+struct FailingEmbedding;
+impl EmbeddingProvider for FailingEmbedding {
+    fn embed_int8(&self, _: &str) -> Result<Vec<i8>, TriageError> {
+        Err(TriageError::Embedding("simulated failure".into()))
+    }
+}
+
+#[tokio::test]
+async fn sync_worker_tracks_embedding_failure_telemetry() {
+    let remote = Arc::new(FakeRemote::default());
+    let store = store();
+    let vault = vault();
+    let service = DesktopService::new(
+        store.clone(),
+        vault.clone(),
+        remote.clone(),
+        Some(Arc::new(FailingEmbedding)),
+    );
+    seed(&service, &store).await;
+    *remote.sync_result.lock().unwrap() = Some(sync_result(vec![inbound(2)]));
+
+    let mut rx = service.events.subscribe();
+    triage_mail_desktop_lib::worker::sync_account_once(&service, &config("acct-1"))
+        .await
+        .unwrap();
+
+    let mut error_count = 0;
+    while let Ok(event) = rx.try_recv() {
+        if event.embedding_errors_count > 0 {
+            error_count += event.embedding_errors_count;
+        }
+    }
+    assert_eq!(error_count, 1);
 }

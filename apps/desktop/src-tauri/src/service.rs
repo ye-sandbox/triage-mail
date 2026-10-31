@@ -236,13 +236,19 @@ impl DesktopService {
         self.blocking(move |s| {
             let embedding = match query.mode {
                 SearchMode::Lexical => None,
-                _ => Some(
-                    s.embedding
-                        .as_ref()
-                        .ok_or(IpcError::EmbeddingUnavailable)?
-                        .embed_int8(&query.query)
-                        .map_err(|_| IpcError::EmbeddingUnavailable)?,
-                ),
+                _ => {
+                    let settings = s.read_stored_settings()?;
+                    if !settings.experimental_semantic_search {
+                        return Err(IpcError::InvalidRequest);
+                    }
+                    Some(
+                        s.embedding
+                            .as_ref()
+                            .ok_or(IpcError::EmbeddingUnavailable)?
+                            .embed_int8(&query.query)
+                            .map_err(|_| IpcError::EmbeddingUnavailable)?,
+                    )
+                }
             };
             let query = query
                 .into_hybrid_query(embedding)
@@ -431,6 +437,7 @@ impl DesktopService {
                 },
                 new_messages_count: 0,
                 triage_alerts: Vec::new(),
+                embedding_errors_count: 0,
             });
         }
         Ok(())
