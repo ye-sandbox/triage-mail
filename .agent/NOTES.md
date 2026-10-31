@@ -103,7 +103,7 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - Search is debounced by 200ms. Words/Meaning/Words + meaning map to Lexical/Semantic/Hybrid.
   Missing embeddings produce a fixed local-model message; the UI never downloads a model.
 - `InboxView` provides the adaptive sidebar/list/reader shell with system light/dark appearance.
-  Reader implementation is [04.3] (native validation pending); triage actions remain [04.4].
+  The secure reader is [04.3]; the keyboard triage palette and extraction badges are [04.4].
 
 ## Inbox Motion ([04.2.1])
 
