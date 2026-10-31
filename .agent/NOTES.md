@@ -102,8 +102,8 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   Subscription teardown silences late callbacks; ingestion remains owned by the native runtime.
 - Search is debounced by 200ms. Words/Meaning/Words + meaning map to Lexical/Semantic/Hybrid.
   Missing embeddings produce a fixed local-model message; the UI never downloads a model.
-- `InboxView` provides the adaptive sidebar/list/overview shell with system light/dark appearance.
-  Message bodies and attachment downloads remain [04.3]; triage actions remain [04.4].
+- `InboxView` provides the adaptive sidebar/list/reader shell with system light/dark appearance.
+  Reader implementation is [04.3] (native validation pending); triage actions remain [04.4].
 
 ## Inbox Motion ([04.2.1])
 
@@ -115,3 +115,19 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   scroll offsets remain immediate; only row background/color feedback transitions.
 - All motion is CSS-owned. `prefers-reduced-motion: reduce` disables spatial, repetitive and
   feedback animation/transition rules, including when the preference changes mid-animation.
+
+## Secure Message Reader ([04.3], Validation Pending)
+
+- `reader/transport.ts` adapts existing body/attachment commands; invocation uses `messageId`
+  for details and `{ request }` with snake_case attachment identity. No backend changes.
+- The reader subtree is keyed by message/account/folder/UID identity. Effect cleanup invalidates
+  late body responses; attachment teardown suppresses late saves. Errors use fixed UI strings.
+- DOMPurify uses an HTML tag/attribute allowlist. Sender styles, navigation URLs, SVG, media,
+  forms and alternate resource attributes are removed. Only raster data images survive by
+  default; CID attachments remain lazy. A leading CSP blocks scripts, connections and remote
+  resources, with normalized dark CSS inside an empty-sandbox, no-referrer srcdoc iframe.
+- Attachment bytes are requested only on a user click, saved via an outer-webview Blob download
+  with an octet-stream MIME type and normalized basename, and never rendered. Duplicate clicks
+  are guarded. Object URLs expire after 60 seconds and are also released on teardown.
+- Synthetic browser QA verified the save flow and compact navigation. Native WebKit saving
+  and the required Cargo checks remain unverified in the current environment.

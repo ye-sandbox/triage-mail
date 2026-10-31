@@ -1,14 +1,20 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
+	import MessageContent from '../reader/MessageContent.svelte';
+	import { nativeReaderTransport } from '../reader/transport';
+	import type { ReaderTransport } from '../reader/types';
 	import type { MessageRowDto } from './types';
-	let { message }: { message: MessageRowDto | undefined } = $props();
+	let {
+		message,
+		transport = nativeReaderTransport
+	}: { message: MessageRowDto | undefined; transport?: ReaderTransport } = $props();
 </script>
 
-<section class="flex min-h-0 flex-1 flex-col bg-[var(--reader)]" aria-label="Message overview">
-	{#key message?.id}
+<section class="flex min-h-0 flex-1 flex-col bg-[var(--reader)]" aria-label="Message reader">
+	{#key message ? JSON.stringify([message.id, message.account_id, message.folder, message.uid]) : ''}
 		<div class="overview-content flex min-h-0 flex-1 flex-col" data-message={!!message}>
 			{#if message}
-				<div class="border-b border-[var(--separator)] px-8 py-8">
+				<div class="shrink-0 border-b border-[var(--separator)] px-8 py-4">
 					<p class="mb-3 text-xs font-medium text-[var(--secondary)]">
 						{message.folder}
 					</p>
@@ -28,19 +34,7 @@
 						</div>
 					</div>
 				</div>
-				<div
-					class="flex flex-1 flex-col items-center justify-center px-8 py-12 text-center text-[var(--secondary)]"
-				>
-					<Icon name="shield" size={28} />
-					<h3 class="mt-4 text-base font-medium text-[var(--text)]">Message overview</h3>
-					<p class="mt-2 max-w-72 text-sm leading-relaxed">
-						Content preview will be available with the secure message reader.
-					</p>
-					{#if message.category_badge}<span
-							class="mt-6 rounded-full bg-[var(--selection-soft)] px-3 py-1 text-xs text-[var(--text)]"
-							>{message.category_badge}</span
-						>{/if}
-				</div>
+				<MessageContent {message} {transport} />
 			{:else}
 				<div class="flex flex-1 flex-col items-center justify-center px-8 py-12 text-center">
 					<span
