@@ -14,15 +14,49 @@
 - **Action Type:**
   - [ ] Read-only / Documentation
   - [x] Source code changes
-- **Status:** READY FOR PLANNING
+- **Status:** RUNNING
   *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
 
 ### Acceptance Criteria
-- [ ] Fetch selected message details with stale-request protection and accessible loading/error states.
-- [ ] Sanitize HTML using DOMPurify and render in an isolated `<iframe sandbox="">`, with strict CSP, normalized dark-mode CSS and remote tracking pixels blocked by default.
-- [ ] Download attachments only after an explicit user action through the established `BODY.PEEK` IPC command.
-- [ ] Preserve the Apple HIG direction, keyboard access, adaptive layout and strict Svelte 5 Runes.
+- [x] Fetch selected message details with stale-request protection and accessible loading/error states.
+- [x] Sanitize HTML using DOMPurify and render in an isolated `<iframe sandbox="">`, with strict CSP, normalized dark-mode CSS and remote tracking pixels blocked by default.
+- [x] Download attachments only after an explicit user action through the established `BODY.PEEK` IPC command.
+- [x] Preserve the Apple HIG direction, keyboard access, adaptive layout and strict Svelte 5 Runes.
 - [ ] Complete the full repository Definition of Done, atomic commit and task log.
+
+### Approved Plan ([04.3])
+
+User approved implementation on 2026-10-30.
+1. Add typed message-detail and attachment transport adapters without changing established IPC payloads.
+2. Replace the selection overview with an accessible reader, stale-request protection, retry states, and preserved adaptive navigation/motion.
+3. Harden DOMPurify sanitization and iframe CSP against active content and remote resource loads; normalize dark-mode presentation.
+4. Add explicit attachment download controls with safe filenames, per-download status, and object URL cleanup; never prefetch attachments.
+5. Verify security and selection/download regressions, run the full repository Definition of Done, then commit and promote [04.4].
+
+
+### Implementation / Validation Progress ([04.3])
+
+- Implementation checkpoint: `8164ca2` (`feat(reader): add sandboxed messages and explicit attachment downloads`).
+- Approved implementation completed; task remains RUNNING pending the full Definition of Done.
+- Frontend check: zero errors/warnings. Unit/component tests: 20 passed. SPA build: passed.
+- Regressions cover stale success/error responses, detail identity mismatch, safe plain text,
+  empty iframe sandbox/referrer policy, IPC argument casing, explicit lazy download identity,
+  duplicate clicks, failed/dismissed downloads, safe filenames and object URL cleanup.
+- Sanitizer regressions cover scripts/events, CSS imports/URLs, srcset/picture, SVG/media,
+  navigation, forms, remote images and lazy CID resources; raster data images remain supported.
+- Synthetic browser QA at desktop and 390×844 verified the actual reader, sandbox document,
+  explicit file saving and compact back navigation with restored list focus. Fixture removed.
+  This is browser evidence; native WebKit download behavior remains to be verified.
+- Svelte runes invariant, tracked/new-file email/secret scan and git diff whitespace check: passed.
+- TypeScript files formatted using locally installed Prettier. Full Svelte Prettier verification
+  remains pending because prettier-plugin-svelte is not installed/cached in this environment.
+- `cargo check --workspace` could not start: `cargo: command not found`. No Rust toolchain was
+  found locally; cargo test/fmt/clippy were not attempted with the same missing prerequisite.
+  User accepted leaving the task open with frontend checks recorded on 2026-10-30.
+- No dependencies, IPC contracts, schemas, CLI flags, environment variables or documented
+  validation commands changed. No live provider, model or AI service was contacted.
+- Pending: Rust workspace check/test/fmt/clippy, Svelte formatter verification, native WebKit
+  download verification and final completion log/promotion of [04.4].
 
 ---
 
