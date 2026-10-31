@@ -13,9 +13,24 @@
   frontend build, runes invariant and secret/PII checks with pinned actions and native deps.
 - **Systems Involved:** CI configuration and validation documentation.
 - **Action Type:** Configuration and documentation changes.
-- **Status:** READY FOR PLANNING
+- **Status:** RUNNING
 - **Next Task:** [90.1] Native Performance Validation (`BACKLOG`).
-- **Plan:** Not yet proposed or approved. No [00.2] implementation has started.
+- **Plan:** Approved by the user on 2026-10-31; implementation in progress.
+
+### Approved Plan ([00.2])
+1. Inspect lockfiles, native build dependencies and existing validation tooling. Design a
+   Linux GitHub Actions workflow with commit-pinned actions, least-privilege permissions,
+   frozen dependency installs and no access to application credentials.
+2. Run Rust workspace check/test/fmt/Clippy and frontend check/test/build in CI. Add
+   deterministic Svelte runes and tracked-text secret/PII checks using synthetic fixtures.
+   Keep provider, OAuth, AI and model requests out of validation.
+3. Synchronize validation documentation in both READMEs using `readme-standard`; document
+   native CI prerequisites and any new local validation commands.
+4. Validate workflow configuration, meaningful scanner regressions and the full repository
+   Definition of Done with cached dependencies. Respect the two-failure circuit breaker;
+   disclose that hosted execution remains unverified until an explicitly requested push.
+5. Record evidence and applicable knowledge, create an atomic Conventional Commit, log
+   its hash and promote [90.1] to READY FOR PLANNING. No push, release or tag.
 
 ---
 
