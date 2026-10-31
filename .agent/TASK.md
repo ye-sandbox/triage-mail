@@ -14,14 +14,14 @@
 - **Action Type:**
   - [ ] Read-only / Documentation
   - [x] Source code changes
-- **Status:** RUNNING
-  *(Workflow: `READY FOR PLANNING` → `PLANNING` on presenting plan → approval → `RUNNING`)*
+- **Status:** DONE
+- **Next Task:** None queued. Optimization or hardening work awaits a user request.
 
 ### Acceptance Criteria
-- [ ] Keyboard-accessible Command Palette (`⌘K` / `Ctrl+K` and shortcut triggers) for Mark Read/Unread, Archive, Trash, Local Tags, and RFC 8058 One-Click Unsubscribe using `cmd_triage_action`.
-- [ ] Optimistic UI updates and resilient error/sync reconciliation with `InboxController` and reader states.
-- [ ] Accessible Triage Badges UI for OTP codes, FEBRABAN Boletos (BRL amount & due date), Pix payloads, NF-e access keys, tracking codes, and one-click unsubscribe availability.
-- [ ] Strictly enforce Svelte 5 Runes (`$props`, `$state`, `$derived`, `$effect`), Apple HIG restraint, reduced-motion compliance, and full repository Definition of Done.
+- [x] Keyboard-accessible Command Palette (`⌘K` / `Ctrl+K` and shortcut triggers) for Mark Read/Unread, Archive, Trash, Local Tags, and RFC 8058 One-Click Unsubscribe using `cmd_triage_action`.
+- [x] Optimistic UI updates and resilient error/sync reconciliation with `InboxController` and reader states.
+- [x] Accessible Triage Badges UI for OTP codes, FEBRABAN Boletos (BRL amount & due date), Pix payloads, NF-e access keys, tracking codes, and one-click unsubscribe availability.
+- [x] Strictly enforce Svelte 5 Runes (`$props`, `$state`, `$derived`, `$effect`), Apple HIG restraint, reduced-motion compliance, and full repository Definition of Done.
 
 ---
 
@@ -43,6 +43,7 @@
 | [04.2] | Apple HIG-Informed Unified Inbox, Virtualized Message List, Typed Search & Sync Refresh | `16df93b` | 2026-10-30 |
 | [04.2.1] | Accessible Apple-Style Inbox Motion | `6820c4b` | 2026-10-30 |
 | [04.3] | Sandboxed Email Viewer & On-Demand Attachment Downloader (`apps/desktop`) | `8164ca2`, `2142c9e` | 2026-10-30 |
+| [04.4] | Keyboard-driven Command Palette & Triage Badges UI (`apps/desktop`) | `78016a4` | 2026-10-30 |
 
 
 ### Validation ([04.1])
