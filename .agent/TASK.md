@@ -7,15 +7,28 @@
 
 ## Active Task
 
+### 📌 Task [90.1]: Native Performance Validation
+
+- **Description:** Measure native inbox scrolling, search latency, memory and binary footprint
+  with synthetic local data; identify evidence-backed gaps against MVP performance targets.
+- **Systems Involved:** Native desktop, storage/search and performance tooling.
+- **Action Type:** Validation; implementation scope requires an approved plan.
+- **Status:** READY FOR PLANNING
+- **Plan:** Not yet proposed or approved. No [90.1] implementation has started.
+
+---
+
+## Completed CI Task Evidence
+
 ### 📌 Task [00.2]: CI Pipeline (GitHub Actions)
 
 - **Description:** Add a GitHub Actions workflow running the repository Definition of Done,
   frontend build, runes invariant and secret/PII checks with pinned actions and native deps.
 - **Systems Involved:** CI configuration and validation documentation.
 - **Action Type:** Configuration and documentation changes.
-- **Status:** RUNNING
-- **Next Task:** [90.1] Native Performance Validation (`BACKLOG`).
-- **Plan:** Approved by the user on 2026-10-31; implementation in progress.
+- **Status:** DONE
+- **Next Task:** [90.1] Native Performance Validation (`READY FOR PLANNING`).
+- **Plan:** Approved by the user on 2026-10-31; implementation complete.
 
 ### Approved Plan ([00.2])
 1. Inspect lockfiles, native build dependencies and existing validation tooling. Design a
@@ -31,6 +44,50 @@
    disclose that hosted execution remains unverified until an explicitly requested push.
 5. Record evidence and applicable knowledge, create an atomic Conventional Commit, log
    its hash and promote [90.1] to READY FOR PLANNING. No push, release or tag.
+
+
+### Acceptance and Validation ([00.2])
+
+- [x] Ubuntu 24.04 CI runs on pull requests, main pushes and manual dispatch. Both action
+  dependencies use full commit hashes; contents permission is read-only, checkout does not
+  persist credentials, jobs have timeouts and superseded runs are cancelled. No application
+  secrets, publish steps or untrusted event expressions are passed to shell commands.
+- [x] Rust 1.99.0 check/test/fmt/Clippy uses the locked dependency graph and runs offline
+  after an explicit fetch. Native GTK/WebKitGTK, keyring and bundled SQLCipher build
+  prerequisites are declared. Frontend uses Node 24.19.0, pnpm 11.25.0 and frozen installation.
+- [x] Added a dependency-free tracked-text email/high-signal secret guard with redacted
+  diagnostics and legacy Svelte syntax checks. Five synthetic regressions cover reserved
+  domains, misleading suffixes, token patterns, runes, binary skipping, tracked-file selection
+  and CLI failure status. Full scan covered 156 text files with zero findings.
+- [x] `cargo check --workspace --locked`, `cargo test --workspace --locked` (159 passed),
+  `cargo fmt --all -- --check` and Clippy for all targets with `-D warnings` passed using
+  cached dependencies and the existing temporary native sysroot. Tests used authorized local
+  loopback mocks. Frontend check (zero errors/warnings), tests (56 passed) and SPA build passed.
+- [x] Workflow YAML parsed; trigger/job structure, SHA pins, read-only permission and checkout
+  policy inspected; all run blocks passed Bash syntax validation. New JS/YAML passed Prettier.
+  Svelte runes scan, staged/working-tree whitespace checks and manual changed-file review passed.
+- [x] Both READMEs synchronized using `readme-standard`; native prerequisites, pinned CI
+  versions, validation commands and scanner limits documented. Command parity, environment
+  table coverage, heading/template checks and nonempty files verified. Replaced unavailable
+  frontend Tauri CLI invocations with existing Vite/Cargo entrypoints; no manifest changes.
+- [x] The initial scanner test runner failed twice and triggered the circuit breaker. After
+  the user authorized diagnosis, direct execution exposed `spawnSync git EPERM`; approved
+  local subprocess access passed all five tests. Recorded this sandbox gotcha in `k-013`.
+- [x] Implementation commit `8649639` (`ci(workflow): enforce workspace validation and policy
+  checks`) recorded; [90.1] promoted to READY FOR PLANNING. Runtime IPC/schema/core traits
+  are unchanged; no active contract update was needed.
+
+### Remaining Limits ([00.2])
+
+- Hosted GitHub Actions execution, action retrieval and clean registry-based installs remain
+  unverified locally. YAML/shell/static policy checks do not replace a hosted run. Existing
+  installed frontend dependencies were used; the offline policy-metadata limitation in `k-008`
+  remains applicable. No registry, model, provider or AI endpoint was contacted during this task.
+- The scanner checks selected high-signal secret patterns and non-reserved mailbox addresses
+  in tracked text, not every possible secret/PII representation or Git history. It complements
+  manual review and does not constitute a public-release audit.
+- No push, release, tag, native packaging or performance claim was made. CI setup will download
+  declared build dependencies when the workflow is explicitly enabled by pushing the change.
 
 ---
 
