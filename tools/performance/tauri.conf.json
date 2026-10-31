@@ -1,0 +1,25 @@
+{
+	"productName": "triage-mail-performance",
+	"version": "0.1.0",
+	"identifier": "org.yesandbox.triagemail.performance",
+	"build": {
+		"frontendDist": "../../target/performance-ui"
+	},
+	"app": {
+		"windows": [
+			{
+				"title": "Synthetic performance validation",
+				"url": "__performance",
+				"width": 1280,
+				"height": 820
+			}
+		],
+		"security": {
+			"csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost",
+			"capabilities": []
+		}
+	},
+	"bundle": {
+		"icon": ["../../apps/desktop/src-tauri/icons/icon.png"]
+	}
+}

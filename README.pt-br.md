@@ -156,6 +156,13 @@ node scripts/ci-guard.mjs
 git diff --check
 ```
 
+A validação opcional de desempenho usa dados sintéticos para busca SQLCipher com 100.000
+mensagens e uma instância separada da interface nativa WebKitGTK, medindo intervalos entre
+frames e memória da árvore de processos. Consulte
+[metodologia, comandos e limites medidos](docs/performance/native-validation.md).
+Essas ferramentas não acessam provedores nem baixam modelos; recompile a SPA normal após a
+compilação da interface de teste antes de gerar o binário do aplicativo.
+
 ## License
 
 Licenciado sob a **GNU Affero General Public License v3.0 (AGPLv3)** — consulte [`LICENSE`](LICENSE) para mais detalhes.
