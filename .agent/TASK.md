@@ -7,24 +7,46 @@
 
 ## Active Task
 
+### 📌 Task [03.4]: Tier 2 Honest Labeling (Experimental Semantic Search)
+
+- **Description:** `LocalCpuEmbeddingProvider` uses hashed feature projections, not ONNX inference.
+  "Meaning" and "Words + meaning" search modes and documentation imply learned semantics. Mark Tier 2
+  experimental, hide Semantic/Hybrid modes behind an explicit setting, correct UI copy, and expose
+  embedding failure telemetry in the sync worker instead of silently discarding errors.
+- **Systems Involved:** `crates/triage-ai`, `apps/desktop` (settings, inbox search modes, sync worker).
+- **Action Type:** Implementation; requires an approved plan.
+- **Status:** READY FOR PLANNING
+- **Scope:**
+  - Add explicit setting to enable experimental semantic search (default disabled/hidden in search dropdown).
+  - Correct UI search copy to honestly label feature-hash semantic projection vs learned ONNX models.
+  - Sync worker: expose embedding failure telemetry rather than silent omission.
+- **Constraints:** P0 secrets isolation, strict typing, Svelte 5 Runes invariant.
+- **Origin:** v0.1.0 readiness review (2026-10-31), findings C2 and I3.
+
+---
+
+## Completed Tasks
+
 ### 📌 Task [02.5]: OAuth Token Refresh
 
 - **Description:** Handle expired OAuth access tokens gracefully. Currently only `refresh_token` is
   stored and access tokens expire (~1h), causing background sync workers to loop indefinitely in
   `Retrying` state.
 - **Systems Involved:** `crates/mail-engine` (auth, protocol, refresh transport); `crates/vault` (atomic update); desktop sync worker.
-- **Action Type:** Implementation; requires an approved plan.
-- **Status:** READY FOR PLANNING
-- **Scope:** Pure-Rust `TokenRefresher` in `crates/mail-engine`, triggered on expired/failed SASL
-  auth; refresh against the user-configured HTTPS token endpoint (no discovery, redirects, inherited
-  proxies or automatic retry loops); atomic vault update; fixed redacted `IpcError`. Clean orphaned
-  OAuth staging entries in vault at startup (k-010).
-- **Constraints:** P0 network policy identical to [04.6] onboarding; no secrets in events/logs.
-- **Origin:** v0.1.0 readiness review (2026-10-31), finding C3.
-
----
-
-## Completed Tasks
+- **Action Type:** Source code changes.
+- **Status:** DONE
+- **Plan:** Approved by the user on 2026-10-31; implementation and validation complete.
+- **Commit:** `d65416d` (`feat(mail-engine): handle oauth token refresh and clean orphaned staging`).
+- **Next Task:** [03.4] Tier 2 Honest Labeling (Experimental Semantic Search) (`READY FOR PLANNING`).
+- **Acceptance:**
+  - [x] Pure-Rust `TokenRefresher` and `TokenRefreshTransport` trait in `crates/mail-engine/src/auth.rs`.
+  - [x] `HttpTokenRefreshTransport` enforces strict P0 network policy (HTTPS scheme only, <=2048 chars, no query/fragment/credentials, no proxy, no redirects, 30s timeout, <=64KB body limit).
+  - [x] SASL XOAUTH2 challenge abort: `protocol.rs` detects `+ ` continuation lines on `AUTHENTICATE` commands, writes `\r\n` CRLF abort sequence, and surfaces `EngineError::AuthenticationFailed`.
+  - [x] `DefaultImapConnector` intercepts authentication failure, refreshes token via `TokenRefresher`, updates vault atomically via `SecretStore`, establishes a fresh TLS session, and retries authentication once.
+  - [x] `AccountAuthMaterial::OAuth2PublicPkce` and `OAuth2ByoCredentials` store optional `token_endpoint: Option<String>` with backwards-compatible deserialization and secret redaction.
+  - [x] Onboarding persists `token_endpoint` during authorization and uses deterministic staging key `VaultKey::for_account("staging", "oauth-pending")`.
+  - [x] `DesktopService::new` cleans orphaned staging vault entries at startup (`k-010`).
+  - [x] Full workspace verification passes: 100% tests pass (44 mail-engine unit tests, 10 imap connector tests, 18 desktop tests, 15 vault tests), clippy zero warnings, fmt check passed, svelte-check 0 errors, vitest 56 passed, git diff clean, zero PII.
 
 ### 📌 Task [02.4]: Lazy Body Fetch via BODYSTRUCTURE & Batched Initial Sync
 
@@ -872,16 +894,11 @@ Active task: [02.5] (see above). Proposed defaults marked *(confirm at plan appr
 - **Commit:** `5124327` (`feat(mail-engine): lazy body fetch via bodystructure and batched sync`).
 - **Outcome:** RFC 3501 `BODYSTRUCTURE` parser extracts attachments lazily without payload downloads; two-phase fetch queries leaf text bodies only; initial sync batched to 300 messages with durable sequential commit per batch.
 
-### [02.5] OAuth Token Refresh — `READY FOR PLANNING`
-- **Gap (C3):** Only `refresh_token` is stored; access tokens expire (~1h) and workers loop in
-  `Retrying` indefinitely for OAuth accounts.
-- **Scope:** Pure-Rust `TokenRefresher` in `crates/mail-engine`, triggered on expired/failed
-  SASL auth; refresh against the user-configured HTTPS token endpoint (no discovery, redirects,
-  inherited proxies or automatic retry loops); atomic vault update; fixed redacted `IpcError`.
-  Clean orphaned OAuth staging entries in vault at startup (k-010).
-- **Constraints:** P0 network policy identical to [04.6] onboarding; no secrets in events/logs.
+### [02.5] OAuth Token Refresh — `DONE`
+- **Commit:** `d65416d` (`feat(mail-engine): handle oauth token refresh and clean orphaned staging`).
+- **Outcome:** Pure-Rust `TokenRefresher` and `HttpTokenRefreshTransport` with strict P0 policy; SASL challenge abort in `protocol.rs`; transparent refresh & retry in `DefaultImapConnector`; `token_endpoint` persisted in vault; orphaned staging entries cleared at startup (`k-010`).
 
-### [03.4] Tier 2 Honest Labeling (Experimental Semantic Search) — `PENDING`
+### [03.4] Tier 2 Honest Labeling (Experimental Semantic Search) — `READY FOR PLANNING`
 - **Gap (C2):** `LocalCpuEmbeddingProvider` uses hashed feature projections, not ONNX inference;
   "Meaning"/"Words + meaning" modes and README imply learned semantics.
 - **Proposed default (option B):** Mark Tier 2 experimental; hide Semantic/Hybrid modes by default
