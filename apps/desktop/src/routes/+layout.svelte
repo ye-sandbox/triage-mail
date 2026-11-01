@@ -1,14 +1,20 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import TitleBar from '$lib/window/TitleBar.svelte';
+	import type { WindowTransport } from '$lib/window/types';
 	import '../app.css';
 
 	type Props = {
-		children?: Snippet;
+		children: Snippet;
+		transport?: WindowTransport;
 	};
 
-	let { children }: Props = $props();
+	let { children, transport }: Props = $props();
 </script>
 
-{#if children}
-	{@render children()}
-{/if}
+<div class="desktop-shell">
+	<TitleBar {transport} />
+	<div class="desktop-shell-content">
+		{@render children()}
+	</div>
+</div>
