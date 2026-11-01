@@ -1,10 +1,17 @@
 <script lang="ts">
 	import type { AccountController } from './controller.svelte';
 	import AccountForm from './AccountForm.svelte';
+	import LanguageSelector from '../ui/LanguageSelector.svelte';
+	import { i18n } from '../i18n/index.svelte';
 	import { clearCredentialInputs } from './forms';
+
 	let { controller, enterInbox }: { controller: AccountController; enterInbox: () => void } =
 		$props();
 	let form = $state<HTMLFormElement>();
+
+	const t = $derived(i18n.t.onboarding);
+	const appT = $derived(i18n.t.app);
+
 	$effect(() => {
 		const current = form;
 		return () => clearCredentialInputs(current);
@@ -21,17 +28,22 @@
 
 <main class="min-h-dvh bg-[var(--background)] px-4 py-8 text-[var(--text)] sm:px-8">
 	<div class="mx-auto max-w-xl space-y-8">
-		<header class="space-y-2">
-			<p class="text-sm font-semibold text-[var(--accent)]">Triage Mail</p>
-			<h1 class="text-3xl font-semibold tracking-tight">
-				{controller.phase === 'locked' ? 'Unlock your mail' : 'Your accounts'}
-			</h1>
-			<p class="text-sm text-[var(--secondary)]">
-				Local storage. Private credentials. Your choice of provider.
-			</p>
+		<header class="flex items-start justify-between gap-4">
+			<div class="space-y-2">
+				<p class="text-sm font-semibold text-[var(--accent)]">{appT.title}</p>
+				<h1 class="text-3xl font-semibold tracking-tight">
+					{controller.phase === 'locked' ? t.unlockTitle : t.accountsTitle}
+				</h1>
+				<p class="text-sm text-[var(--secondary)]">
+					{appT.tagline}
+				</p>
+			</div>
+			<div class="pt-1">
+				<LanguageSelector />
+			</div>
 		</header>
 		{#if controller.phase === 'loading'}
-			<p role="status">Opening local mail…</p>
+			<p role="status">{t.openingMail}</p>
 		{:else if controller.phase === 'locked'}
 			<form
 				bind:this={form}
@@ -40,11 +52,10 @@
 				autocomplete="off"
 			>
 				<p class="text-sm text-[var(--secondary)]">
-					Your system keyring is unavailable or the vault is locked. Enter your local vault
-					passphrase. On first use, this creates an encrypted fallback vault.
+					{t.vaultLockedHelp}
 				</p>
 				<label class="block text-sm"
-					>Vault passphrase
+					>{t.vaultPassphraseLabel}
 					<input
 						class="setup-input mt-2"
 						name="passphrase"
@@ -57,22 +68,22 @@
 					/>
 				</label>
 				<button class="setup-primary" type="submit" disabled={controller.busy}
-					>{controller.busy ? 'Unlocking…' : 'Unlock vault'}</button
+					>{controller.busy ? t.unlocking : t.unlockVault}</button
 				>
 				<button
 					class="setup-secondary"
 					type="button"
 					disabled={controller.busy}
-					onclick={() => void controller.load()}>Retry system keyring</button
+					onclick={() => void controller.load()}>{t.retryKeyring}</button
 				>
 			</form>
 		{:else if controller.phase === 'error'}
 			<button class="setup-secondary" type="button" onclick={() => void controller.load()}
-				>Try opening mail again</button
+				>{t.tryAgain}</button
 			>
 		{:else if controller.phase === 'ready'}
 			{#if controller.accounts.length}
-				<section aria-label="Connected accounts" class="space-y-4">
+				<section aria-label={t.connectedAccounts} class="space-y-4">
 					<ul
 						class="divide-y divide-[var(--separator)] rounded-2xl border border-[var(--separator)] bg-[var(--surface)] px-6"
 					>
@@ -82,7 +93,7 @@
 								<p class="mt-1 break-all text-sm text-[var(--secondary)]">
 									{account.imap_host}:<span class="tabular-nums">{account.imap_port}</span>
 									· {account.auth_method === 'AppPassword'
-										? 'App password'
+										? i18n.t.accountForm.methodAppPassword
 										: account.auth_method === 'ProtonBridgeLocal'
 											? 'Proton Bridge'
 											: 'OAuth'}
@@ -94,12 +105,12 @@
 						class="setup-secondary"
 						type="button"
 						disabled={controller.busy}
-						onclick={enterInbox}>Open inbox</button
+						onclick={enterInbox}>{t.openInbox}</button
 					>
 				</section>
 			{:else}
 				<p class="text-sm text-[var(--secondary)]">
-					Connect your first account to start bringing your mail together.
+					{t.connectFirstAccount}
 				</p>
 			{/if}
 			<div class="rounded-2xl border border-[var(--separator)] bg-[var(--surface)] p-6">

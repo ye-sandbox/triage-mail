@@ -4,6 +4,7 @@
 	import { nativeSettingsTransport } from './transport';
 	import AiSettingsForm from './AiSettingsForm.svelte';
 	import ModelSettings from './ModelSettings.svelte';
+	import LanguageSelector from '../ui/LanguageSelector.svelte';
 	let {
 		close,
 		transport = nativeSettingsTransport
@@ -68,9 +69,12 @@
 	<div class="mx-auto max-w-2xl space-y-8">
 		<div class="flex items-center justify-between gap-4">
 			<h1 class="text-2xl font-semibold">Settings &amp; privacy</h1>
-			<button type="button" onclick={close} class="rounded-lg px-4 py-2 text-[var(--accent)]"
-				>Back to inbox</button
-			>
+			<div class="flex items-center gap-3">
+				<LanguageSelector />
+				<button type="button" onclick={close} class="rounded-lg px-4 py-2 text-[var(--accent)]"
+					>Back to inbox</button
+				>
+			</div>
 		</div>
 		{#if error}<p role="alert">{error}</p>
 			<button type="button" onclick={() => void load()}>Retry loading settings</button>{/if}

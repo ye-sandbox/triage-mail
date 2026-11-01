@@ -101,6 +101,84 @@ Runtime credentials and database encryption keys are stored strictly in the oper
 | `PROTON_BRIDGE_HOST` | Local loopback address for Proton Mail Bridge IMAP | `127.0.0.1` | No |
 | `PROTON_BRIDGE_PORT` | Local loopback port for Proton Mail Bridge IMAP | `1143` | No |
 
+## Account Setup and Authentication Guide
+
+`triage-mail` supports four authentication methods behind an agnostic IMAP transport. Major providers block standard account passwords over IMAP; select the appropriate method below based on your provider.
+
+### Authentication Methods Overview
+
+| Method | Best For | Prerequisites | Compatible Services |
+| :--- | :--- | :--- | :--- |
+| **App Password** | Fast, simple setup without developer accounts | Two-Factor Authentication (2FA) enabled on email account; IMAP enabled | Gmail, Google Workspace, iCloud, Yahoo, AOL, Fastmail, Outlook, custom IMAP |
+| **OAuth · Public PKCE** | Modern browser login without storing client secrets | Provider supports RFC 7636 PKCE with `127.0.0.1` loopback redirect | Microsoft 365, Outlook.com, Hotmail, standard OIDC providers |
+| **OAuth · BYO Credentials** | Continuous OAuth token flow for Google / enterprise | Developer project with `client_id` and `client_secret` (Desktop client) | Google / Gmail (via GCP Console), private enterprise SSO (Keycloak, Okta) |
+| **Proton Mail Bridge** | End-to-end encrypted Proton Mail accounts | Paid Proton account + official Proton Mail Bridge app running locally | Proton Mail exclusively |
+
+### Provider Configuration Details
+
+#### Google / Gmail
+- **Recommended (App Password):**
+  1. Enable 2-Step Verification in [Google Account Security](https://myaccount.google.com/security).
+  2. Visit [App Passwords](https://myaccount.google.com/apppasswords), generate a 16-character password (e.g. named `Triage Mail`).
+  3. Ensure IMAP is enabled in Gmail settings (*See all settings $\rightarrow$ Forwarding and POP/IMAP $\rightarrow$ Enable IMAP*).
+  4. In `triage-mail`, select **App password**: Host `imap.gmail.com`, Port `993`, and paste the 16-character password.
+- **Alternative (BYO OAuth):**
+  1. Create a project in [Google Cloud Console](https://console.cloud.google.com/).
+  2. Configure OAuth Consent Screen (External, add scope `https://mail.google.com/`).
+  3. Create Credentials $\rightarrow$ OAuth Client ID $\rightarrow$ Application type **Desktop app**.
+  4. In `triage-mail`, select **OAuth · Your client credentials**:
+     - Authorization endpoint: `https://accounts.google.com/o/oauth2/v2/auth`
+     - Token endpoint: `https://oauth2.googleapis.com/token`
+     - Scopes: `https://mail.google.com/`
+     - Client ID & Client Secret from GCP.
+
+#### Microsoft (Outlook.com / Hotmail / Microsoft 365)
+- **Recommended (OAuth · Public PKCE):**
+  1. In `triage-mail`, select **OAuth · Public PKCE**.
+  2. Host: `outlook.office365.com`, Port: `993`.
+  3. Authorization endpoint: `https://login.microsoftonline.com/common/oauth2/v2.0/authorize`
+  4. Token endpoint: `https://login.microsoftonline.com/common/oauth2/v2.0/token`
+  5. Scopes: `offline_access https://outlook.office.com/IMAP.AccessAsUser.All`
+  6. Client ID: Public Microsoft Application ID registered for desktop PKCE.
+- **Alternative (App Password):**
+  1. If two-step verification is enabled on your Microsoft account, create an app password under *Advanced security options*.
+  2. In `triage-mail`, select **App password**: Host `outlook.office365.com`, Port `993`.
+
+#### Apple iCloud Mail
+1. Enable two-factor authentication on your Apple ID.
+2. Sign in to [appleid.apple.com](https://appleid.apple.com) and go to *Sign-In and Security $\rightarrow$ App-Specific Passwords*.
+3. Generate a password for `triage-mail`.
+4. In `triage-mail`, select **App password**:
+   - Host: `imap.mail.me.com`
+   - Port: `993`
+   - Email: your iCloud email address
+   - Secret: the app-specific password.
+
+#### Yahoo Mail & AOL
+1. Go to *Account Info $\rightarrow$ Account Security*.
+2. Scroll to *Generate app password* and select *Other app* $\rightarrow$ name it `triage-mail`.
+3. In `triage-mail`, select **App password**:
+   - Host: `imap.mail.yahoo.com` (or `imap.aol.com` for AOL)
+   - Port: `993`
+   - Secret: the 16-character generated app password.
+
+#### Proton Mail (via Proton Mail Bridge)
+1. Ensure you have an active paid Proton subscription (required by Proton for Bridge access).
+2. Download, install, and open the official **Proton Mail Bridge** application on your machine.
+3. Add your Proton account inside the Bridge and wait for local synchronization.
+4. In Bridge settings, verify that IMAP is set to SSL/TLS (default port `1143`).
+5. Open the account drawer in Proton Mail Bridge to view your **Bridge Username** and **Bridge Password**.
+6. In `triage-mail`, select **Proton Mail Bridge**:
+   - Host: `127.0.0.1` (strictly loopback)
+   - Port: `1143`
+   - Username: Bridge username (as shown in Bridge)
+   - Bridge password: the password generated by Bridge (*never* your master Proton account password).
+
+#### Custom / Self-Hosted IMAP (Dovecot, Postfix, Zimbra, cPanel)
+1. In `triage-mail`, select **App password**.
+2. Enter your full email address, IMAP server hostname (e.g., `mail.example.org`), and TLS port (`993`).
+3. Enter your account password or dedicated application token.
+
 ## Usage
 
 ```bash

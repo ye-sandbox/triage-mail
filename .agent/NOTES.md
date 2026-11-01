@@ -311,4 +311,12 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   - Strictly NO approximate nearest neighbor (ANN) graph indexing (HNSW, IVF) in v0.1.
   - Binary quantization (1-bit scalar quantization with Hamming distance / bitwise POPCNT candidate pre-filtering) + int8 cosine reranking of top 200 candidates scheduled for v0.2 evaluation to reach sub-15ms global queries.
 
+## Account Onboarding Help Guide & Apple-Style Language Selector ([04.8])
+
+- **Reactive i18n Store (`src/lib/i18n/`):** Pure Svelte 5 rune-based localization module supporting `en` (English) and `pt-BR` (Português do Brasil). Preferences are persisted to `localStorage` with fallback to browser language. Typed translation dictionary avoids external dependencies.
+- **Minimalist Apple-Style Language Selector (`LanguageSelector.svelte`):** Segmented pill control (`EN` | `PT`) with translucent backdrop blur, subtle Apple dark/light surface tokens, instant active feedback, accessible `role="radiogroup"` / `aria-checked` bindings, and zero layout shift. Exposed in Onboarding and Settings.
+- **In-App Account Help Guide & Provider Presets (`AccountForm.svelte`):**
+  - Interactive disclosure guide explaining all 4 login methods: App Passwords (2FA prerequisite, IMAP enabling, common provider links/hosts), OAuth2 Public PKCE (Microsoft / loopback 127.0.0.1 redirect), OAuth2 BYO Credentials (Google Cloud Console, client_id + client_secret), and Proton Mail Bridge (local 127.0.0.1:1143 IMAP, paid Proton account, bridge password alert).
+  - Quick-fill provider presets (Gmail, Outlook/Hotmail, iCloud, Yahoo, Fastmail, Proton Mail Bridge) to auto-populate host, port, and recommended auth mode in 1 click.
+- **Documentation Perimeter:** Comprehensive Account Setup & Authentication guides added in `README.md` and `README.pt-br.md` maintaining 1:1 bilingual parity and zero heading emojis per `readme-standard`.
 
