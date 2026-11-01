@@ -336,3 +336,28 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - **Live Search Preference Re-synchronization:** Changes to experimental semantic search or tokenizer rebuilds in `SearchModule` immediately update `inbox.setExperimentalSemanticSearch(enabled)` upon dialog close/reload without requiring app restart.
 - **Bilingual EN/PT-BR Localization (`translations.ts`, `types.ts`):** All modal headings, tab titles, close buttons, and dirty-form prompts maintain strict 1:1 bilingual parity with zero missing keys.
 
+## Account Mailboxes Navigation & Migration v2 ([04.1])
+
+- **Mailbox Scope Contract (`SearchQueryDto`):**
+  - Add optional `scope: Option<MailboxScopeDto>` (default `None` for backwards-compatible global All Mail queries across all accounts).
+  - Schema:
+    - `MailboxScopeDto::GlobalAllMail` (or `None`).
+    - `MailboxScopeDto::AccountView { account_id: String, view: MailboxViewDto }`.
+    - `MailboxViewDto`: `Inbox`, `Starred`, `Snoozed`, `Folder(String)`.
+  - Effective folder visibility in SQLite: evaluates `COALESCE(override.folder, membership.folder)` where `override` is from `message_folder_overrides` and `membership` is from `message_folder_memberships`.
+  - Active Snooze Rule: `Inbox` filters out messages where `snooze_until_epoch_ms > now_utc_ms()`. When expired, messages automatically reappear in `Inbox` without moving or modifying flags.
+  - Archive or Trash mutations immediately set `snooze_until_epoch_ms = NULL` in `messages`.
+- **Append-Only Migration v2 (`crates/storage`):**
+  - Table `folders`: `(account_id, folder_name)` PK, `display_name TEXT NOT NULL`, `delimiter TEXT`, `role TEXT NOT NULL DEFAULT 'other'`, `is_selectable INTEGER NOT NULL DEFAULT 1`, `total_messages INTEGER`, `unread_messages INTEGER`, `updated_at_epoch_ms INTEGER NOT NULL`.
+  - Table `message_folder_memberships`: `(account_id, folder, uid)` PK, `message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE`, `created_at_epoch_ms INTEGER NOT NULL`.
+  - Column additions on `messages`: `is_starred INTEGER NOT NULL DEFAULT 0`, `snooze_until_epoch_ms INTEGER`, `provider_message_id TEXT`. Indices on `(account_id, is_starred, received_at_epoch_ms DESC)`, `(snooze_until_epoch_ms)`, and `(account_id, provider_message_id)`.
+  - Table `account_avatars`: `account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE`, `avatar_bytes BLOB NOT NULL`, `mime_type TEXT NOT NULL`, `width INTEGER NOT NULL`, `height INTEGER NOT NULL`, `updated_at_epoch_ms INTEGER NOT NULL`.
+- **Same-Account Deduplication Engine:**
+  - Gmail: Provider message ID (`X-GM-MSGID`) checked before storing bodies/embeddings. Existing message record only acquires an additional row in `message_folder_memberships` for the newly synced label/folder.
+  - Other IMAP: Fallback deduplication by `(account_id, message_id_header, received_at_epoch_ms)`.
+  - Segregation Invariant: Deduplication NEVER occurs across distinct accounts.
+  - Per-folder UID mapping is preserved in `message_folder_memberships` so that IMAP operations (`STORE`, `MOVE`, `BODY.PEEK[part]`) execute against the correct `folder` and `uid`.
+- **Zero-Network Local Avatars:**
+  - File picker reads local raster images only (JPEG/PNG/WebP, max 2MB, max 1024x1024).
+  - Native worker decodes, strips EXIF/metadata, resizes to 128x128 thumbnail, and stores encrypted in `account_avatars`.
+  - Accounts without custom images use deterministic initials and accent colors. Third-party fetches (Gravatar, OAuth avatars) are strictly forbidden under Rule P0.
