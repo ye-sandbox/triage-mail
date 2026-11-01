@@ -26,7 +26,7 @@
 	}
 </script>
 
-<main class="min-h-dvh bg-[var(--background)] px-4 py-8 text-[var(--text)] sm:px-8">
+<main class="h-full min-h-0 flex-1 overflow-y-auto bg-[var(--background)] px-4 py-8 text-[var(--text)] sm:px-8">
 	<div class="mx-auto max-w-xl space-y-8">
 		<header class="flex items-start justify-between gap-4">
 			<div class="space-y-2">

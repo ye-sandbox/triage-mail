@@ -65,7 +65,7 @@
 	}
 </script>
 
-<main class="h-dvh overflow-y-auto bg-[var(--reader)] px-4 py-8 text-[var(--text)]">
+<main class="h-full min-h-0 flex-1 overflow-y-auto bg-[var(--reader)] px-4 py-8 text-[var(--text)]">
 	<div class="mx-auto max-w-2xl space-y-8">
 		<div class="flex items-center justify-between gap-4">
 			<h1 class="text-2xl font-semibold">Settings &amp; privacy</h1>
