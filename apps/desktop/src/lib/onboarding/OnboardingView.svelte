@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { AccountController } from './controller.svelte';
 	import AccountForm from './AccountForm.svelte';
+	import AccountList from './AccountList.svelte';
 	import LanguageSelector from '../ui/LanguageSelector.svelte';
 	import { i18n } from '../i18n/index.svelte';
 	import { clearCredentialInputs } from './forms';
@@ -84,23 +85,7 @@
 		{:else if controller.phase === 'ready'}
 			{#if controller.accounts.length}
 				<section aria-label={t.connectedAccounts} class="space-y-4">
-					<ul
-						class="divide-y divide-[var(--separator)] rounded-2xl border border-[var(--separator)] bg-[var(--surface)] px-6"
-					>
-						{#each controller.accounts as account (account.account_id)}
-							<li class="py-4">
-								<p class="break-all font-medium">{account.email_display}</p>
-								<p class="mt-1 break-all text-sm text-[var(--secondary)]">
-									{account.imap_host}:<span class="tabular-nums">{account.imap_port}</span>
-									· {account.auth_method === 'AppPassword'
-										? i18n.t.accountForm.methodAppPassword
-										: account.auth_method === 'ProtonBridgeLocal'
-											? 'Proton Bridge'
-											: 'OAuth'}
-								</p>
-							</li>
-						{/each}
-					</ul>
+					<AccountList accounts={controller.accounts} />
 					<button
 						class="setup-secondary"
 						type="button"

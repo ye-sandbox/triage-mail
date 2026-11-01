@@ -3,7 +3,9 @@
 	import type { Settings, SettingsTab, SettingsTransport } from './types';
 	import { SETTINGS_TABS } from './types';
 	import { nativeSettingsTransport } from './transport';
+	import type { AccountController } from '../onboarding/controller.svelte';
 	import GeneralModule from './modules/GeneralModule.svelte';
+	import AccountsModule from './modules/AccountsModule.svelte';
 	import SearchModule from './modules/SearchModule.svelte';
 	import AiModule from './modules/AiModule.svelte';
 	import PrivacyModule from './modules/PrivacyModule.svelte';
@@ -12,12 +14,14 @@
 		open = false,
 		close,
 		initialTab = 'general',
-		transport = nativeSettingsTransport
+		transport = nativeSettingsTransport,
+		accountController
 	}: {
 		open?: boolean;
 		close: () => void;
 		initialTab?: SettingsTab;
 		transport?: SettingsTransport;
+		accountController?: AccountController;
 	} = $props();
 
 	let activeTab = $state<SettingsTab>('general');
@@ -137,7 +141,13 @@
 					aria-labelledby={`tab-${activeTab}`}
 					class="flex-1 overflow-y-auto p-6"
 				>
-					{#if error}
+					{#if activeTab === 'accounts'}
+						{#if accountController}
+							<AccountsModule controller={accountController} />
+						{:else}
+							<p class="text-sm text-[var(--secondary)]">Account manager unavailable.</p>
+						{/if}
+					{:else if error}
 						<div class="space-y-4">
 							<p role="alert" class="text-sm text-red-500">{error}</p>
 							<button
