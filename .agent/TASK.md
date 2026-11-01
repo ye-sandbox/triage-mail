@@ -7,6 +7,46 @@
 
 ## Active Task
 
+### Task [04.1]: Account Mailboxes Navigation
+
+- **Description:** Implement an expandable account list below global All Mail, with local account photos, functional per-account mailbox views (Inbox, Starred, Snoozed, Spam, Archive, Trash, Other folders), same-account deduplication, and append-only Migration v2.
+- **Status:** RUNNING
+- **Action Type:** Sequential / Wave implementation across tasks `[04.1.1]`–`[04.1.7]`.
+- **Plan and implementation tasks:** [Account Mailboxes Plan](plans/04.1-account-mailboxes.md).
+- **Scope:** Append-only Migration v2 (`folders`, `message_folder_memberships`, `account_avatars`, `messages` column additions), folder catalog synchronization, two-way Starred and local Snoozed behavior, account-scoped search, local private avatars, and Svelte 5 expandable account navigation.
+
+#### Execution Queue
+
+- [x] **[04.1.1]** `[DONE]` `[SEQ: W1]` Finalize mailbox contracts, append-only migration design, and deduplication specifications
+  - `Paths:` `docs/adr/decisions.md, .agent/NOTES.md, .agent/plans/04.1-account-mailboxes.md`
+  - `Verify:` `git diff --check && node scripts/ci-guard.mjs`
+
+- [ ] **[04.1.2]** `[READY FOR PLANNING]` `[SEQ: W2]` Discover and synchronize account folders
+  - `Paths:` `crates/mail-engine/src/**, crates/storage/src/**, apps/desktop/src-tauri/src/**`
+  - `Verify:` `cargo test --workspace`
+
+- [ ] **[04.1.3]** `[PLANNED]` `[SEQ: W3]` Add persisted Starred and local Snoozed behavior
+  - `Paths:` `crates/storage/src/**, crates/mail-engine/src/**, apps/desktop/src-tauri/src/**`
+  - `Verify:` `cargo test --workspace`
+
+- [ ] **[04.1.4]** `[PLANNED]` `[SEQ: W4]` Expose account-scoped mailbox search
+  - `Paths:` `crates/storage/src/**, apps/desktop/src-tauri/src/**`
+  - `Verify:` `cargo test --workspace`
+
+- [ ] **[04.1.5]** `[PLANNED]` `[SEQ: W5]` Add private local account photos
+  - `Paths:` `crates/storage/src/**, apps/desktop/src-tauri/src/**, apps/desktop/src/lib/onboarding/**`
+  - `Verify:` `cargo test --workspace && pnpm --filter desktop check && pnpm --filter desktop test`
+
+- [ ] **[04.1.6]** `[PLANNED]` `[SEQ: W6]` Build expandable account navigation and view controls
+  - `Paths:` `apps/desktop/src/lib/inbox/**, apps/desktop/src/lib/onboarding/{DesktopApp,InboxSession}.svelte, apps/desktop/src/lib/i18n/**`
+  - `Verify:` `pnpm --filter desktop check && pnpm --filter desktop test && ! grep -rn "export let" apps/desktop/src/`
+
+- [ ] **[04.1.7]** `[PLANNED]` `[SEQ: W7]` Validate and close the mailbox feature
+  - `Paths:` `feature tests, .agent/TASK.md, .agent/NOTES.md`
+  - `Verify:` `cargo test --workspace && pnpm --filter desktop check && pnpm --filter desktop test && node scripts/ci-guard.mjs`
+
+## Completed Tasks
+
 ### Task [04.1]: Unified Settings Modal
 
 - **Description:** Implement a unified, accessible, and responsive Settings dialog with typed modules, persistent mounted inbox shell, gear entry point, and embedded account management.
@@ -15,34 +55,6 @@
 - **Commits:** `e3b2ff4`, `6c21bbf`, `e9464eb`, `e59d45a`
 - **Plan and implementation tasks:** [Unified Settings Modal](plans/04.1-settings-modal.md).
 - **Scope:** Persistent inbox beneath dim overlay, gear trigger in sidebar footer and toolbar fallback, typed modules (General, Accounts, Search, AI, Privacy), unsaved-form guards, pending operation isolation, EN/PT-BR localization.
-
-#### Execution Queue (`W1` -> `W2`)
-
-- [x] **[04.1.8]** `[DONE: e3b2ff4]` `[PARALLEL: W1]` Implement Settings dialog primitive and typed modules (General, Search, AI, Privacy)
-  - `Model:` `gemini-3.8-flash-medium`
-  - `Read:` `apps/desktop/src/lib/settings/SettingsView.svelte, apps/desktop/src/lib/settings/AiSettingsForm.svelte, apps/desktop/src/lib/settings/ModelSettings.svelte`
-  - `Paths:` `apps/desktop/src/lib/settings/types.ts, apps/desktop/src/lib/settings/SettingsDialog.svelte, apps/desktop/src/lib/settings/modules/GeneralModule.svelte, apps/desktop/src/lib/settings/modules/SearchModule.svelte, apps/desktop/src/lib/settings/modules/AiModule.svelte, apps/desktop/src/lib/settings/modules/PrivacyModule.svelte, apps/desktop/src/lib/settings/dialog.svelte.test.ts`
-  - `Verify:` `([ -e node_modules ] || ln -s /home/yegear/github/triage-mail/node_modules node_modules) && ([ -e apps/desktop/node_modules ] || cp -RP /home/yegear/github/triage-mail/apps/desktop/node_modules apps/desktop/node_modules) && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/settings/dialog.svelte.test.ts && ! grep -rn "export let" apps/desktop/src/`
-
-- [x] **[04.1.9]** `[DONE: 6c21bbf]` `[PARALLEL: W1]` Implement persistent inbox shell, sidebar gear entry point, and live search preference synchronization
-  - `Model:` `gemini-3.8-flash-medium`
-  - `Read:` `apps/desktop/src/lib/inbox/Sidebar.svelte, apps/desktop/src/lib/inbox/SearchToolbar.svelte, apps/desktop/src/lib/onboarding/DesktopApp.svelte, apps/desktop/src/lib/onboarding/InboxSession.svelte`
-  - `Paths:` `apps/desktop/src/lib/inbox/Icon.svelte, apps/desktop/src/lib/inbox/Sidebar.svelte, apps/desktop/src/lib/inbox/SearchToolbar.svelte, apps/desktop/src/lib/onboarding/DesktopApp.svelte, apps/desktop/src/lib/onboarding/InboxSession.svelte, apps/desktop/src/lib/inbox/InboxView.svelte, apps/desktop/src/lib/inbox/settings-shell.svelte.test.ts`
-  - `Verify:` `([ -e node_modules ] || ln -s /home/yegear/github/triage-mail/node_modules node_modules) && ([ -e apps/desktop/node_modules ] || cp -RP /home/yegear/github/triage-mail/apps/desktop/node_modules apps/desktop/node_modules) && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/inbox/settings-shell.svelte.test.ts && ! grep -rn "export let" apps/desktop/src/`
-
-- [x] **[04.1.10]** `[DONE: e9464eb]` `[PARALLEL: W2]` Embed account management in Settings with reusable account list and add account flow
-  - `Model:` `gemini-3.8-flash-medium`
-  - `Read:` `apps/desktop/src/lib/onboarding/OnboardingView.svelte, apps/desktop/src/lib/onboarding/AccountForm.svelte, apps/desktop/src/lib/onboarding/controller.svelte.ts`
-  - `Paths:` `apps/desktop/src/lib/onboarding/AccountList.svelte, apps/desktop/src/lib/onboarding/OnboardingView.svelte, apps/desktop/src/lib/settings/modules/AccountsModule.svelte, apps/desktop/src/lib/settings/accounts-module.svelte.test.ts`
-  - `Verify:` `([ -e node_modules ] || ln -s /home/yegear/github/triage-mail/node_modules node_modules) && ([ -e apps/desktop/node_modules ] || cp -RP /home/yegear/github/triage-mail/apps/desktop/node_modules apps/desktop/node_modules) && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/settings/accounts-module.svelte.test.ts src/lib/onboarding/onboarding.svelte.test.ts && ! grep -rn "export let" apps/desktop/src/`
-
-- [x] **[04.1.11]** `[DONE: e59d45a]` `[PARALLEL: W2]` Add unsaved-form dirty guards, pending operation protection, responsive layout, EN/PT-BR copy, and active contracts
-  - `Model:` `gemini-3.8-flash-medium`
-  - `Read:` `apps/desktop/src/lib/i18n/translations.ts, apps/desktop/src/lib/settings/SettingsDialog.svelte, .agent/NOTES.md`
-  - `Paths:` `apps/desktop/src/lib/settings/guards.ts, apps/desktop/src/lib/i18n/translations.ts, apps/desktop/src/lib/settings/modal-flow.svelte.test.ts, .agent/NOTES.md`
-  - `Verify:` `([ -e node_modules ] || ln -s /home/yegear/github/triage-mail/node_modules node_modules) && ([ -e apps/desktop/node_modules ] || cp -RP /home/yegear/github/triage-mail/apps/desktop/node_modules apps/desktop/node_modules) && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/settings/modal-flow.svelte.test.ts && git diff --check && node scripts/ci-guard.mjs && ! grep -rn "export let" apps/desktop/src/`
-
-## Completed Tasks
 
 ### Task [04.9]: Application Title Bar
 
@@ -59,36 +71,6 @@
 - [x] **[04.9.2]** `[DONE: 4cb5658]` `[PARALLEL: W1]` Configure remaining-height desktop shell CSS, view viewport layouts, undecorated window, and minimal Tauri capabilities
 - [x] **[04.9.3]** `[DONE: 76973ef]` `[PARALLEL: W2]` Integrate persistent `TitleBar` in `+layout.svelte` global desktop shell and add shell/dialog regression tests
 - [x] **[04.9.4]** `[DONE: ec087bc]` `[PARALLEL: W2]` Record Application Title Bar active contracts in `.agent/NOTES.md`
-
-## Retained Planning Queue (not active)
-
-### Task [04.1]: Account Mailboxes Navigation
-
-- **Description:** Plan an expandable account list below global All Mail, with local account photos and functional per-account mailbox views.
-- **Status:** PLANNING
-- **Action Type:** Planning only; implementation requires user approval.
-- **Plan and implementation tasks:** [Account Mailboxes Plan](plans/04.1-account-mailboxes.md).
-- **UI planning addendum:** [Unified Settings Modal](plans/04.1-settings-modal.md), integrating Accounts into a centered modular dialog opened by one sidebar-footer gear icon.
-- **Scope:** Inbox, Starred, Snoozed, Spam, Archive, Trash, and additional discovered server folders. Keep global All Mail.
-- **Additional UI scope:** Preserve the mounted inbox behind Settings; organize General, Accounts, Search, AI and models, and Privacy in an internal sidebar. Planning only.
-- **Next step:** Review the proposed behavior and contract extensions, then approve the implementation queue. No implementation task is RUNNING.
-
-### Separate Settings Modal Queue (under [04.1])
-
-All tasks remain PLANNING; implementation approval is still required. Details, paths,
-dependencies, and acceptance criteria: [Settings Modal Tasks](plans/04.1-settings-modal.md#separate-implementation-tasks).
-
-| Task | Scope | Depends on |
-|---|---|---|
-| [04.1.8] | Persistent inbox, gear entry point, and dialog shell | Explicit modal implementation approval |
-| [04.1.9] | Typed Settings modules and live search preferences | [04.1.8] |
-| [04.1.10] | Embedded account management | [04.1.9] |
-| [04.1.11] | Unsaved-form guards, pending operations, and credential cleanup | [04.1.10] |
-| [04.1.12] | Responsive layout, EN/PT-BR, and accessibility | [04.1.11] |
-| [04.1.13] | Regression checks, visual QA, and feature closure | [04.1.12] |
-
-Mailbox tasks [04.1.1]–[04.1.7] keep their existing IDs. The modal queue may run first
-after approval; shared UI files require sequential integration with mailbox work.
 
 ---
 
