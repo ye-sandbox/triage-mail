@@ -44,7 +44,7 @@
 - **Action Type:** Implementation.
 - **Status:** DONE
 - **Plan:** Approved by user on 2026-10-31; implementation and validation complete.
-- **Commit:** `PENDING_COMMIT` (`feat(storage): consolidate canonical v1 schema and persist triage badges`).
+- **Commit:** `0a2cf35` (`feat(storage): consolidate canonical v1 schema and persist triage badges`).
 - **Next Task:** [90.5] Parallel Read Pool & Latency Target ADR (`READY FOR PLANNING`).
 - **Acceptance:**
   - [x] ADR-007 authored and approved, superseding ADR-006; P1 schema immutability policy established for released schemas (append-only strictly from v0.1.0 tag onward).
@@ -957,7 +957,7 @@ Active task: [02.5] (see above). Proposed defaults marked *(confirm at plan appr
 - **Outcome:** Marked Tier 2 experimental; hidden Semantic/Hybrid modes behind an explicit setting; honestly labeled feature-hash semantic projection in UI; exposed embedding failure telemetry in the sync worker (`SyncProgressEvent.embedding_errors_count`).
 
 ### [01.3] Pre-Release Schema Consolidation & Persisted Triage — `DONE`
-- **Commit:** `PENDING_COMMIT` (`feat(storage): consolidate canonical v1 schema and persist triage badges`).
+- **Commit:** `0a2cf35` (`feat(storage): consolidate canonical v1 schema and persist triage badges`).
 - **Outcome:** Migrations v1–v5 consolidated into single canonical v1 schema; single account-partitioned `vec_messages` virtual table with zero duplicate vector tables or reconciliation triggers; deterministic triage badges persisted in SQLCipher at ingestion; `MessageRowDto` exposes `triage_badges` for zero-IPC-call list badge rendering; verified against 100k exact dot-product reference oracle.
 
 ### [90.5] Parallel Read Pool & Latency Target ADR — `PENDING`
