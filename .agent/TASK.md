@@ -7,7 +7,7 @@
 
 ## Active Task
 
-None — Milestone v0.1.1 Released (`v0.1.1` tag)
+None — Milestone v0.1.2 Released (`v0.1.2` tag)
 
 ---
 

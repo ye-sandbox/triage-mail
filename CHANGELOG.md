@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-01
+
+### Added
+- Step-by-step credential configuration playbooks and field checklists in `AccountHelpGuide.svelte` for all four sign-in modes (App Password for Gmail/iCloud/Yahoo/Fastmail, OAuth Public PKCE in Microsoft Entra/Azure, OAuth BYO Credentials in Google Cloud Console, and local Proton Mail Bridge) in both English (`en`) and Brazilian Portuguese (`pt-BR`).
+- One-click `Gmail OAuth` preset in `presets.ts` and `AccountForm.svelte` to auto-populate `imap.gmail.com:993`, `OAuth2ByoCredentials`, Google OAuth 2.0 authorization/token endpoints, and the `https://mail.google.com/` scope.
+
 ## [0.1.1] - 2026-11-01
 
 ### Added
