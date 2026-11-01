@@ -5,6 +5,23 @@
 
 ---
 
+## [v0.1.2] - 2026-11-01
+
+### 📌 Task [04.8.1]: Step-by-Step Credential Setup Playbooks & Gmail OAuth Preset
+
+- **Description:** Expand the interactive in-app onboarding guide with explicit field checklists ("What to fill in the form") and numbered provider-specific step-by-step playbooks explaining how to configure and obtain credentials across all four authentication modes in `en` and `pt-BR`, plus add a one-click `Gmail OAuth` quick-fill preset.
+- **Systems Involved:** `apps/desktop` (`src/lib/i18n/`, `src/lib/onboarding/`).
+- **Action Type:** Feature & Documentation.
+- **Status:** DONE
+- **Commit:** `13ca708` (`feat(desktop): add step-by-step credential playbooks and Gmail OAuth preset to onboarding guide`).
+- **Acceptance:**
+  - [x] Field checklist and step-by-step credential playbooks added for App Password (Gmail, iCloud, Yahoo, AOL, Fastmail), OAuth Public PKCE (Microsoft Entra / Azure), OAuth BYO Credentials (Google Cloud Console), and Proton Mail Bridge in both `en` and `pt-BR`.
+  - [x] One-click `Gmail OAuth` preset extracted to `presets.ts` to auto-populate `imap.gmail.com:993`, `OAuth2ByoCredentials`, Google OAuth endpoints, and `https://mail.google.com/` scope.
+  - [x] Component modularity enforced (`AccountForm.svelte` and `AccountHelpGuide.svelte` < 250 lines) with Svelte 5 Runes and `#snippet`.
+  - [x] Full Definition of Done verified: `svelte-check`, Vitest, SPA build, Cargo workspace check/fmt/clippy, and `scripts/ci-guard.mjs` passed with 0 errors.
+
+---
+
 ## [v0.1.1] - 2026-11-01
 
 ### 📌 Task [04.8]: Account Onboarding Help Guide, Provider Presets & Apple-Style Language Selector
