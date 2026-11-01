@@ -357,7 +357,7 @@ describe('onboarding help guide and language selection', () => {
 		await unmount(component);
 	});
 
-	it('toggles interactive sign-in help guide and displays method tabs', async () => {
+	it('toggles interactive sign-in help guide and displays method tabs with step-by-step playbooks', async () => {
 		const { controller, target } = fixture();
 		controller.phase = 'ready';
 		const component = mount(OnboardingView, {
@@ -378,6 +378,26 @@ describe('onboarding help guide and language selection', () => {
 		expect(toggleButton!.getAttribute('aria-expanded')).toBe('true');
 		expect(target.textContent).toContain('Two-Factor Authentication');
 		expect(target.textContent).toContain('Gmail, Google Workspace');
+		expect(target.textContent).toContain('What to fill in the form below:');
+		expect(target.textContent).toContain('Step-by-step: how to obtain your credentials:');
+		expect(target.textContent).toContain('myaccount.google.com/apppasswords');
+
+		const tabs = [...target.querySelectorAll<HTMLButtonElement>('button[role="tab"]')];
+		expect(tabs).toHaveLength(4);
+
+		tabs[1].click();
+		flushSync();
+		expect(target.textContent).toContain('portal.azure.com');
+		expect(target.textContent).toContain('Application (client) ID');
+
+		tabs[2].click();
+		flushSync();
+		expect(target.textContent).toContain('console.cloud.google.com');
+		expect(target.textContent).toContain('Desktop app');
+
+		tabs[3].click();
+		flushSync();
+		expect(target.textContent).toContain('Mailbox details / Configuration');
 
 		await unmount(component);
 	});
@@ -393,8 +413,10 @@ describe('onboarding help guide and language selection', () => {
 
 		const buttons = [...target.querySelectorAll('button')];
 		const gmailPreset = buttons.find((b) => b.textContent?.trim() === 'Gmail');
+		const gmailOAuthPreset = buttons.find((b) => b.textContent?.trim() === 'Gmail OAuth');
 		const protonPreset = buttons.find((b) => b.textContent?.trim() === 'Proton');
 		expect(gmailPreset).toBeDefined();
+		expect(gmailOAuthPreset).toBeDefined();
 		expect(protonPreset).toBeDefined();
 
 		gmailPreset!.click();
@@ -403,6 +425,18 @@ describe('onboarding help guide and language selection', () => {
 		const portInput = target.querySelector<HTMLInputElement>('input[name="port"]')!;
 		expect(hostInput.value).toBe('imap.gmail.com');
 		expect(portInput.value).toBe('993');
+
+		gmailOAuthPreset!.click();
+		flushSync();
+		expect(target.querySelector<HTMLInputElement>('input[name="authorize"]')!.value).toBe(
+			'https://accounts.google.com/o/oauth2/v2/auth'
+		);
+		expect(target.querySelector<HTMLInputElement>('input[name="token"]')!.value).toBe(
+			'https://oauth2.googleapis.com/token'
+		);
+		expect(target.querySelector<HTMLInputElement>('input[name="scopes"]')!.value).toBe(
+			'https://mail.google.com/'
+		);
 
 		protonPreset!.click();
 		flushSync();

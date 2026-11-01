@@ -315,8 +315,9 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 
 - **Reactive i18n Store (`src/lib/i18n/`):** Pure Svelte 5 rune-based localization module supporting `en` (English) and `pt-BR` (Português do Brasil). Preferences are persisted to `localStorage` with fallback to browser language. Typed translation dictionary avoids external dependencies.
 - **Minimalist Apple-Style Language Selector (`LanguageSelector.svelte`):** Segmented pill control (`EN` | `PT`) with translucent backdrop blur, subtle Apple dark/light surface tokens, instant active feedback, accessible `role="radiogroup"` / `aria-checked` bindings, and zero layout shift. Exposed in Onboarding and Settings.
-- **In-App Account Help Guide & Provider Presets (`AccountForm.svelte`):**
-  - Interactive disclosure guide explaining all 4 login methods: App Passwords (2FA prerequisite, IMAP enabling, common provider links/hosts), OAuth2 Public PKCE (Microsoft / loopback 127.0.0.1 redirect), OAuth2 BYO Credentials (Google Cloud Console, client_id + client_secret), and Proton Mail Bridge (local 127.0.0.1:1143 IMAP, paid Proton account, bridge password alert).
-  - Quick-fill provider presets (Gmail, Outlook/Hotmail, iCloud, Yahoo, Fastmail, Proton Mail Bridge) to auto-populate host, port, and recommended auth mode in 1 click.
+- **In-App Account Help Guide & Provider Presets (`AccountForm.svelte`, `AccountHelpGuide.svelte`, `presets.ts`):**
+  - Interactive disclosure guide explaining all 4 login methods: App Passwords (2FA prerequisite, IMAP enabling, common provider links/hosts), OAuth2 Public PKCE (Microsoft Entra / Azure app registration, loopback `127.0.0.1` redirect), OAuth2 BYO Credentials (Google Cloud Console project, Gmail API, `client_id` + `client_secret`), and Proton Mail Bridge (local `127.0.0.1:1143` IMAP, paid Proton account, bridge password alert).
+  - Each authentication tab includes a structured field checklist ("What to fill in the form") and numbered provider-specific step-by-step playbooks explaining how to configure and obtain credentials.
+  - Quick-fill provider presets (`Gmail`, `Gmail OAuth`, `Outlook`, `iCloud`, `Yahoo`, `Fastmail`, `Proton`) isolated in `presets.ts` to auto-populate host, port, OAuth endpoints/scopes, and recommended auth mode in 1 click.
 - **Documentation Perimeter:** Comprehensive Account Setup & Authentication guides added in `README.md` and `README.pt-br.md` maintaining 1:1 bilingual parity and zero heading emojis per `readme-standard`.
 
