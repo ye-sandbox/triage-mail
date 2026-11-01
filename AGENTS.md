@@ -42,13 +42,14 @@ The agent MUST minimize default token load by following progressive disclosure:
 - **Architectural Decisions (`docs/adr/decisions.md`):** MUST load when creating new crates, researching historical trade-offs, or changing system boundaries.
 - **Domain Skills (`.agent/skills/<name>/SKILL.md` or global skills):** MUST load `svelte-dev` when authoring Svelte 5 components, and `readme-standard` when updating `README.md` / `README.pt-br.md`.
 - **Knowledge Base (`.agent/knowledge/`):** MUST load relevant atomic cards when diagnosing obscure platform errors, SQLCipher/sqlite-vec linkage quirks, or IMAP provider gotchas.
+- **Transversal Skills:** Reference external organizational playbooks (`agent-skills`) ONLY when tasks require UI porting, QA audit, sequential/parallel subagent queue execution (`task-queue`), or host-level orchestration.
 
 ---
 
 ## Execution Protocol
 
 1. Read `AGENTS.md`, `.agent/TASK.md`, and `.agent/NOTES.md` before editing any files.
-2. **Plan first:** Set `Status` in `.agent/TASK.md` to `PLANNING`; present plan; await approval; then set to `RUNNING`.
+2. **Plan first (or Pre-Approved Fast-Track):** If `Status` in `.agent/TASK.md` is `READY FOR PLANNING`, set to `PLANNING`, present plan, await approval, then set to `RUNNING`. If task scope was already decided during planning (`Status: APPROVED`) with zero open questions/blockers, transition directly to `RUNNING` on `proceed` (or use the `task-queue` skill on `proceed queue` to execute sequential/parallel subagents with multi-account quota routing; tag independent tasks that have strictly disjoint file scopes with `[PARALLEL: Wx]` and `Paths:`). Halt and revert to `PLANNING` if any ambiguity or unapproved dependency arises.
 3. Work on exactly ONE active task at a time.
 4. **Falsifiable Definition of Done (DoD):**
    A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
