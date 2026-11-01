@@ -18,9 +18,9 @@ O `triage-mail` é um motor de leitura unificada, busca híbrida instantânea e 
 Todas as credenciais, corpos de mensagens e índices vetoriais residem exclusivamente na máquina do usuário sob criptografia em repouso, com zero telemetria e sem dependências de runtimes externos pesados:
 
 - **Binário Nativo & Baixo Consumo:** Stack pura em Rust (`tokio`) + Tauri v2 + SvelteKit 5 SPA (binário desktop nativo enxuto, sem Electron e sem sidecars Python/Node).
-- **Busca Híbrida de Alta Performance:** Combina busca léxica exata configurável via SQLite `FTS5` (padrão `unicode61 remove_diacritics 2`, `trigram` opcional) e busca semântica vetorial KNN via extensão `sqlite-vec` embutida (quantização `int8` com pré-filtragem; `< 15ms` semântica filtrada, `~50ms` híbrida global em 100k mensagens).
-- **Caixa Unificada Virtualizada a 60fps:** Projetada para lidar com `100k+` mensagens simultâneas com triagem orientada por atalhos de teclado (*Command Palette*), sincronização incremental (`UIDVALIDITY`/`CONDSTORE`) e sincronização bidirecional de *flags* IMAP.
-- **Autenticação Multimodo Transparente:** Suporte a Senhas de App (*App Passwords*), OAuth2 PKCE público, credenciais BYO OAuth fornecidas pelo usuário (`client_id`/`client_secret` salvos no cofre do SO), IMAP TLS 1.3 padrão e Proton Mail Bridge local através de um conector `ImapConnector` agnóstico.
+- **Busca Híbrida de Alta Performance:** Combina busca léxica exata configurável via SQLite `FTS5` (padrão `unicode61 remove_diacritics 2`, `trigram` opcional) e busca semântica vetorial KNN via extensão `sqlite-vec` embutida (quantização `int8` com pré-filtragem; $\le 15$ms semântica filtrada p95, ~52ms híbrida global p50 em 100k mensagens, ADR-008).
+- **Caixa Unificada Virtualizada:** Projetada para lidar com `100k+` mensagens com pegada de memória delimitada ($\le 18$ linhas DOM montadas), triagem orientada por atalhos de teclado (*Command Palette*), sincronização incremental (`UIDVALIDITY`/`CONDSTORE`) e sincronização bidirecional de *flags* IMAP.
+- **Autenticação Multimodo Transparente:** Suporte a Senhas de App (*App Passwords*), OAuth2 PKCE público, credenciais BYO OAuth fornecidas pelo usuário (`client_id`/`client_secret` salvos no cofre do SO), IMAP padrão (TLS 1.3 e TLS 1.2) e Proton Mail Bridge local através de um conector `ImapConnector` agnóstico.
 - **Pipeline de IA Local-First em 3 Camadas:**
   - *Camada 1 (Determinística, Custo Zero):* Regex e heurísticas nativas em Rust para extração imediata de códigos 2FA/OTP, Boletos FEBRABAN (com extração determinística de valor em R\$ e data de vencimento), chaves/payloads Pix, metadados de NF-e, códigos de rastreio, `List-Unsubscribe` + cancelamento em 1 clique RFC 8058 (`List-Unsubscribe-Post`) e categorização automática (`Financeiro`, `Segurança`, `Newsletter`, `Pessoal`).
   - *Camada 2 (Projeção Semântica Experimental em CPU Local):* Projeções determinísticas de hash de tokens e n-grams (`int8[384]`) inicializadas a partir de cabeçalhos de modelos ou constantes offline para `sqlite-vec`; inferência neural com modelos ONNX está planejada para a v0.2.
@@ -34,7 +34,7 @@ O repositório é estruturado como um Cargo Workspace modular para que as crates
 ```mermaid
 flowchart TD
     UI["apps/desktop (SvelteKit 5 SPA + DOMPurify Sandbox)"] <-->|"Tauri v2 Typed IPC & Channels"| TauriCore["apps/desktop/src-tauri (IPC Adapter)"]
-    TauriCore --> MailEngine["crates/mail-engine (async-imap, TLS 1.3, OAuth2 PKCE, mail-parser)"]
+    TauriCore --> MailEngine["crates/mail-engine (IMAP assíncrono próprio, TLS 1.3/1.2, OAuth2 PKCE, mail-parser)"]
     TauriCore --> Storage["crates/storage (SQLite WAL + SQLCipher + FTS5 + sqlite-vec)"]
     TauriCore --> Vault["crates/vault (OS Keyring + Argon2id + AES-GCM)"]
     TauriCore --> TriageAI["crates/triage-ai (Camada 1 Regex, Camada 2 Projeção Semântica, Camada 3 Ollama/BYOK)"]
@@ -43,6 +43,17 @@ flowchart TD
     MailEngine <-->|"IMAP IDLE / BODY.PEEK"| Providers["Servidores IMAP & Proton Bridge Local (127.0.0.1)"]
     TriageAI -.->|"HTTP Opcional (Opt-in)"| Ollama["Ollama Local (127.0.0.1:11434) / BYOK"]
 ```
+
+## Status e Limitações Conhecidas
+
+O `triage-mail` é um motor de entrada e triagem de e-mails em versão MVP (v0.1.0) com os seguintes limites empíricos de desempenho e escopo arquitetural:
+
+- **Limites de Latência de Busca (ADR-008):** Em 100.000 mensagens no hardware de referência (AMD Ryzen 7 7700), as latências observadas em p95 warm são: semântica com filtro de partição $\le 15$ ms (12,9 ms), busca léxica $\le 40$ ms (37,3 ms), semântica exata global $\le 50$ ms (47,8 ms) e busca híbrida concorrente $\le 60$ ms (52,4 ms p50). A varredura vetorial exata global em 100k itens transmite 38,4 MB de embeddings `int8[384]` brutos através da descriptografia AES-256 do SQLCipher; busca vetorial global abaixo de 15ms é fisicamente inviável em CPU sem aproximações. Pré-filtragem de candidatos via quantização escalar de 1 bit (POPCNT Hamming distance) está agendada para avaliação na v0.2.
+- **Exibição Nativa e Rolagem Virtual:** A lista de mensagens virtualizada mantém uma pegada de DOM delimitada ($\le 18$ linhas montadas) em 100k mensagens. Intervalos de callback de frame observados no WebKitGTK nativo registraram p95 em ~23ms sob Linux/WSL. Apresentação a 60fps acelerada por hardware depende dos drivers locais de GPU e compositor e não é garantida em todas as distribuições Linux.
+- **Busca Semântica na Camada 2:** A Camada 2 utiliza atualmente projeções determinísticas experimentais de hash de características (`int8[384]`) inicializadas a partir da configuração de modelo. A integração com runtime neural ONNX está postergada para a v0.2.
+- **Cliente IMAP Próprio (ADR-009):** A comunicação IMAP emprega um cliente assíncrono próprio desenvolvido sobre `tokio` e `tokio-rustls` (suportando TLS 1.3 e TLS 1.2, com pinning de certificado em loopback para Proton Mail Bridge), substituindo a biblioteca `async-imap` para garantir `#![forbid(unsafe_code)]` e busca tardia de corpos sem download de anexos via RFC 3501 `BODYSTRUCTURE`.
+- **Escopo Exclusivo de Entrada (*Inbound-Only*):** O MVP v0.1 foca estritamente na sincronização, leitura local, busca e triagem de mensagens de entrada. Composição de e-mails e envio via SMTP estão postergados para a v0.2.
+- **Escopo de Sincronização Multipasas:** A sincronização indexa pastas padrão (INBOX, Archive, Trash) com busca de partes de texto em duas fases. Anexos binários são baixados sob demanda via `IMAP BODY.PEEK[<part_id>]`.
 
 ## Quickstart
 
