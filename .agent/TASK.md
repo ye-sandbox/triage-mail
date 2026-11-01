@@ -28,7 +28,7 @@ None — Milestone MVP v0.1.0 Complete (Pending Release Tag / Push Authorization
 - **Commit:** `f35aaa5` (`docs(audit): complete public transition audit, author adr-009, and update status limitations`).
 - **Acceptance:**
   - [x] Full secret and PII scrub verification: 179 tracked text files scanned with zero findings via `scripts/ci-guard.mjs`; git diff additions across history verified clean of credentials and non-reserved email addresses.
-  - [x] Git author identity configured: Local git repository `user.email` set to anonymous `yegear1@users.noreply.github.com` per `oss-readiness` skill.
+  - [x] Git author identity configured: Local git repository `user.email` set to anonymous GitHub noreply email per `oss-readiness` skill.
   - [x] Local paths scrubbed: WSL absolute paths removed from `.agent/TASK.md`.
   - [x] AGPLv3 notices verified: root `LICENSE` file and all manifests (`Cargo.toml`, sub-crates, `apps/desktop/package.json`) enforce AGPLv3.
   - [x] ADR-009 authored in `docs/adr/decisions.md` documenting the in-house asynchronous IMAP client architecture, two-phase lazy body fetch, SASL XOAUTH2 challenge-abort continuation handling, and loopback TLS pinning for Proton Mail Bridge.
