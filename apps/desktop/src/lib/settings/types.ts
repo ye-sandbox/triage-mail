@@ -20,3 +20,24 @@ export interface SettingsTransport {
 	download(request: { model_url: string; tokenizer_url: string; consent: boolean }): Promise<void>;
 	summarize(messageId: string, consent: boolean, expected: AiSettings): Promise<string>;
 }
+
+export type SettingsTab = 'general' | 'search' | 'ai' | 'privacy';
+
+export interface SettingsTabItem {
+	id: SettingsTab;
+	label: string;
+}
+
+export const SETTINGS_TABS: readonly SettingsTabItem[] = [
+	{ id: 'general', label: 'General' },
+	{ id: 'search', label: 'Search' },
+	{ id: 'ai', label: 'AI' },
+	{ id: 'privacy', label: 'Privacy' }
+] as const;
+
+export interface SettingsModuleProps {
+	settings: Settings;
+	transport: SettingsTransport;
+	busy?: boolean;
+	onReload?: () => void | Promise<void>;
+}
