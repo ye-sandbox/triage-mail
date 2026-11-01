@@ -18,9 +18,9 @@
 All credentials, message bodies, and semantic indices reside exclusively on the user's machine under encryption at rest, with zero telemetry and zero external sidecar runtimes:
 
 - **Native Binary & Low Footprint:** Pure Rust (`tokio`) + Tauri v2 + SvelteKit 5 SPA (lean native desktop binary with zero Electron/Node/Python backend processes).
-- **High-Performance Hybrid Search:** Combines configurable lexical exact match via SQLite `FTS5` (default `unicode61 remove_diacritics 2`, optional `trigram`) and local semantic vector KNN via embedded `sqlite-vec` (`int8` quantized with pre-filtering; sub-15ms filtered semantic, ~50ms global hybrid across 100k messages).
-- **60fps Virtualized Unified Inbox:** Engineered to scroll through `100k+` messages smoothly with keyboard-first triage (`Command Palette`), incremental `UIDVALIDITY`/`CONDSTORE` sync, and two-way IMAP flag synchronization.
-- **Transparent Multi-Mode Authentication:** Supports App Passwords, OAuth2 Public PKCE, user-supplied BYO OAuth (`client_id`/`client_secret` stored in the OS vault), standard IMAP TLS 1.3, and local Proton Mail Bridge behind an agnostic `ImapConnector`.
+- **High-Performance Hybrid Search:** Combines configurable lexical exact match via SQLite `FTS5` (default `unicode61 remove_diacritics 2`, optional `trigram`) and local semantic vector KNN via embedded `sqlite-vec` (`int8` quantized with pre-filtering; $\le 15$ms filtered semantic p95, ~52ms global hybrid p50 across 100k messages, ADR-008).
+- **Virtualized Unified Inbox:** Engineered to scroll through `100k+` messages with bounded memory ($\le 18$ DOM rows mounted), keyboard-first triage (`Command Palette`), incremental `UIDVALIDITY`/`CONDSTORE` sync, and two-way IMAP flag synchronization.
+- **Transparent Multi-Mode Authentication:** Supports App Passwords, OAuth2 Public PKCE, user-supplied BYO OAuth (`client_id`/`client_secret` stored in the OS vault), standard IMAP (TLS 1.3 and TLS 1.2), and local Proton Mail Bridge behind an agnostic `ImapConnector`.
 - **3-Tier Local-First AI Pipeline:**
   - *Tier 1 (Deterministic, Zero Cost):* Native Rust regex and heuristics for instant extraction of 2FA/OTP codes, FEBRABAN Boletos (with deterministic BRL amount and due date extraction), Pix EMV/keys, NF-e metadata, package tracking numbers, `List-Unsubscribe` + RFC 8058 One-Click Unsubscribe (`List-Unsubscribe-Post`), and automatic categorization (`Financial`, `Security`, `Newsletter`, `Personal`).
   - *Tier 2 (Experimental Local CPU Semantic Projection):* Deterministic token and n-gram feature-hash projections (`int8[384]`) seeded from model headers or offline constants for `sqlite-vec`; learned neural ONNX model inference is planned for v0.2.
@@ -34,7 +34,7 @@ The repository is structured as a modular Cargo Workspace so the core Rust crate
 ```mermaid
 flowchart TD
     UI["apps/desktop (SvelteKit 5 SPA + DOMPurify Sandbox)"] <-->|"Tauri v2 Typed IPC & Channels"| TauriCore["apps/desktop/src-tauri (IPC Adapter)"]
-    TauriCore --> MailEngine["crates/mail-engine (async-imap, TLS 1.3, OAuth2 PKCE, mail-parser)"]
+    TauriCore --> MailEngine["crates/mail-engine (in-house async IMAP, TLS 1.3/1.2, OAuth2 PKCE, mail-parser)"]
     TauriCore --> Storage["crates/storage (SQLite WAL + SQLCipher + FTS5 + sqlite-vec)"]
     TauriCore --> Vault["crates/vault (OS Keyring + Argon2id + AES-GCM)"]
     TauriCore --> TriageAI["crates/triage-ai (Tier 1 Regex, Tier 2 Semantic Projection, Tier 3 Ollama/BYOK)"]
@@ -43,6 +43,17 @@ flowchart TD
     MailEngine <-->|"IMAP IDLE / BODY.PEEK"| Providers["IMAP Servers & Local Proton Bridge (127.0.0.1)"]
     TriageAI -.->|"Optional HTTP (Opt-in)"| Ollama["Local Ollama (127.0.0.1:11434) / BYOK"]
 ```
+
+## Status & Known Limitations
+
+`triage-mail` is an MVP (v0.1.0) inbound email and triage engine with the following empirical performance bounds and architectural scope limits:
+
+- **Search Latency Target Bounds (ADR-008):** At 100,000 messages on reference hardware (AMD Ryzen 7 7700), observed warm p95 latencies are: partition-filtered semantic $\le 15$ ms (12.9 ms), lexical search $\le 40$ ms (37.3 ms), global exact semantic $\le 50$ ms (47.8 ms), and parallel hybrid search $\le 60$ ms (52.4 ms p50). Global exact vector scans over 100k items stream 38.4 MB of raw `int8[384]` embeddings through SQLCipher AES-256 decryption; sub-15ms global vector search is physically infeasible on CPU without lossy approximations. Sub-15ms candidate pre-filtering via 1-bit scalar quantization (Hamming distance POPCNT) is scheduled for evaluation in v0.2.
+- **Native Display & Virtual Scrolling:** The virtualized message list maintains a bounded DOM footprint ($\le 18$ mounted rows) across 100k messages. Native WebKitGTK frame callback intervals observed p95 at ~23ms under Linux/WSL. Hardware-accelerated 60fps presentation depends on local GPU and display compositor drivers and is not guaranteed across all Linux environments.
+- **Tier 2 Semantic Search:** Tier 2 currently uses experimental deterministic feature-hash projections (`int8[384]`) seeded from model configuration. Neural ONNX embedding runtime integration is deferred to v0.2.
+- **In-House IMAP Client (ADR-009):** IMAP communication uses an in-house asynchronous client built on `tokio` and `tokio-rustls` (supporting TLS 1.3 and TLS 1.2, with loopback certificate pinning for Proton Mail Bridge), replacing `async-imap` to enforce `#![forbid(unsafe_code)]` and zero-download lazy body fetches via RFC 3501 `BODYSTRUCTURE`.
+- **Inbound-Only Scope:** MVP v0.1 focuses strictly on inbound email synchronization, local reading, search, and triage. Outbound composition and SMTP transmission are deferred to v0.2.
+- **Multi-Folder Sync Scope:** Synchronization indexes standard folders (INBOX, Archive, Trash) with two-phase text-part fetching. Binary attachments are fetched on demand via `IMAP BODY.PEEK[<part_id>]`.
 
 ## Quickstart
 
