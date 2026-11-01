@@ -7,6 +7,23 @@
 
 ## Active Task
 
+### 📌 Task [99.1]: Public Transition Audit & Secret Scrubbing Verification
+
+- **Description:** Full public repository transition audit: zero PII/secret/token/non-reserved
+  mailbox leaks across git history and tracked files; AGPLv3 notices; reproducible packaging.
+- **Additional scope (C4, I6, I7):** "Status & Known Limitations" section in both READMEs
+  (readme-standard) removing unmet claims (sub-15ms, 60fps native, ONNX, `async-imap`, TLS 1.3-only,
+  INBOX-only sync). ADR documenting the in-house IMAP client choice. Measure real-account-free
+  production idle memory baseline. Verify a hosted CI run (requires explicit push authorization).
+- **Systems Involved:** Entire workspace, `.agent/`, `README.md`, `README.pt-br.md`, `docs/adr`.
+- **Action Type:** Audit, Hardening & Documentation; requires an approved plan.
+- **Status:** READY FOR PLANNING
+- **Constraints:** RFC 2606 reserved domains only; no push/tag without explicit request.
+
+---
+
+## Completed Tasks
+
 ### 📌 Task [90.5]: Parallel Read Pool & Latency Target ADR
 
 - **Description:** Hybrid search runs lexical and semantic branches sequentially (~75ms warm p50).
@@ -17,19 +34,23 @@
   p95 warm @100k — filtered semantic ≤15ms, lexical ≤40ms, global semantic ≤50ms, hybrid ≤60ms,
   UI first page incl. IPC ≤100ms. No approximate (ANN) search in v0.1; binary-quantized
   candidate + int8 rerank evaluated for v0.2.
-- **Systems Involved:** `crates/storage`, `docs/adr`.
-- **Action Type:** Investigation & Architecture; requires an approved plan.
-- **Status:** READY FOR PLANNING
-- **Scope:**
-  - Parallel read pool investigation for lexical and semantic concurrent query execution.
-  - Memory profiling of concurrent page-cache overhead.
-  - Author ADR redefining latency targets for v0.1.0 and future roadmap.
-- **Constraints:** Preserve encryption, exact ranking/candidate coverage, safety boundaries.
-- **Origin:** v0.1.0 readiness review (2026-10-31), finding I1.
-
----
-
-## Completed Tasks
+- **Systems Involved:** `crates/storage`, `docs/adr`, `docs/performance`.
+- **Action Type:** Investigation & Architecture.
+- **Status:** DONE
+- **Plan:** Approved by user on 2026-10-31; implementation, benchmark, and ADR authoring complete.
+- **Commit:** `09299a9` (`feat(storage): parallel read pool investigation, dual-connection hybrid search, and ADR-008 latency targets`).
+- **Next Task:** [99.1] Public Transition Audit & Secret Scrubbing Verification (`READY FOR PLANNING`).
+- **Acceptance:**
+  - [x] ADR-008 authored and recorded in `docs/adr/decisions.md`, affirming WAL ACID concurrency safety and redefining latency targets for v0.1.0 at 100k messages.
+  - [x] Empirical investigation completed via `crates/storage/examples/parallel_read_investigation.rs`: measured 100,000 synthetic messages and 384-dimensional int8 embeddings in SQLCipher (WAL mode) across 16MiB, 32MiB, and 64MiB page caches.
+  - [x] Concurrent hybrid candidate search implemented via `execute_hybrid_search_parallel` and integrated into `SqliteMailStore`: dual-connection execution reduces global hybrid latency from 78.96ms down to 52.39ms (33.7% faster, 26.57ms savings) with 100% exact result equivalence to sequential execution.
+  - [x] Page cache memory overhead profiled: secondary read connection adds ~25.5 MiB resident memory (VmRSS) under 100k vector queries; overall process RSS remains ~102.7 MiB (well below the 110 MiB budget).
+  - [x] Disk-backed `SqliteMailStore::open` initializes secondary connection and safely falls back to sequential search under contention or in-memory hermetic databases.
+  - [x] Benchmark and cache profiling in `crates/storage/examples/search_performance.rs` updated with concurrent profiling.
+  - [x] Native validation log `docs/performance/native-validation.md` updated with comprehensive benchmark tables and memory analysis.
+  - [x] Knowledge card `k-019-wal-parallel-readers-and-cache-overhead.md` recorded.
+  - [x] Contracts and latency bounds updated in `.agent/NOTES.md`, `README.md`, and `README.pt-br.md`.
+  - [x] Full Definition of Done verified: 170 Rust tests, 59 Vitest tests, svelte-check 0 errors/0 warnings, clippy 0 warnings, formatting clean, Svelte runes invariant clean, secret scanner clean (177 files, 0 findings), git diff clean.
 
 ### 📌 Task [01.3]: Pre-Release Schema Consolidation & Persisted Triage
 
@@ -960,18 +981,11 @@ Active task: [02.5] (see above). Proposed defaults marked *(confirm at plan appr
 - **Commit:** `0a2cf35` (`feat(storage): consolidate canonical v1 schema and persist triage badges`).
 - **Outcome:** Migrations v1–v5 consolidated into single canonical v1 schema; single account-partitioned `vec_messages` virtual table with zero duplicate vector tables or reconciliation triggers; deterministic triage badges persisted in SQLCipher at ingestion; `MessageRowDto` exposes `triage_badges` for zero-IPC-call list badge rendering; verified against 100k exact dot-product reference oracle.
 
-### [90.5] Parallel Read Pool & Latency Target ADR — `PENDING`
-- **Gap:** Hybrid search runs lexical and semantic branches sequentially (~75ms warm p50).
-  The [90.4] rationale (pooling unsafe for ACID) is incorrect: WAL read-only connections are safe.
-  Global exact <15ms is physically infeasible (~42ms vector scan at 100k).
-- **Scope:** Two read-only SQLCipher connections executing branches concurrently; measure memory
-  cost of per-connection page cache. ADR redefining targets *(confirm at plan approval)*:
-  p95 warm @100k — filtered semantic ≤15ms, lexical ≤40ms, global semantic ≤50ms, hybrid ≤60ms,
-  UI first page incl. IPC ≤100ms. No approximate (ANN) search in v0.1; binary-quantized
-  candidate + int8 rerank evaluated for v0.2.
-- **Depends on:** [01.3] (final schema).
+### [90.5] Parallel Read Pool & Latency Target ADR — `DONE`
+- **Commit:** `09299a9` (`feat(storage): parallel read pool investigation, dual-connection hybrid search, and ADR-008 latency targets`).
+- **Outcome:** Empirical parallel read and page-cache memory profiling completed; dual-connection concurrent hybrid search implemented in `SqliteMailStore` and `crates/storage::search` reducing warm global hybrid latency from ~79ms to ~52ms (-33.7%); net memory overhead of secondary connection measured at ~25.5 MiB; ADR-008 authored and recorded in `docs/adr/decisions.md` redefining falsifiable targets for v0.1.0 at 100k messages.
 
-### [99.1] Public Transition Audit & Secret Scrubbing Verification — `PENDING`
+### [99.1] Public Transition Audit & Secret Scrubbing Verification — `READY FOR PLANNING`
 - **Description:** Full public repository transition audit: zero PII/secret/token/non-reserved
   mailbox leaks across git history and tracked files; AGPLv3 notices; reproducible packaging.
 - **Additional scope (C4, I6, I7):** "Status & Known Limitations" section in both READMEs
