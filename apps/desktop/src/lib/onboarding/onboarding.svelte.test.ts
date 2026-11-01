@@ -381,6 +381,9 @@ describe('onboarding help guide and language selection', () => {
 		expect(target.textContent).toContain('What to fill in the form below:');
 		expect(target.textContent).toContain('Step-by-step: how to obtain your credentials:');
 		expect(target.textContent).toContain('myaccount.google.com/apppasswords');
+		// INVARIANT: When Gmail is selected by default, other provider playbooks are filtered out
+		expect(target.textContent).not.toContain('appleid.apple.com');
+		expect(target.textContent).not.toContain('Settings -> Privacy & Security -> Integrations');
 
 		const tabs = [...target.querySelectorAll<HTMLButtonElement>('button[role="tab"]')];
 		expect(tabs).toHaveLength(4);
@@ -414,10 +417,32 @@ describe('onboarding help guide and language selection', () => {
 		const buttons = [...target.querySelectorAll('button')];
 		const gmailPreset = buttons.find((b) => b.textContent?.trim() === 'Gmail');
 		const gmailOAuthPreset = buttons.find((b) => b.textContent?.trim() === 'Gmail OAuth');
+		const icloudPreset = buttons.find((b) => b.textContent?.trim() === 'iCloud');
 		const protonPreset = buttons.find((b) => b.textContent?.trim() === 'Proton');
 		expect(gmailPreset).toBeDefined();
 		expect(gmailOAuthPreset).toBeDefined();
+		expect(icloudPreset).toBeDefined();
 		expect(protonPreset).toBeDefined();
+
+		// INVARIANT: Gmail is selected by default on initial render
+		expect(gmailPreset!.getAttribute('aria-pressed')).toBe('true');
+		expect(icloudPreset!.getAttribute('aria-pressed')).toBe('false');
+
+		// Toggle help guide open and check that switching presets switches the displayed playbook
+		const toggleButton = target.querySelector<HTMLButtonElement>(
+			'button[aria-controls="account-help-content"]'
+		)!;
+		toggleButton.click();
+		flushSync();
+		expect(target.textContent).toContain('myaccount.google.com/apppasswords');
+		expect(target.textContent).not.toContain('appleid.apple.com');
+
+		icloudPreset!.click();
+		flushSync();
+		expect(gmailPreset!.getAttribute('aria-pressed')).toBe('false');
+		expect(icloudPreset!.getAttribute('aria-pressed')).toBe('true');
+		expect(target.textContent).toContain('appleid.apple.com');
+		expect(target.textContent).not.toContain('myaccount.google.com/apppasswords');
 
 		gmailPreset!.click();
 		flushSync();
