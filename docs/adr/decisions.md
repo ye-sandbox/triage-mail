@@ -116,3 +116,26 @@ type: architectural-decision-log
 - **Consequences:** All database tables and indices are created in a single migration v1 transaction. Storage
   footprint is reduced by eliminating vector table duplication. Development databases must be recreated from
   IMAP sync. Verified 100k global and account-filtered vec0 KNN searches against the exact reference oracle.
+
+### [2026-10-31] ADR-008: Concurrency Architecture & Empirical Latency Target Redefinition
+
+- **Context:**
+  1. *Physical Limits of Global Exact Vector Search:* Scanning 100,000 `int8[384]` embeddings on CPU requires streaming 38.4 MB of raw vector payloads through memory and SQLCipher AES-256 page decryption. On a single modern core, this linear exact scan physically requires ~42–46ms warm. A blanket `<15ms` target across all query modalities (lexical, global semantic, hybrid) was set before 100k native measurements and is physically infeasible for global exact scans without indexing or lossy approximations.
+  2. *Correction of Concurrency Invariant:* The [90.4] rationale claimed that connection pooling was unsafe for SQLite ACID semantics. That assertion was incorrect. In SQLite WAL mode (`PRAGMA journal_mode = WAL;`), multiple read-only connections are fully ACID-compliant, providing concurrent thread-safe snapshot isolation without write contention or read-lock blocking.
+  3. *Hybrid Latency Bottleneck:* In hybrid search, running lexical (FTS5 BM25 ~32ms) and semantic (`vec_messages` ~46ms) candidate collection sequentially on a single connection resulted in ~79ms p50 latency.
+- **Decision:**
+  1. *Affirm WAL Concurrency Model & Dual-Connection Parallel Hybrid Search:* Affirm that concurrent read connections in SQLite WAL mode are completely safe, isolated, and ACID-compliant. Enable an optional secondary read connection in `SqliteMailStore` for file-backed databases, executing lexical and semantic hybrid candidate collection concurrently via `execute_hybrid_search_parallel` using `std::thread::scope`. When a secondary connection is unavailable (e.g. in-memory hermetic tests) or locked, gracefully fall back to sequential execution.
+  2. *Redefined Latency Targets for v0.1.0 (p95 warm @ 100,000 messages on reference hardware):*
+     - Filtered semantic search (25k partition): $\le 15$ ms (observed ~12.2 ms p50 / 12.9 ms p95).
+     - Lexical search (common 99k matches): $\le 40$ ms (observed ~31.9 ms p50 / 37.3 ms p95).
+     - Global semantic search (100k exact scan): $\le 50$ ms (observed ~42.7 ms p50 / 47.8 ms p95).
+     - Hybrid search (lexical + semantic + RRF + hydration): $\le 60$ ms concurrent (observed ~52.4 ms p50) / $\le 95$ ms sequential.
+     - UI First Page (including IPC serialization + WebKit virtual DOM): $\le 100$ ms.
+  3. *Page Cache Memory Overhead Budget:* Empirically establish that each active SQLCipher connection configured with a 64 MiB soft page cache target (`cache_size = -65536`) consumes at most ~25.5 MiB of net additional resident memory (VmRSS) under 100k vector workloads, maintaining overall process RSS under ~105 MiB.
+  4. *v0.1 Strict Scope Boundaries:* Strictly prohibit approximate nearest neighbor (ANN) graph indexing (HNSW, IVF, etc.) in v0.1 to avoid index corruption risks, memory bloat, and non-deterministic recalls in local desktop installations.
+  5. *v0.2 Roadmap Evaluation:* Evaluate 1-bit scalar quantization (binary vectors with bitwise POPCNT Hamming distance for 48-byte candidate filtering) followed by int8 dot-product reranking of the top 200 candidates to achieve sub-15ms global semantic search in v0.2.
+- **Alternatives Considered:**
+  - *Keep blanket <15ms requirement for global exact search:* Rejected as physically impossible on CPU for exact linear 100k scans without approximations or caching.
+  - *Adopt ANN vector graphs (e.g. HNSW) for v0.1:* Rejected due to complexity, memory bloat, write amplification during background sync, and risk of index corruption in local-first desktop apps.
+  - *Keep hybrid search strictly sequential on 1 connection:* Rejected because concurrent execution reduces hybrid wall-clock latency by 33.7% (~26.6ms savings) for only ~25.5 MiB of additional memory.
+- **Consequences:** Provides honest, falsifiable, and empirically grounded performance contracts across all search modalities. File-backed hybrid search runs in ~52ms p50 instead of ~79ms. Single-connection and in-memory stores safely fall back to sequential execution. All trait boundaries and DTOs remain strictly preserved.

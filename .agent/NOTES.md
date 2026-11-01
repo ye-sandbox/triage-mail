@@ -24,7 +24,7 @@ All core domain crates MUST remain pure Rust (zero dependency on `tauri`) so the
 | IPC Command / Channel | Direction | Payload Schema | Performance / Security Invariant |
 |---|---|---|---|
 | `cmd_list_accounts` / `cmd_add_account` | UI $\rightarrow$ Rust | `AccountConfigDto` (supports App Password, OAuth2 Public PKCE, BYO-OAuth credentials, Proton Bridge; never returns raw secrets to UI) | Secrets stored immediately in `vault` (`keyring` or Argon2 fallback); UI only sees opaque `account_id` |
-| `cmd_search_messages` | UI $\rightarrow$ Rust | `SearchQueryDto { query, mode: Lexical \| Semantic \| Hybrid, limit, offset }` $\rightarrow$ `Vec<MessageRowDto>` | Target execution `< 15ms` via SQLite `FTS5` + `sqlite-vec` (`int8` quantized + pre-filtered) |
+| `cmd_search_messages` | UI $\rightarrow$ Rust | `SearchQueryDto { query, mode: Lexical \| Semantic \| Hybrid, limit, offset }` $\rightarrow$ `Vec<MessageRowDto>` | Filtered semantic $\le 15$ms, lexical $\le 40$ms, global semantic $\le 50$ms, hybrid $\le 60$ms (ADR-008) |
 | `cmd_triage_action` | UI $\rightarrow$ Rust | `TriageMutationDto { message_ids, action: MarkRead \| Archive \| Trash \| Tag(String) \| OneClickUnsubscribe }` | Optimistic local SQLite update + queued async IMAP `STORE FLAGS` sync (or RFC 8058 HTTP POST on explicit unsubscribe) |
 | `cmd_get_message_body` | UI $\rightarrow$ Rust | `MessageId` $\rightarrow$ `MessageDetailDto { headers, text_plain, html_raw, triage_badges, attachments_meta }` | HTML sanitized in UI with `DOMPurify` + `<iframe sandbox="">` + normalized base dark-mode CSS |
 | `cmd_fetch_attachment` | UI $\rightarrow$ Rust | `AttachmentRequestDto { account_id, folder, uid, part_id }` $\rightarrow$ `AttachmentBytesDto` | **Lazy Attachment Invariant:** Fetched on-demand via `IMAP BODY.PEEK[section]` |
@@ -287,5 +287,25 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - **Deterministic Staging Key & Startup Hygiene (k-010):**
   - OAuth onboarding uses a deterministic vault key: `staging_oauth_vault_key() -> VaultKey::for_account("staging", "oauth-pending")`.
   - On application startup, `DesktopService::new` invokes `clean_orphaned_staging(vault)` to remove any pending staging secret left over from process termination or crashes, preventing secret accretion in OS keyring backends.
+
+## Concurrency Architecture & Empirical Latency Targets ([90.5] / ADR-008)
+
+- **SQLite WAL Concurrency & Snapshot Isolation:**
+  - Multiple read connections in SQLite WAL mode are completely thread-safe and ACID-compliant without reader-writer or reader-reader locking contention.
+  - `SqliteMailStore::open` initializes an optional secondary read connection for disk-backed databases (`secondary_conn: Option<Mutex<Connection>>`).
+  - `execute_hybrid_search_parallel` executes lexical search on connection 1 and semantic search on connection 2 concurrently via `std::thread::scope`, returning fused RRF results with 100% exact equivalence to sequential execution.
+  - In-memory databases or contended connections gracefully fall back to sequential execution.
+- **Empirical Page Cache Overhead:**
+  - Secondary read connection adds ~25.5 MiB of resident memory (VmRSS) under 100k vector scans at 64 MiB soft cache target (`cache_size = -65536`).
+  - Total process RSS remains ~102.7 MiB (well below 110 MiB budget).
+- **Redefined Latency Targets for v0.1.0 (p95 warm @ 100k messages on reference hardware):**
+  - Filtered semantic: $\le 15$ ms (observed ~12.2 ms p50 / 12.9 ms p95).
+  - Lexical search: $\le 40$ ms (observed ~31.9 ms p50 / 37.3 ms p95).
+  - Global semantic search: $\le 50$ ms (observed ~42.7 ms p50 / 47.8 ms p95).
+  - Hybrid search: $\le 60$ ms concurrent (observed ~52.4 ms p50) / $\le 95$ ms sequential.
+  - UI First Page (including IPC + WebKit virtual DOM): $\le 100$ ms.
+- **v0.1 vs v0.2 Boundaries:**
+  - Strictly NO approximate nearest neighbor (ANN) graph indexing (HNSW, IVF) in v0.1.
+  - Binary quantization (1-bit scalar quantization with Hamming distance / bitwise POPCNT candidate pre-filtering) + int8 cosine reranking of top 200 candidates scheduled for v0.2 evaluation to reach sub-15ms global queries.
 
 

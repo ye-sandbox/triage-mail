@@ -4,7 +4,9 @@ use std::{collections::HashSet, error::Error, io::Read, time::Instant};
 
 use rusqlite::params;
 use storage::{
-    connection::open_encrypted_connection, migrations::SchemaMigrator, search::int8_slice_to_bytes,
+    connection::open_encrypted_connection,
+    migrations::SchemaMigrator,
+    search::{execute_hybrid_search, execute_hybrid_search_parallel, int8_slice_to_bytes},
     DatabaseKey, FtsTokenizerMode, HybridQuery, SearchEngine, SearchMode, SqliteMailStore,
 };
 
@@ -220,6 +222,46 @@ fn rss() -> Result<String> {
         .to_string())
 }
 
+fn profile_parallel_reads(path: &std::path::Path, key: &DatabaseKey) -> Result<()> {
+    let query = HybridQuery {
+        query_text: "newsletter".into(),
+        query_embedding_int8: Some(vector(4242)),
+        account_filter: None,
+        mode: SearchMode::Hybrid,
+        limit: 200,
+        offset: 0,
+    };
+    for kib in [16384, 32768, 65536] {
+        let conn1 = open_encrypted_connection(path, key)?;
+        conn1.pragma_update(None, "cache_size", -kib)?;
+        let mut conn2 = open_encrypted_connection(path, key)?;
+        conn2.pragma_update(None, "cache_size", -kib)?;
+
+        for sample in 0..5 {
+            let start = Instant::now();
+            let rows = execute_hybrid_search(&conn1, &query)?;
+            let ms = start.elapsed().as_secs_f64() * 1000.0;
+            println!(
+                "# parallel_read_profile,sequential,{kib},{sample},{ms:.6},{},{}",
+                rows.len(),
+                rss()?
+            );
+        }
+
+        for sample in 0..5 {
+            let start = Instant::now();
+            let rows = execute_hybrid_search_parallel(&conn1, &mut conn2, &query)?;
+            let ms = start.elapsed().as_secs_f64() * 1000.0;
+            println!(
+                "# parallel_read_profile,concurrent,{kib},{sample},{ms:.6},{},{}",
+                rows.len(),
+                rss()?
+            );
+        }
+    }
+    Ok(())
+}
+
 fn sparse_cases(path: &std::path::Path, key: &DatabaseKey, neighbors: &[String]) -> Result<()> {
     run_case(
         path,
@@ -296,6 +338,7 @@ fn main() -> Result<()> {
     let key = DatabaseKey::from_bytes(bytes);
     seed(&path, &key)?;
     profile_cache(&path, &key)?;
+    profile_parallel_reads(&path, &key)?;
     let mut header = [0; 16];
     std::fs::File::open(&path)?.read_exact(&mut header)?;
     assert_ne!(&header, b"SQLite format 3\0");

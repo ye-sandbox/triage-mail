@@ -22,6 +22,7 @@ pub(crate) fn read_tokenizer(conn: &Connection) -> Result<FtsTokenizerMode, Stor
 
 impl SqliteMailStore {
     pub fn set_tokenizer(&self, mode: FtsTokenizerMode) -> Result<(), StorageError> {
+        let _sec_guard = self.secondary_conn.as_ref().map(|s| s.lock());
         let mut conn = self
             .conn
             .lock()
