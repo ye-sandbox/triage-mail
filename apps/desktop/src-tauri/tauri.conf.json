@@ -22,5 +22,22 @@
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost"
     }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "shortDescription": "100% Local-First Email Aggregator & Triage Engine",
+    "longDescription": "100% Local-First, Provider-Agnostic, Open-Source Email Aggregator & Triage Engine built with Rust, Tauri v2, SQLite, and SvelteKit 5.",
+    "category": "Email",
+    "copyright": "AGPL-3.0-only",
+    "icon": [
+      "icons/32x32.png",
+      "icons/64x64.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ]
   }
 }
