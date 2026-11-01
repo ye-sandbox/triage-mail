@@ -17,13 +17,13 @@
 
 #### Execution Queue (`W1` -> `W2`)
 
-- [ ] **[04.1.8]** `[APPROVED]` `[PARALLEL: W1]` Implement Settings dialog primitive and typed modules (General, Search, AI, Privacy)
+- [x] **[04.1.8]** `[DONE: e3b2ff4]` `[PARALLEL: W1]` Implement Settings dialog primitive and typed modules (General, Search, AI, Privacy)
   - `Model:` `gemini-3.8-flash-medium`
   - `Read:` `apps/desktop/src/lib/settings/SettingsView.svelte, apps/desktop/src/lib/settings/AiSettingsForm.svelte, apps/desktop/src/lib/settings/ModelSettings.svelte`
   - `Paths:` `apps/desktop/src/lib/settings/types.ts, apps/desktop/src/lib/settings/SettingsDialog.svelte, apps/desktop/src/lib/settings/modules/GeneralModule.svelte, apps/desktop/src/lib/settings/modules/SearchModule.svelte, apps/desktop/src/lib/settings/modules/AiModule.svelte, apps/desktop/src/lib/settings/modules/PrivacyModule.svelte, apps/desktop/src/lib/settings/dialog.svelte.test.ts`
   - `Verify:` `([ -e node_modules ] || ln -s /home/yegear/github/triage-mail/node_modules node_modules) && ([ -e apps/desktop/node_modules ] || cp -RP /home/yegear/github/triage-mail/apps/desktop/node_modules apps/desktop/node_modules) && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/settings/dialog.svelte.test.ts && ! grep -rn "export let" apps/desktop/src/`
 
-- [ ] **[04.1.9]** `[APPROVED]` `[PARALLEL: W1]` Implement persistent inbox shell, sidebar gear entry point, and live search preference synchronization
+- [x] **[04.1.9]** `[DONE: 6c21bbf]` `[PARALLEL: W1]` Implement persistent inbox shell, sidebar gear entry point, and live search preference synchronization
   - `Model:` `gemini-3.8-flash-medium`
   - `Read:` `apps/desktop/src/lib/inbox/Sidebar.svelte, apps/desktop/src/lib/inbox/SearchToolbar.svelte, apps/desktop/src/lib/onboarding/DesktopApp.svelte, apps/desktop/src/lib/onboarding/InboxSession.svelte`
   - `Paths:` `apps/desktop/src/lib/inbox/Icon.svelte, apps/desktop/src/lib/inbox/Sidebar.svelte, apps/desktop/src/lib/inbox/SearchToolbar.svelte, apps/desktop/src/lib/onboarding/DesktopApp.svelte, apps/desktop/src/lib/onboarding/InboxSession.svelte, apps/desktop/src/lib/inbox/InboxView.svelte, apps/desktop/src/lib/inbox/settings-shell.svelte.test.ts`
