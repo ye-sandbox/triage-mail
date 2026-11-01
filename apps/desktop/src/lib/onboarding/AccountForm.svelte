@@ -2,15 +2,64 @@
 	import { clearCredentialInputs } from './forms';
 	import type { AccountController } from './controller.svelte';
 	import type { AccountConfig, AuthMethod, AccountSubmission } from './types';
+	import { i18n } from '../i18n/index.svelte';
+	import AccountHelpGuide from './AccountHelpGuide.svelte';
+
 	let { controller }: { controller: AccountController } = $props();
 	let method = $state<AuthMethod>('AppPassword');
 	let form = $state<HTMLFormElement>();
+
+	let presetHost = $state('');
+	let presetPort = $state(993);
+	let presetAuth = $state('');
+	let presetToken = $state('');
+	let presetScopes = $state('');
+
+	const t = $derived(i18n.t.accountForm);
 	const oauth = $derived(method === 'OAuth2PublicPkce' || method === 'OAuth2ByoCredentials');
+
+	interface Preset {
+		name: string;
+		host: string;
+		port: number;
+		method: AuthMethod;
+		authEndpoint?: string;
+		tokenEndpoint?: string;
+		scopes?: string;
+	}
+
+	const presets: Preset[] = [
+		{ name: 'Gmail', host: 'imap.gmail.com', port: 993, method: 'AppPassword' },
+		{
+			name: 'Outlook',
+			host: 'outlook.office365.com',
+			port: 993,
+			method: 'OAuth2PublicPkce',
+			authEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+			tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+			scopes: 'offline_access https://outlook.office.com/IMAP.AccessAsUser.All'
+		},
+		{ name: 'iCloud', host: 'imap.mail.me.com', port: 993, method: 'AppPassword' },
+		{ name: 'Yahoo', host: 'imap.mail.yahoo.com', port: 993, method: 'AppPassword' },
+		{ name: 'Fastmail', host: 'imap.fastmail.com', port: 993, method: 'AppPassword' },
+		{ name: 'Proton', host: '127.0.0.1', port: 1143, method: 'ProtonBridgeLocal' }
+	];
+
+	function applyPreset(p: Preset) {
+		presetHost = p.host;
+		presetPort = p.port;
+		presetAuth = p.authEndpoint ?? '';
+		presetToken = p.tokenEndpoint ?? '';
+		presetScopes = p.scopes ?? '';
+		method = p.method;
+	}
+
 	$effect(() => {
 		const current = form;
 		// INVARIANT: Capture the old form so a mode switch clears even detached inputs.
 		return () => clearCredentialInputs(current);
 	});
+
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		if (controller.busy || !form) return;
@@ -55,25 +104,47 @@
 
 <section aria-labelledby="add-account-title" class="space-y-6">
 	<div>
-		<h2 id="add-account-title" class="text-xl font-semibold">Connect an account</h2>
+		<h2 id="add-account-title" class="text-xl font-semibold">{t.title}</h2>
 		<p class="mt-2 text-sm text-[var(--secondary)]">
-			Use the connection settings supplied by your mail provider.
+			{t.subtitle}
 		</p>
 	</div>
+
+	<!-- Interactive Login Methods Guide -->
+	<AccountHelpGuide selectedMethod={method} />
+
+	<!-- Provider Presets -->
+	<div class="space-y-2">
+		<span class="text-xs font-medium text-[var(--secondary)]">{t.quickFillLabel}</span>
+		<div class="flex flex-wrap gap-1.5">
+			{#each presets as p}
+				<button
+					type="button"
+					disabled={controller.busy}
+					class="rounded-full border border-[var(--separator)] bg-[var(--surface)] px-2.5 py-1 text-xs font-medium text-[var(--secondary)] transition-all hover:border-[var(--accent)] hover:text-[var(--text)] active:scale-95 disabled:opacity-50"
+					onclick={() => applyPreset(p)}
+				>
+					{p.name}
+				</button>
+			{/each}
+		</div>
+	</div>
+
 	<label class="block text-sm"
-		>Sign-in method
+		>{t.methodLabel}
 		<select class="setup-input mt-2" bind:value={method} disabled={controller.busy}>
-			<option value="AppPassword">App password</option>
-			<option value="OAuth2PublicPkce">OAuth · Public PKCE</option>
-			<option value="OAuth2ByoCredentials">OAuth · Your client credentials</option>
-			<option value="ProtonBridgeLocal">Proton Mail Bridge</option>
+			<option value="AppPassword">{t.methodAppPassword}</option>
+			<option value="OAuth2PublicPkce">{t.methodOAuthPublic}</option>
+			<option value="OAuth2ByoCredentials">{t.methodOAuthByo}</option>
+			<option value="ProtonBridgeLocal">{t.methodProton}</option>
 		</select>
 	</label>
+
 	{#key method}
 		<form bind:this={form} onsubmit={submit} autocomplete="off" class="space-y-4">
 			<fieldset disabled={controller.busy} class="space-y-4">
 				<label class="block text-sm"
-					>{method === 'ProtonBridgeLocal' ? 'Bridge username' : 'Email address or IMAP username'}
+					>{method === 'ProtonBridgeLocal' ? t.emailLabelBridge : t.emailLabel}
 					<input
 						class="setup-input mt-2"
 						name="email"
@@ -85,17 +156,17 @@
 				</label>
 				<div class="grid grid-cols-[minmax(0,1fr)_6rem] gap-4">
 					<label class="block text-sm"
-						>IMAP host
+						>{t.hostLabel}
 						<input
 							class="setup-input mt-2"
 							name="host"
 							required
 							maxlength="253"
-							value={method === 'ProtonBridgeLocal' ? '127.0.0.1' : ''}
+							value={method === 'ProtonBridgeLocal' ? '127.0.0.1' : presetHost}
 						/>
 					</label>
 					<label class="block text-sm"
-						>Port
+						>{t.portLabel}
 						<input
 							class="setup-input mt-2 tabular-nums"
 							name="port"
@@ -103,18 +174,16 @@
 							required
 							min="1"
 							max="65535"
-							value={method === 'ProtonBridgeLocal' ? 1143 : 993}
+							value={method === 'ProtonBridgeLocal' ? 1143 : presetPort}
 						/>
 					</label>
 				</div>
 				{#if oauth}
 					<p class="text-sm text-[var(--secondary)]">
-						Register a desktop client with your provider using a loopback redirect at <code
-							>http://127.0.0.1/callback</code
-						> with a dynamic port supported by your provider. Authorization opens in your browser.
+						{t.oauthHelp}
 					</p>
 					<label class="block text-sm"
-						>Authorization endpoint (HTTPS)
+						>{t.authEndpointLabel}
 						<input
 							class="setup-input mt-2"
 							name="authorize"
@@ -122,10 +191,11 @@
 							required
 							pattern="https://.*"
 							maxlength="2048"
+							value={presetAuth}
 						/>
 					</label>
 					<label class="block text-sm"
-						>Token endpoint (HTTPS)
+						>{t.tokenEndpointLabel}
 						<input
 							class="setup-input mt-2"
 							name="token"
@@ -133,23 +203,25 @@
 							required
 							pattern="https://.*"
 							maxlength="2048"
+							value={presetToken}
 						/>
 					</label>
 					<label class="block text-sm"
-						>IMAP scopes
+						>{t.scopesLabel}
 						<input
 							class="setup-input mt-2"
 							name="scopes"
 							required
 							maxlength="4096"
 							aria-describedby="scope-help"
+							value={presetScopes}
 						/>
 					</label>
 					<p id="scope-help" class="text-xs text-[var(--secondary)]">
-						Space-separated provider scopes. Include offline access if your provider supports it.
+						{t.scopesHelp}
 					</p>
 					<label class="block text-sm"
-						>Client ID
+						>{t.clientIdLabel}
 						<input
 							class="setup-input mt-2"
 							name="client"
@@ -163,10 +235,10 @@
 				{#if method !== 'OAuth2PublicPkce'}
 					<label class="block text-sm"
 						>{method === 'OAuth2ByoCredentials'
-							? 'Client secret'
+							? t.clientSecretLabel
 							: method === 'ProtonBridgeLocal'
-								? 'Bridge password'
-								: 'App password'}
+								? t.bridgePasswordLabel
+								: t.appPasswordLabel}
 						<input
 							class="setup-input mt-2"
 							name="secret"
@@ -180,31 +252,28 @@
 				{/if}
 				{#if method === 'ProtonBridgeLocal'}
 					<p class="text-sm text-[var(--secondary)]">
-						Start Proton Mail Bridge first and select its SSL/TLS IMAP mode. Only loopback hosts are
-						allowed; local self-signed TLS is accepted.
+						{t.protonNotice}
 					</p>
 				{/if}
 				<p class="text-xs leading-relaxed text-[var(--secondary)]">
-					{oauth
-						? 'Authorize contacts your configured provider endpoints. Tokens and client credentials stay in the native vault. Automatic token refresh is not available yet.'
-						: 'Connect saves credentials in the native vault and starts inbound mail sync.'}
+					{oauth ? t.oauthVaultNotice : t.connectVaultNotice}
 				</p>
 				<button type="submit" class="setup-primary"
 					>{controller.busy
-						? 'Connecting…'
+						? t.connecting
 						: oauth
-							? 'Authorize and connect'
-							: 'Connect account'}</button
+							? t.authorizeAndConnect
+							: t.connectAccount}</button
 				>
 			</fieldset>
 		</form>
 	{/key}
 	{#if controller.authorizing}
 		<p role="status" class="text-sm">
-			Finish authorization in your browser. This attempt expires in five minutes.
+			{t.browserAuthPending}
 		</p>
 		<button class="setup-secondary" type="button" onclick={() => void controller.cancel()}
-			>Cancel authorization</button
+			>{t.cancelAuth}</button
 		>
 	{/if}
 </section>

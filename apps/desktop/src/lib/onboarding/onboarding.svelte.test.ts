@@ -322,3 +322,95 @@ it('defers cancellation until native registration and cancels a late acknowledge
 	await operation;
 	expect(controller.error).toBe('');
 });
+
+describe('onboarding help guide and language selection', () => {
+	it('switches app language via Apple-style segmented selector', async () => {
+		const { controller, target } = fixture();
+		controller.phase = 'ready';
+		const component = mount(OnboardingView, {
+			target,
+			props: { controller, enterInbox: vi.fn() }
+		});
+		flushSync();
+
+		expect(target.textContent).toContain('Connect an account');
+		expect(target.textContent).toContain('Your accounts');
+
+		const ptButton = [...target.querySelectorAll('button')].find(
+			(b) => b.getAttribute('aria-label') === 'Português'
+		);
+		expect(ptButton).toBeDefined();
+		ptButton!.click();
+		flushSync();
+
+		expect(target.textContent).toContain('Conectar uma conta');
+		expect(target.textContent).toContain('Suas contas');
+
+		const enButton = [...target.querySelectorAll('button')].find(
+			(b) => b.getAttribute('aria-label') === 'English'
+		);
+		expect(enButton).toBeDefined();
+		enButton!.click();
+		flushSync();
+
+		expect(target.textContent).toContain('Connect an account');
+		await unmount(component);
+	});
+
+	it('toggles interactive sign-in help guide and displays method tabs', async () => {
+		const { controller, target } = fixture();
+		controller.phase = 'ready';
+		const component = mount(OnboardingView, {
+			target,
+			props: { controller, enterInbox: vi.fn() }
+		});
+		flushSync();
+
+		const toggleButton = target.querySelector<HTMLButtonElement>(
+			'button[aria-controls="account-help-content"]'
+		);
+		expect(toggleButton).toBeDefined();
+		expect(toggleButton!.getAttribute('aria-expanded')).toBe('false');
+
+		toggleButton!.click();
+		flushSync();
+
+		expect(toggleButton!.getAttribute('aria-expanded')).toBe('true');
+		expect(target.textContent).toContain('Two-Factor Authentication');
+		expect(target.textContent).toContain('Gmail, Google Workspace');
+
+		await unmount(component);
+	});
+
+	it('applies provider presets to pre-fill host, port and authentication method', async () => {
+		const { controller, target } = fixture();
+		controller.phase = 'ready';
+		const component = mount(OnboardingView, {
+			target,
+			props: { controller, enterInbox: vi.fn() }
+		});
+		flushSync();
+
+		const buttons = [...target.querySelectorAll('button')];
+		const gmailPreset = buttons.find((b) => b.textContent?.trim() === 'Gmail');
+		const protonPreset = buttons.find((b) => b.textContent?.trim() === 'Proton');
+		expect(gmailPreset).toBeDefined();
+		expect(protonPreset).toBeDefined();
+
+		gmailPreset!.click();
+		flushSync();
+		const hostInput = target.querySelector<HTMLInputElement>('input[name="host"]')!;
+		const portInput = target.querySelector<HTMLInputElement>('input[name="port"]')!;
+		expect(hostInput.value).toBe('imap.gmail.com');
+		expect(portInput.value).toBe('993');
+
+		protonPreset!.click();
+		flushSync();
+		const bridgeHost = target.querySelector<HTMLInputElement>('input[name="host"]')!;
+		const bridgePort = target.querySelector<HTMLInputElement>('input[name="port"]')!;
+		expect(bridgeHost.value).toBe('127.0.0.1');
+		expect(bridgePort.value).toBe('1143');
+
+		await unmount(component);
+	});
+});

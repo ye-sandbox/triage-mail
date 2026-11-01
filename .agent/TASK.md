@@ -7,7 +7,13 @@
 
 ## Active Task
 
-None — Milestone v0.1.0 Released (`v0.1.0` tag)
+### 📌 Task [04.8]: Account Onboarding Help Guide, Provider Presets & Apple-Style Language Selector
+
+- **Description:** Implement in-app account onboarding assistance (comprehensive help guide for App Password, OAuth PKCE, OAuth BYO Credentials, and Proton Mail Bridge, plus one-click provider presets for Gmail, Outlook, Yahoo, iCloud, Fastmail, and Proton) alongside a minimalist Apple-style segmented language selector (`EN` | `PT`), a reactive Svelte 5 i18n store, and bilingual documentation in `README.md` and `README.pt-br.md`.
+- **Systems Involved:** `apps/desktop` (`src/lib/i18n/`, `src/lib/onboarding/`, `src/lib/settings/`), `README.md`, `README.pt-br.md`.
+- **Action Type:** Feature & Documentation.
+- **Status:** RUNNING
+- **Constraints:** Svelte 5 Runes only, zero legacy Svelte 4 syntax, Apple-style design tokens and fluid motion, strict validation pass (`cargo check`, `pnpm --filter desktop check`, `pnpm --filter desktop test`, `ci-guard.mjs`).
 
 ---
 
