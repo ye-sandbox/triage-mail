@@ -10,8 +10,9 @@
 ### Task [04.9]: Application Title Bar
 
 - **Description:** Implement an application-styled title bar replacing OS decorations, with themed window controls and a persistent desktop shell.
-- **Status:** RUNNING
+- **Status:** DONE
 - **Action Type:** Implementation across 2 parallel waves (`W1` and `W2`).
+- **Commits:** `626aaba`, `4cb5658`, `76973ef`, `ec087bc`
 - **Plan and implementation tasks:** [Application Title Bar](plans/04.9-custom-title-bar.md).
 - **Scope:** Themed chrome, native drag/minimize/maximize/restore/close, minimal Tauri capabilities, remaining-height layout, EN/PT-BR, accessibility, and native compatibility verification.
 
@@ -25,11 +26,11 @@
   - `Read:` `apps/desktop/src/app.css, apps/desktop/src/lib/inbox/InboxView.svelte, apps/desktop/src/lib/settings/SettingsView.svelte`
   - `Paths:` `apps/desktop/src/app.css, apps/desktop/src/lib/inbox/InboxView.svelte, apps/desktop/src/lib/onboarding/OnboardingView.svelte, apps/desktop/src/lib/settings/SettingsView.svelte, apps/desktop/src-tauri/tauri.conf.json, apps/desktop/src-tauri/capabilities/main.json`
   - `Verify:` `PATH="/home/yegear/AntigravityProfiles/luisfmb/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH" cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/inbox/inbox.svelte.test.ts src/lib/settings/settings.svelte.test.ts && ! grep -rn "export let" apps/desktop/src/`
-- [ ] **[04.9.3]** `[APPROVED]` `[PARALLEL: W2]` Integrate persistent `TitleBar` in `+layout.svelte` global desktop shell and add shell/dialog regression tests
+- [x] **[04.9.3]** `[DONE: 76973ef]` `[PARALLEL: W2]` Integrate persistent `TitleBar` in `+layout.svelte` global desktop shell and add shell/dialog regression tests
   - `Read:` `apps/desktop/src/routes/+layout.svelte, apps/desktop/src/lib/window/TitleBar.svelte, apps/desktop/src/lib/window/transport.ts`
   - `Paths:` `apps/desktop/src/routes/+layout.svelte, apps/desktop/src/lib/window/shell.svelte.test.ts`
   - `Verify:` `([ -e node_modules ] || ln -s /home/yegear/github/triage-mail/node_modules node_modules) && ([ -e apps/desktop/node_modules ] || cp -RP /home/yegear/github/triage-mail/apps/desktop/node_modules apps/desktop/node_modules) && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/window/ && pnpm --filter desktop build && ! grep -rn "export let" apps/desktop/src/`
-- [ ] **[04.9.4]** `[APPROVED]` `[PARALLEL: W2]` Record Application Title Bar active contracts in `.agent/NOTES.md`
+- [x] **[04.9.4]** `[DONE: ec087bc]` `[PARALLEL: W2]` Record Application Title Bar active contracts in `.agent/NOTES.md`
   - `Read:` `.agent/NOTES.md, .agent/TASK.md`
   - `Paths:` `.agent/NOTES.md`
   - `Verify:` `git diff --check && node scripts/ci-guard.mjs`
