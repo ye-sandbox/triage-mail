@@ -44,6 +44,8 @@ pub struct MessageRecord {
     pub is_read: bool,
     pub has_attachments: bool,
     pub category_badge: Option<String>,
+    #[serde(default)]
+    pub triage_badges: Vec<triage_ai::TriageBadge>,
     pub raw_headers: String,
     pub text_body: Option<String>,
     pub html_body: Option<String>,

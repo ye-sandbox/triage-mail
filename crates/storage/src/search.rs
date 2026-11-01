@@ -153,7 +153,7 @@ fn knn_candidates(
     if let Some(account_id) = account {
         let mut stmt = conn
             .prepare_cached(
-                "SELECT message_id,distance FROM vec_messages_by_account
+                "SELECT message_id,distance FROM vec_messages
                  WHERE embedding_int8 MATCH vec_int8(?1) AND k=?2 AND account_id=?3",
             )
             .map_err(query_error)?;
@@ -269,7 +269,7 @@ fn load_summaries(
     for chunk in ids.chunks(500) {
         let sql = format!(
             "SELECT id, account_id, folder, uid, subject, sender, received_at_epoch_ms,
-             is_read, has_attachments, category_badge FROM messages WHERE id IN ({})",
+             is_read, has_attachments, category_badge, triage_badges FROM messages WHERE id IN ({})",
             vec!["?"; chunk.len()].join(",")
         );
         let mut stmt = conn.prepare_cached(&sql).map_err(query_error)?;
@@ -287,6 +287,10 @@ fn load_summaries(
 }
 
 fn row_to_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageRowSummary> {
+    let triage_badges = row
+        .get::<_, Option<String>>(10)?
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default();
     Ok(MessageRowSummary {
         id: row.get(0)?,
         account_id: row.get(1)?,
@@ -300,6 +304,7 @@ fn row_to_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageRowSummary
         category_badge: row.get(9)?,
         tags: Vec::new(),
         folder_override: None,
+        triage_badges,
     })
 }
 

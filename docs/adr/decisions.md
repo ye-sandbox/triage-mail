@@ -67,7 +67,7 @@ type: architectural-decision-log
 - **Consequences:** Every commit is audited for secret/PII cleanliness so the full git history can be made public safely.
 
 
-### [2026-10-31] ADR-006: Derived Account-Partitioned Vector Index
+### [2026-10-31] ADR-006: Derived Account-Partitioned Vector Index (Superseded by ADR-007)
 
 - **Context:** Correct account-aware scalar vector ranking at 100k messages takes about 380ms.
   Filtering global KNN output underfills pages; per-message vector lookups defeat contiguous scans.
@@ -86,3 +86,33 @@ type: architectural-decision-log
   No vector shadow-table access, new network behavior, FFI or dependency is required. Cache_size
   is a soft per-connection target; process memory and migration growth must be measured separately.
   Old binaries must not write a v5 database because they cannot maintain the derived index.
+
+### [2026-10-31] ADR-007: Pre-Release Schema Consolidation & Persisted Triage (Supersedes ADR-006)
+
+- **Context:** Prior to the initial `v0.1.0` release, schema migrations v1–v5 accumulated evolutionary
+  intermediate states: v2 FTS, v3 initial vec0, v4 desktop outbox/connections, and v5 derived
+  `vec_messages_by_account`. ADR-006 introduced vector index duplication solely to preserve an unreleased
+  v4 development schema. Furthermore, triage categories and badges were recalculated on demand for
+  every message detail request, and visible row badges required fetching full message bodies over IPC.
+- **Decision:**
+  1. *Schema Governance Policy:* P1 schema immutability applies strictly to released schemas. Prior to
+     the `v0.1.0` release tag, development schemas may be consolidated because local development databases
+     can be cleanly recreated from IMAP sync. From release tag `v0.1.0` onward, all migrations MUST be
+     strictly append-only (`v2`, `v3`, etc.).
+  2. *Canonical v1 Schema Consolidation:* Collapse migrations v1–v5 into a single canonical v1 schema.
+     Replace the duplicate `vec_messages` / `vec_messages_by_account` tables with a single account-partitioned
+     `vec_messages` virtual table (`account_id TEXT PARTITION KEY`), dropping the derived table, reconciliation
+     triggers, and migration backfill logic entirely.
+  3. *Persisted Triage Ingestion & Additive DTO:* Persist both `category_badge TEXT` and `triage_badges TEXT`
+     at message ingestion time in SQLite. Hydrate `triage_badges` into `MessageRowSummary` and expose them
+     additively on `MessageRowDto`, allowing message list views to render badges immediately without
+     expensive full-body IPC round-trips or on-demand regex re-analysis.
+- **Alternatives Considered:**
+  - *Keep append-only v1–v5 into v0.1.0 release:* Rejected because shipping duplicate vector indices,
+    backfill overhead, and four synchronization triggers permanently locks avoidable storage and CPU waste
+    into the public schema foundation.
+  - *Keep on-demand triage re-calculation:* Rejected because parsing regex/heuristics on every message detail
+    and fetching bodies over IPC for list badges introduces unnecessary IPC serialization and CPU overhead.
+- **Consequences:** All database tables and indices are created in a single migration v1 transaction. Storage
+  footprint is reduced by eliminating vector table duplication. Development databases must be recreated from
+  IMAP sync. Verified 100k global and account-filtered vec0 KNN searches against the exact reference oracle.

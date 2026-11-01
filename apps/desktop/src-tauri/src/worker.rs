@@ -5,7 +5,10 @@ use std::time::Duration;
 use mail_engine::{AdaptivePollConfig, AdaptivePollSchedule, ParsedInboundMessage};
 use storage::{AttachmentRecord, FolderSyncState, MailRepository, MessageRecord};
 use tokio::sync::watch;
-use triage_ai::{DefaultDeterministicTriage, DeterministicTriage, TriageEventHook};
+use triage_ai::{
+    DefaultDeterministicTriage, DeterministicTriage, DeterministicTriageResult, TriageCategory,
+    TriageEventHook,
+};
 
 use crate::events::BatchEvents;
 use crate::remote::{MutationOutcome, RemoteMutation};
@@ -208,12 +211,22 @@ pub async fn sync_account_once(
                         .commit_sync_batch(&records, &flags, &state, result.uidvalidity_reset)
                         .map_err(storage_error)?;
                     for record in &records {
-                        let triage = DefaultDeterministicTriage.analyze(
-                            &record.subject,
-                            &record.sender,
-                            record.text_body.as_deref().unwrap_or_default(),
-                            record.one_click_unsubscribe_supported,
-                        );
+                        let category = record
+                            .category_badge
+                            .as_deref()
+                            .and_then(|c| match c {
+                                "Security" => Some(TriageCategory::Security),
+                                "Financial" => Some(TriageCategory::Financial),
+                                "Shopping" => Some(TriageCategory::Shopping),
+                                "Newsletter" => Some(TriageCategory::Newsletter),
+                                "Personal" => Some(TriageCategory::Personal),
+                                _ => None,
+                            })
+                            .unwrap_or(TriageCategory::Personal);
+                        let triage = DeterministicTriageResult {
+                            category,
+                            badges: record.triage_badges.clone(),
+                        };
                         events
                             .on_message_triaged(&record.id, &triage)
                             .map_err(|_| IpcError::Internal)?;
@@ -320,6 +333,7 @@ fn message_record(
         is_read: false,
         has_attachments: !attachments.is_empty(),
         category_badge: Some(format!("{:?}", triage.category)),
+        triage_badges: triage.badges,
         raw_headers: message.raw_headers.unwrap_or_default(),
         text_body: message.text_plain,
         html_body: message.html_raw,

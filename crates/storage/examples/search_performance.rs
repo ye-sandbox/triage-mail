@@ -28,14 +28,6 @@ fn vector(id: usize) -> Vec<i8> {
 fn seed(path: &std::path::Path, key: &DatabaseKey) -> Result<()> {
     let mut conn = open_encrypted_connection(path, key)?;
     SchemaMigrator::new(FtsTokenizerMode::default()).migrate(&mut conn)?;
-    // INVARIANT: This disposable fixture models a real v4 upgrade. Never downgrade a
-    // user database; remove only this empty fixture's v5 additions before population.
-    conn.execute_batch(
-        "DROP TRIGGER messages_vector_insert;
-        DROP TRIGGER messages_vector_delete; DROP TRIGGER messages_vector_account;
-        DROP TRIGGER messages_vector_account_insert; DROP TABLE vec_messages_by_account;
-        DELETE FROM schema_migrations WHERE version=5;",
-    )?;
     let tx = conn.transaction()?;
     for account in 0..4 {
         tx.execute(
@@ -55,7 +47,7 @@ fn seed(path: &std::path::Path, key: &DatabaseKey) -> Result<()> {
                     'fixture@example.com', ?3, '', ?5, 0)",
         )?;
         let mut embedding = tx.prepare(
-            "INSERT INTO vec_messages(message_id, embedding_int8) VALUES (?1, vec_int8(?2))",
+            "INSERT INTO vec_messages(message_id, account_id, embedding_int8) VALUES (?1, ?2, vec_int8(?3))",
         )?;
         for id in 0..ROWS {
             let name = format!("message-{id}");
@@ -64,9 +56,10 @@ fn seed(path: &std::path::Path, key: &DatabaseKey) -> Result<()> {
             } else {
                 "newsletter"
             };
+            let account_id = format!("account-{}", id % 4);
             message.execute(params![
                 name,
-                format!("account-{}", id % 4),
+                account_id,
                 id + 1,
                 format!("Synthetic {topic} {id}"),
                 format!(
@@ -74,28 +67,11 @@ fn seed(path: &std::path::Path, key: &DatabaseKey) -> Result<()> {
                     "local synthetic content ".repeat(40)
                 )
             ])?;
-            embedding.execute(params![name, int8_slice_to_bytes(&vector(id))])?;
+            embedding.execute(params![name, account_id, int8_slice_to_bytes(&vector(id))])?;
         }
     }
     tx.commit()?;
     conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
-    let before = std::fs::metadata(path)?.len();
-    let start = Instant::now();
-    assert_eq!(
-        SchemaMigrator::new(Default::default()).migrate(&mut conn)?,
-        1
-    );
-    let migration_ms = start.elapsed().as_secs_f64() * 1000.;
-    conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
-    let indexed: usize =
-        conn.query_row("SELECT count(*) FROM vec_messages_by_account", [], |r| {
-            r.get(0)
-        })?;
-    assert_eq!(indexed, ROWS);
-    println!(
-        "# migration_ms={migration_ms:.6},bytes_before={before},bytes_after={},indexed={indexed}",
-        std::fs::metadata(path)?.len()
-    );
     let count: usize = conn.query_row("SELECT count(*) FROM messages", [], |r| r.get(0))?;
     let vectors: usize = conn.query_row("SELECT count(*) FROM vec_messages", [], |r| r.get(0))?;
     assert_eq!((count, vectors), (ROWS, ROWS));
@@ -267,15 +243,14 @@ fn sparse_cases(path: &std::path::Path, key: &DatabaseKey, neighbors: &[String])
     )?;
     for id in ROWS..ROWS + 31 {
         let name = format!("message-{id}");
-        tx.execute(
-            "INSERT INTO vec_messages(message_id,embedding_int8) VALUES (?1,vec_int8(?2))",
-            params![name, int8_slice_to_bytes(&vector(id))],
-        )?;
-        // Exercise the production late-message membership trigger, not a benchmark-only index.
         tx.execute("INSERT INTO messages(id,account_id,folder,uid,subject,sender,recipients,
             received_at_epoch_ms,raw_headers,created_at_epoch_ms)
             VALUES (?1,'account-sparse','INBOX',?2,'synthetic','sender@example.org','reader@example.com',?2,'',0)",
             params![name,id+1])?;
+        tx.execute(
+            "INSERT INTO vec_messages(message_id,account_id,embedding_int8) VALUES (?1,'account-sparse',vec_int8(?2))",
+            params![name, int8_slice_to_bytes(&vector(id))],
+        )?;
     }
     tx.commit()?;
     drop(conn);

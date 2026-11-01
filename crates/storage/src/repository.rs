@@ -121,14 +121,16 @@ impl SqliteMailStore {
         tx: &rusqlite::Transaction<'_>,
         message: &MessageRecord,
     ) -> Result<(), StorageError> {
+        let triage_badges_json =
+            serde_json::to_string(&message.triage_badges).unwrap_or_else(|_| "[]".to_string());
         tx.execute(
             "INSERT INTO messages (
                 id, account_id, folder, uid, message_id_header, in_reply_to, references_header,
                 subject, sender, recipients, received_at_epoch_ms, is_read, has_attachments,
-                category_badge, raw_headers, text_body, html_body, list_unsubscribe,
+                category_badge, triage_badges, raw_headers, text_body, html_body, list_unsubscribe,
                 list_unsubscribe_post, one_click_unsubscribe_supported, created_at_epoch_ms
              ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22
              ) ON CONFLICT(account_id, folder, uid) DO UPDATE SET
                 subject = excluded.subject,
                 sender = excluded.sender,
@@ -139,6 +141,7 @@ impl SqliteMailStore {
                 ) THEN messages.is_read ELSE excluded.is_read END,
                 has_attachments = excluded.has_attachments,
                 category_badge = excluded.category_badge,
+                triage_badges = excluded.triage_badges,
                 raw_headers = excluded.raw_headers,
                 text_body = excluded.text_body,
                 html_body = excluded.html_body,
@@ -160,6 +163,7 @@ impl SqliteMailStore {
                 if message.is_read { 1 } else { 0 },
                 if message.has_attachments { 1 } else { 0 },
                 message.category_badge,
+                triage_badges_json,
                 message.raw_headers,
                 message.text_body,
                 message.html_body,
@@ -226,22 +230,10 @@ impl SqliteMailStore {
             .transaction()
             .map_err(|e| StorageError::Query(e.to_string()))?;
         let vec_bytes = int8_slice_to_bytes(embedding_int8);
-        // INVARIANT: A failed replacement must retain both previous vectors. Orphans
-        // remain authoritative-only until a message insertion establishes account membership.
-        for table in ["vec_messages", "vec_messages_by_account"] {
-            tx.execute(
-                &format!("DELETE FROM {table} WHERE message_id=?1"),
-                [message_id],
-            )
+        tx.execute("DELETE FROM vec_messages WHERE message_id=?1", [message_id])
             .map_err(|e| StorageError::Query(e.to_string()))?;
-        }
         tx.execute(
-            "INSERT INTO vec_messages(message_id,embedding_int8) VALUES (?1,vec_int8(?2))",
-            rusqlite::params![message_id, vec_bytes],
-        )
-        .map_err(|e| StorageError::Query(e.to_string()))?;
-        tx.execute(
-            "INSERT INTO vec_messages_by_account(message_id,account_id,embedding_int8)
+            "INSERT INTO vec_messages(message_id,account_id,embedding_int8)
              SELECT id,account_id,vec_int8(?2) FROM messages WHERE id=?1",
             rusqlite::params![message_id, vec_bytes],
         )
@@ -283,7 +275,7 @@ impl SqliteMailStore {
             .prepare(
                 "SELECT id, account_id, folder, uid, message_id_header, in_reply_to, references_header,
                         subject, sender, recipients, received_at_epoch_ms, is_read, has_attachments,
-                        category_badge, raw_headers, text_body, html_body, list_unsubscribe,
+                        category_badge, triage_badges, raw_headers, text_body, html_body, list_unsubscribe,
                         list_unsubscribe_post, one_click_unsubscribe_supported, created_at_epoch_ms
                  FROM messages WHERE id = ?1;",
             )
@@ -364,27 +356,32 @@ impl SqliteMailStore {
             category_badge: row
                 .get(13)
                 .map_err(|e| StorageError::Query(e.to_string()))?,
+            triage_badges: row
+                .get::<_, Option<String>>(14)
+                .map_err(|e| StorageError::Query(e.to_string()))?
+                .and_then(|json| serde_json::from_str(&json).ok())
+                .unwrap_or_default(),
             raw_headers: row
-                .get(14)
-                .map_err(|e| StorageError::Query(e.to_string()))?,
-            text_body: row
                 .get(15)
                 .map_err(|e| StorageError::Query(e.to_string()))?,
-            html_body: row
+            text_body: row
                 .get(16)
                 .map_err(|e| StorageError::Query(e.to_string()))?,
-            list_unsubscribe: row
+            html_body: row
                 .get(17)
                 .map_err(|e| StorageError::Query(e.to_string()))?,
-            list_unsubscribe_post: row
+            list_unsubscribe: row
                 .get(18)
                 .map_err(|e| StorageError::Query(e.to_string()))?,
+            list_unsubscribe_post: row
+                .get(19)
+                .map_err(|e| StorageError::Query(e.to_string()))?,
             one_click_unsubscribe_supported: row
-                .get::<_, i64>(19)
+                .get::<_, i64>(20)
                 .map_err(|e| StorageError::Query(e.to_string()))?
                 != 0,
             created_at_epoch_ms: row
-                .get(20)
+                .get(21)
                 .map_err(|e| StorageError::Query(e.to_string()))?,
             attachments,
             tags,

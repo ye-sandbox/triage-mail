@@ -105,6 +105,7 @@ pub fn workspace_bridge_health() -> (&'static str, MessageRowSummary, TriageBadg
         category_badge: Some(format!("{:?}", TriageCategory::Personal)),
         tags: Vec::new(),
         folder_override: None,
+        triage_badges: Vec::new(),
     };
     let sample_badge = TriageBadge::UnsubscribeAvailable {
         supports_one_click: true,

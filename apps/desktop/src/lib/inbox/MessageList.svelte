@@ -2,6 +2,7 @@
 	import { tick, untrack } from 'svelte';
 	import Icon from './Icon.svelte';
 	import BadgePreview from './BadgePreview.svelte';
+	import TriageBadges from './TriageBadges.svelte';
 	import type { BadgeLoader } from './badges';
 	import type { InboxController } from './controller.svelte';
 	import { ROW_HEIGHT, visibleRange, selectionTop } from './virtual';
@@ -134,11 +135,15 @@
 								<span class="truncate"
 									>{inbox.folderLabels[row.id] || row.category_badge || row.folder}</span
 								>{#if row.has_attachments}<Icon name="paperclip" size={12} />{/if}
-								{#if badgeLoader}<BadgePreview
+								{#if row.triage_badges && row.triage_badges.length > 0}
+									<TriageBadges badges={row.triage_badges} />
+								{:else if badgeLoader}
+									<BadgePreview
 										id={row.id}
 										loader={badgeLoader}
 										revision={inbox.badgeRevision}
-									/>{/if}
+									/>
+								{/if}
 							</div>
 						</div>
 					</div>

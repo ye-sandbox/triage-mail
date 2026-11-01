@@ -19,6 +19,7 @@ export type MessageRowDto = {
 	category_badge: string | null;
 	tags: string[];
 	folder_override: string | null;
+	triage_badges?: import('../reader/types').TriageBadge[];
 };
 export type SyncState =
 	'Syncing' | 'Idle' | 'Retrying' | 'MutationPending' | 'MutationFailed' | 'ResyncRequired';

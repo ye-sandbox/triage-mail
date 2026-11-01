@@ -231,19 +231,24 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   query-plan constraints live in k-015; target latency remains subject to measured evidence.
 
 
-## Account-Partitioned Vector Index ([90.3], approved before implementation)
+## Pre-Release Schema Consolidation & Persisted Triage ([01.3] / ADR-007)
 
-- Add migration v5: `vec_messages_by_account` is a derived vec0 table with
-  `message_id TEXT PRIMARY KEY`, `account_id TEXT PARTITION KEY` and
-  `embedding_int8 int8[384] distance_metric=cosine`. Existing `vec_messages` remains
-  authoritative and its schema is unchanged. Backfill only vectors joined to live messages.
-- Embedding replacements update both tables atomically. Message insert/account-identity
-  changes reconcile derived membership from the authoritative table; deletion removes derived
-  membership, including cascades and UIDVALIDITY invalidation. Orphans remain unindexed.
-- Filtered top-k constrains the opaque account partition before ranking. Exact cosine/ID tie
-  semantics and deep-page fallback remain. Existing DTOs, core traits and tokenizer modes stay.
-- Index duplication trades encrypted disk space and write work for contiguous account scans.
-  Migration/backfill is transactional; failures preserve v4. No vector shadow-table access.
+- **Schema Governance Policy:** P1 schema immutability applies strictly to released schemas. Prior to
+  `v0.1.0` release, intermediate evolutionary migrations v1–v5 are collapsed into a canonical v1 schema.
+  From tag `v0.1.0` onward, all migrations MUST be append-only (`v2`, `v3`, etc.).
+- **Canonical Schema v1:**
+  - `accounts`, `folder_sync_state`, `attachments`, `tags`, `account_connections`, `pending_mutations`,
+    `message_folder_overrides`.
+  - `messages`: includes `category_badge TEXT` and `triage_badges TEXT NOT NULL DEFAULT '[]'`.
+  - `messages_fts`: FTS5 external content table + triggers (`messages_ai`, `messages_ad`, `messages_au`).
+  - `vec_messages`: single vec0 table with `message_id TEXT PRIMARY KEY`, `account_id TEXT PARTITION KEY`,
+    and `embedding_int8 int8[384] distance_metric=cosine`.
+- **Elimination of Derived Index Duplication:** Dropped `vec_messages_by_account`, reconciliation triggers,
+  and migration backfill. Embedding replacement writes to `vec_messages` directly.
+- **Persisted Triage & Zero-Body List Badges:** `worker.rs` populates `category_badge` and `triage_badges`
+  at ingestion into `messages`. `MessageRowSummary` / `MessageRowDto` exposes `triage_badges: Vec<TriageBadge>`
+  additively. UI list renders badges directly without calling `cmd_get_message_body` or transferring full
+  bodies over IPC. Message detail uses persisted triage metadata, avoiding dynamic regex re-computation.
 
 ## Exact Search Formulation & Latency ([90.4])
 

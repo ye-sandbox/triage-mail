@@ -38,6 +38,7 @@ fn create_sample_message(
         is_read: false,
         has_attachments: true,
         category_badge: Some("finance".to_string()),
+        triage_badges: vec![],
         raw_headers: "From: billing@example.org\r\nSubject: Test\r\n".to_string(),
         text_body: Some(body.to_string()),
         html_body: Some(format!("<p>{body}</p>")),
@@ -132,6 +133,61 @@ fn test_message_persistence_and_retrieval() {
     store.update_message_is_read("msg_1", true).unwrap();
     let updated = store.get_message_by_id("msg_1").unwrap().unwrap();
     assert!(updated.is_read);
+}
+
+#[test]
+fn test_triage_badges_persistence_and_summary_hydration() {
+    let key = DatabaseKey::from_bytes([23u8; 32]);
+    let store =
+        SqliteMailStore::open_in_memory(&key, FtsTokenizerMode::Unicode61RemoveDiacritics).unwrap();
+
+    let account = create_sample_account("acc_triage", "triage@example.com");
+    store.insert_account(&account).unwrap();
+
+    let mut msg = create_sample_message(
+        "msg_triage",
+        "acc_triage",
+        "INBOX",
+        102,
+        "Security Code",
+        "Your verification code is 654321.",
+    );
+    msg.category_badge = Some("Security".to_string());
+    msg.triage_badges = vec![triage_ai::TriageBadge::OtpCode {
+        code: "654321".to_string(),
+    }];
+    store.insert_message(&msg).unwrap();
+
+    let fetched = store
+        .get_message_by_id("msg_triage")
+        .unwrap()
+        .expect("msg found");
+    assert_eq!(fetched.category_badge.as_deref(), Some("Security"));
+    assert_eq!(
+        fetched.triage_badges,
+        vec![triage_ai::TriageBadge::OtpCode {
+            code: "654321".to_string(),
+        }]
+    );
+
+    // Verify row summary in search results has triage_badges populated
+    let results = store
+        .search(&HybridQuery {
+            query_text: "verification".to_string(),
+            query_embedding_int8: None,
+            account_filter: Some("acc_triage".to_string()),
+            mode: SearchMode::Lexical,
+            limit: 10,
+            offset: 0,
+        })
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(
+        results[0].triage_badges,
+        vec![triage_ai::TriageBadge::OtpCode {
+            code: "654321".to_string(),
+        }]
+    );
 }
 
 #[test]
