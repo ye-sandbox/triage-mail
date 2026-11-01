@@ -3,7 +3,13 @@
 	import type { GuidePlaybook } from '../i18n/types';
 	import type { AuthMethod } from './types';
 
-	let { selectedMethod }: { selectedMethod?: AuthMethod } = $props();
+	let {
+		selectedMethod,
+		selectedPreset
+	}: {
+		selectedMethod?: AuthMethod;
+		selectedPreset?: string;
+	} = $props();
 	let open = $state(false);
 	let activeTab = $state<AuthMethod>('AppPassword');
 
@@ -66,6 +72,20 @@
 					playbooks: t.appPassword.playbooks
 				};
 		}
+	});
+
+	const displayedPlaybooks = $derived.by(() => {
+		if (selectedPreset) {
+			const matching = activeContent.playbooks.filter(
+				(p) =>
+					p.id === selectedPreset ||
+					p.provider.toLowerCase().includes(selectedPreset.toLowerCase())
+			);
+			if (matching.length > 0) {
+				return matching;
+			}
+		}
+		return activeContent.playbooks;
 	});
 </script>
 
@@ -161,7 +181,7 @@
 				<div class="space-y-2">
 					<h3 class="font-semibold text-[var(--text)]">{t.stepsTitle}</h3>
 					<div class="space-y-2">
-						{#each activeContent.playbooks as playbook}
+						{#each displayedPlaybooks as playbook}
 							{@render playbookCard(playbook)}
 						{/each}
 					</div>

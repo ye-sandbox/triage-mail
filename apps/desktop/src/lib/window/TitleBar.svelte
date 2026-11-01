@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { i18n } from '$lib/i18n/index.svelte.ts';
+	import { i18n } from '$lib/i18n/index.svelte';
 	import { createTauriWindowTransport } from './transport';
 	import { getWindowLabels, type WindowState, type WindowTransport } from './types';
 

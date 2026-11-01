@@ -1,6 +1,7 @@
 export type SupportedLocale = 'en' | 'pt-BR';
 
 export interface GuidePlaybook {
+	id?: string;
 	provider: string;
 	steps: string[];
 }

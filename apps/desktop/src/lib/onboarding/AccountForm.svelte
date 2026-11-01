@@ -7,10 +7,11 @@
 	import { providerPresets, type ProviderPreset } from './presets';
 
 	let { controller }: { controller: AccountController } = $props();
+	let selectedPreset = $state<string>('Gmail');
 	let method = $state<AuthMethod>('AppPassword');
 	let form = $state<HTMLFormElement>();
 
-	let presetHost = $state('');
+	let presetHost = $state('imap.gmail.com');
 	let presetPort = $state(993);
 	let presetAuth = $state('');
 	let presetToken = $state('');
@@ -20,6 +21,7 @@
 	const oauth = $derived(method === 'OAuth2PublicPkce' || method === 'OAuth2ByoCredentials');
 
 	function applyPreset(p: ProviderPreset) {
+		selectedPreset = p.name;
 		presetHost = p.host;
 		presetPort = p.port;
 		presetAuth = p.authEndpoint ?? '';
@@ -84,9 +86,6 @@
 		</p>
 	</div>
 
-	<!-- Interactive Login Methods Guide -->
-	<AccountHelpGuide selectedMethod={method} />
-
 	<!-- Provider Presets -->
 	<div class="space-y-2">
 		<span class="text-xs font-medium text-[var(--secondary)]">{t.quickFillLabel}</span>
@@ -95,7 +94,10 @@
 				<button
 					type="button"
 					disabled={controller.busy}
-					class="rounded-full border border-[var(--separator)] bg-[var(--surface)] px-2.5 py-1 text-xs font-medium text-[var(--secondary)] transition-all hover:border-[var(--accent)] hover:text-[var(--text)] active:scale-95 disabled:opacity-50"
+					class="rounded-full border px-2.5 py-1 text-xs font-medium transition-all active:scale-95 disabled:opacity-50 {selectedPreset === p.name
+						? 'border-[var(--accent)] bg-[var(--selection-soft)] text-[var(--accent)] font-semibold shadow-xs'
+						: 'border-[var(--separator)] bg-[var(--surface)] text-[var(--secondary)] hover:border-[var(--accent)] hover:text-[var(--text)]'}"
+					aria-pressed={selectedPreset === p.name}
 					onclick={() => applyPreset(p)}
 				>
 					{p.name}
@@ -104,9 +106,26 @@
 		</div>
 	</div>
 
+	<!-- Interactive Login Methods Guide -->
+	<AccountHelpGuide selectedMethod={method} {selectedPreset} />
+
 	<label class="block text-sm"
 		>{t.methodLabel}
-		<select class="setup-input mt-2" bind:value={method} disabled={controller.busy}>
+		<select
+			class="setup-input mt-2"
+			value={method}
+			disabled={controller.busy}
+			onchange={(e) => {
+				const val = (e.currentTarget as HTMLSelectElement).value as AuthMethod;
+				method = val;
+				if (selectedPreset) {
+					const cur = providerPresets.find((p) => p.name === selectedPreset);
+					if (cur && cur.method !== val) {
+						selectedPreset = '';
+					}
+				}
+			}}
+		>
 			<option value="AppPassword">{t.methodAppPassword}</option>
 			<option value="OAuth2PublicPkce">{t.methodOAuthPublic}</option>
 			<option value="OAuth2ByoCredentials">{t.methodOAuthByo}</option>

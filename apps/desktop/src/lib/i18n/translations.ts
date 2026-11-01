@@ -84,35 +84,45 @@ export const translations: Record<SupportedLocale, Translations> = {
 					'Popular hosts: imap.gmail.com:993, imap.mail.me.com:993, imap.mail.yahoo.com:993, outlook.office365.com:993',
 				fields: [
 					'Email address: Your full email address (e.g. reader@example.com).',
-					'IMAP host & Port: Click your provider in Quick fill below (or enter your server host and port 993).',
+					'IMAP host & Port: Click your provider in Quick fill (or enter your server host and port 993).',
 					'App password: The 16-character password generated in your provider security settings (paste without spaces).'
 				],
 				playbooks: [
 					{
+						id: 'Gmail',
 						provider: 'Google / Gmail & Google Workspace',
 						steps: [
 							'Open your Google Account security page (myaccount.google.com/security) and enable 2-Step Verification (2FA).',
 							'Go to App passwords (myaccount.google.com/apppasswords), enter the name "Triage Mail", and click Create.',
 							'Copy the 16-letter password shown on screen (ignore spaces).',
 							'In Gmail on the web (Settings -> See all settings -> Forwarding and POP/IMAP), verify that IMAP access is Enabled.',
-							'Click "Gmail" in Quick fill below, enter your email, and paste the 16-character App Password.'
+							'Click "Gmail" in Quick fill, enter your email, and paste the 16-character App Password.'
 						]
 					},
 					{
+						id: 'iCloud',
 						provider: 'Apple iCloud Mail',
 						steps: [
 							'Sign in to appleid.apple.com (Two-Factor Authentication is required).',
 							'Open Sign-In and Security -> App-Specific Passwords -> Generate an app-specific password.',
 							'Name it "Triage Mail" and copy the generated xxxx-xxxx-xxxx-xxxx password.',
-							'Click "iCloud" in Quick fill below, enter your iCloud email address, and paste the generated password.'
+							'Click "iCloud" in Quick fill, enter your iCloud email address, and paste the generated password.'
 						]
 					},
 					{
-						provider: 'Yahoo Mail, AOL & Fastmail',
+						id: 'Yahoo',
+						provider: 'Yahoo Mail & AOL',
 						steps: [
-							'Yahoo / AOL: Go to Account Info -> Account Security -> Generate and manage app passwords, create one for "Triage Mail", and copy it.',
-							'Fastmail: Go to Settings -> Privacy & Security -> Integrations -> New app password, select IMAP access, and copy the password.',
-							'Click "Yahoo" or "Fastmail" in Quick fill below, enter your email, and paste the App Password.'
+							'Go to Account Info -> Account Security -> Generate and manage app passwords, create one for "Triage Mail", and copy it.',
+							'Click "Yahoo" in Quick fill, enter your email, and paste the App Password.'
+						]
+					},
+					{
+						id: 'Fastmail',
+						provider: 'Fastmail',
+						steps: [
+							'Go to Settings -> Privacy & Security -> Integrations -> New app password, select IMAP access, and copy the password.',
+							'Click "Fastmail" in Quick fill, enter your email, and paste the App Password.'
 						]
 					}
 				]
@@ -133,6 +143,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 				],
 				playbooks: [
 					{
+						id: 'Outlook',
 						provider: 'Microsoft (Outlook.com / Hotmail / Microsoft 365)',
 						steps: [
 							'Open Microsoft Entra / Azure Portal (portal.azure.com -> App registrations) and click New registration.',
@@ -140,7 +151,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 							'Under Redirect URI, choose platform "Public client/native (mobile & desktop)" and enter http://127.0.0.1/callback.',
 							'In API permissions -> Add a permission -> Microsoft APIs, add delegated permissions IMAP.AccessAsUser.All and offline_access.',
 							'On the Overview page of your registered app, copy the Application (client) ID.',
-							'Click "Outlook" in Quick fill below, type your email, paste the Client ID, and click Authorize and connect.'
+							'Click "Outlook" in Quick fill, type your email, paste the Client ID, and click Authorize and connect.'
 						]
 					}
 				]
@@ -160,13 +171,14 @@ export const translations: Record<SupportedLocale, Translations> = {
 				],
 				playbooks: [
 					{
+						id: 'Gmail OAuth',
 						provider: 'Google Cloud Console (Gmail / Google Workspace)',
 						steps: [
 							'Open console.cloud.google.com, create a project, and enable the "Gmail API" under APIs & Services -> Library.',
 							'Go to APIs & Services -> OAuth consent screen, choose External (or Internal for Workspace), add scope https://mail.google.com/, and add your own email under Test users.',
 							'Go to Credentials -> Create Credentials -> OAuth client ID and select Application type "Desktop app".',
 							'Copy both the generated Client ID and Client secret.',
-							'Click "Gmail OAuth" in Quick fill below, enter your email, paste your Client ID and Client secret, and click Authorize and connect.',
+							'Click "Gmail OAuth" in Quick fill, enter your email, paste your Client ID and Client secret, and click Authorize and connect.',
 							'In the browser window, sign in and approve access (if Google shows an unverified-app prompt for your personal project, click Advanced -> Proceed).'
 						]
 					}
@@ -187,6 +199,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 				],
 				playbooks: [
 					{
+						id: 'Proton',
 						provider: 'Proton Mail Bridge (Local Desktop Setup)',
 						steps: [
 							'Download, install, and launch the official Proton Mail Bridge application on your computer (requires a paid Proton plan).',
@@ -194,7 +207,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 							'Click on your account in the Bridge app and open Mailbox details / Configuration.',
 							'Verify that the local IMAP port is 1143 and security mode is set to SSL/TLS or STARTTLS.',
 							'Copy the Username and the Bridge Password displayed on that screen (never use your web Proton password).',
-							'Click "Proton" in Quick fill below, paste the Bridge username and Bridge password, and click Connect account.'
+							'Click "Proton" in Quick fill, paste the Bridge username and Bridge password, and click Connect account.'
 						]
 					}
 				]
@@ -284,35 +297,45 @@ export const translations: Record<SupportedLocale, Translations> = {
 					'Hosts comuns: imap.gmail.com:993, imap.mail.me.com:993, imap.mail.yahoo.com:993, outlook.office365.com:993',
 				fields: [
 					'Endereço de e-mail: Seu e-mail completo (ex.: leitor@example.com).',
-					'Host IMAP e Porta: Clique no botão do seu provedor em "Preenchimento rápido" abaixo (ou informe o host do servidor e a porta 993).',
+					'Host IMAP e Porta: Clique no botão do seu provedor em "Preenchimento rápido" (ou informe o host do servidor e a porta 993).',
 					'Senha de aplicativo: A senha exclusiva de 16 caracteres gerada no painel de segurança do seu provedor (cole sem espaços).'
 				],
 				playbooks: [
 					{
+						id: 'Gmail',
 						provider: 'Google / Gmail e Google Workspace',
 						steps: [
 							'Acesse a página de Segurança da Conta Google (myaccount.google.com/security) e ative a "Verificação em duas etapas" (2FA).',
 							'Acesse "Senhas de app" (myaccount.google.com/apppasswords), digite o nome "Triage Mail" e clique em "Criar".',
 							'Copie a senha de 16 letras exibida na tela (ignore os espaços).',
 							'No Gmail pelo navegador (Configurações -> Ver todas as configurações -> Encaminhamento e POP/IMAP), confirme que o "Acesso IMAP" está ativado.',
-							'Clique em "Gmail" no Preenchimento rápido abaixo, informe seu e-mail e cole a senha de 16 caracteres.'
+							'Com "Gmail" selecionado no Preenchimento rápido, informe seu e-mail e cole a senha de 16 caracteres.'
 						]
 					},
 					{
+						id: 'iCloud',
 						provider: 'Apple iCloud Mail',
 						steps: [
 							'Acesse appleid.apple.com (é obrigatório estar com a autenticação de dois fatores ativada).',
 							'Vá em "Início de sessão e segurança" -> "Senhas específicas de apps" -> "Gerar uma senha de app".',
 							'Informe o nome "Triage Mail" e copie a senha gerada no formato xxxx-xxxx-xxxx-xxxx.',
-							'Clique em "iCloud" no Preenchimento rápido abaixo, digite seu e-mail iCloud e cole a senha gerada.'
+							'Clique em "iCloud" no Preenchimento rápido, digite seu e-mail iCloud e cole a senha gerada.'
 						]
 					},
 					{
-						provider: 'Yahoo Mail, AOL e Fastmail',
+						id: 'Yahoo',
+						provider: 'Yahoo Mail e AOL',
 						steps: [
-							'Yahoo / AOL: Acesse Informações da conta -> Segurança da conta -> Gerar e gerenciar senhas de app, crie uma para "Triage Mail" e copie os 16 caracteres.',
-							'Fastmail: Acesse Settings -> Privacy & Security -> Integrations -> New app password, marque acesso IMAP e copie a senha.',
-							'Clique em "Yahoo" ou "Fastmail" no Preenchimento rápido abaixo, preencha seu e-mail e cole a Senha de aplicativo.'
+							'Acesse Informações da conta -> Segurança da conta -> Gerar e gerenciar senhas de app, crie uma para "Triage Mail" e copie os 16 caracteres.',
+							'Clique em "Yahoo" no Preenchimento rápido, preencha seu e-mail e cole a Senha de aplicativo.'
+						]
+					},
+					{
+						id: 'Fastmail',
+						provider: 'Fastmail',
+						steps: [
+							'Acesse Settings -> Privacy & Security -> Integrations -> New app password, marque acesso IMAP e copie a senha.',
+							'Clique em "Fastmail" no Preenchimento rápido, preencha seu e-mail e cole a Senha de aplicativo.'
 						]
 					}
 				]
@@ -333,6 +356,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 				],
 				playbooks: [
 					{
+						id: 'Outlook',
 						provider: 'Microsoft (Outlook.com / Hotmail / Microsoft 365)',
 						steps: [
 							'Acesse o portal Microsoft Entra / Azure (portal.azure.com -> Registros de aplicativo / App registrations) e clique em "Novo registro".',
@@ -340,7 +364,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 							'Em URI de redirecionamento (Redirect URI), selecione a plataforma "Cliente público/nativo (móvel e área de trabalho)" e digite http://127.0.0.1/callback.',
 							'Em Permissões de API -> Adicionar uma permissão -> APIs da Microsoft, adicione as permissões delegadas IMAP.AccessAsUser.All e offline_access.',
 							'Na página "Visão geral" (Overview) do aplicativo criado, copie o "ID do aplicativo (cliente)" (Application / client ID).',
-							'Clique em "Outlook" no Preenchimento rápido abaixo, informe seu e-mail, cole o ID do cliente e clique em "Autorizar e conectar".'
+							'Clique em "Outlook" no Preenchimento rápido, informe seu e-mail, cole o ID do cliente e clique em "Autorizar e conectar".'
 						]
 					}
 				]
@@ -360,13 +384,14 @@ export const translations: Record<SupportedLocale, Translations> = {
 				],
 				playbooks: [
 					{
+						id: 'Gmail OAuth',
 						provider: 'Google Cloud Console (Gmail / Google Workspace)',
 						steps: [
 							'Acesse console.cloud.google.com, crie um novo projeto e, em "APIs e Serviços -> Biblioteca", pesquise por "Gmail API" e clique em "Ativar".',
 							'Em "APIs e Serviços -> Tela de permissão OAuth", configure como Externo (ou Interno no Workspace), adicione o escopo https://mail.google.com/ e adicione seu próprio e-mail em "Usuários de teste" (Test users).',
 							'Vá em "Credenciais -> Criar credenciais -> ID do cliente OAuth" e selecione o tipo de aplicativo "App para computador" (Desktop app).',
 							'Copie o "ID do cliente" (Client ID) e a "Chave secreta do cliente" (Client secret) gerados.',
-							'Clique em "Gmail OAuth" no Preenchimento rápido abaixo, digite seu e-mail, cole o ID do cliente e a Chave secreta e clique em "Autorizar e conectar".',
+							'Clique em "Gmail OAuth" no Preenchimento rápido, digite seu e-mail, cole o ID do cliente e a Chave secreta e clique em "Autorizar e conectar".',
 							'Na janela do navegador, faça login e aprove o acesso (se o Google exibir o aviso de app não verificado para seu projeto pessoal, clique em Avançado -> Acessar).'
 						]
 					}
@@ -387,6 +412,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 				],
 				playbooks: [
 					{
+						id: 'Proton',
 						provider: 'Proton Mail Bridge (Configuração Local no Computador)',
 						steps: [
 							'Baixe, instale e abra o aplicativo oficial Proton Mail Bridge no seu computador (requer assinatura Proton paga).',
@@ -394,7 +420,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 							'Clique sobre sua conta conectada no Bridge e abra "Detalhes da caixa de correio" (Mailbox details / Configuration).',
 							'Confirme que a porta IMAP local é 1143 e que o modo de segurança está definido como SSL/TLS ou STARTTLS.',
 							'Copie o "Username" e o "Password" mostrados nessa tela do Bridge (nunca utilize a senha da sua conta Proton da web).',
-							'Clique em "Proton" no Preenchimento rápido abaixo, cole o usuário e a senha do Bridge e clique em "Conectar conta".'
+							'Clique em "Proton" no Preenchimento rápido, cole o usuário e a senha do Bridge e clique em "Conectar conta".'
 						]
 					}
 				]

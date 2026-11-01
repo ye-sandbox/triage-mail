@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { i18n } from '$lib/i18n/index.svelte.ts';
+import { i18n } from '$lib/i18n/index.svelte';
 import TitleBar from './TitleBar.svelte';
 import { createFakeWindowTransport } from './transport';
 import type { WindowTransport } from './types';
