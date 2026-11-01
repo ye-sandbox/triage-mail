@@ -5,6 +5,25 @@
 
 ---
 
+## [v0.1.1] - 2026-11-01
+
+### 📌 Task [04.8]: Account Onboarding Help Guide, Provider Presets & Apple-Style Language Selector
+
+- **Description:** Implement in-app account onboarding assistance (comprehensive help guide for App Password, OAuth PKCE, OAuth BYO Credentials, and Proton Mail Bridge, plus one-click provider presets for Gmail, Outlook, Yahoo, iCloud, Fastmail, and Proton) alongside a minimalist Apple-style segmented language selector (`EN` | `PT`), a reactive Svelte 5 i18n store, and bilingual documentation in `README.md` and `README.pt-br.md`.
+- **Systems Involved:** `apps/desktop` (`src/lib/i18n/`, `src/lib/onboarding/`, `src/lib/settings/`), `README.md`, `README.pt-br.md`.
+- **Action Type:** Feature & Documentation.
+- **Status:** DONE
+- **Commit:** `7a09859` (`feat(desktop): add login methods help guide, provider presets, and apple-style language selector`).
+- **Acceptance:**
+  - [x] Interactive account onboarding help guide (`AccountHelpGuide.svelte`) explaining App Password, OAuth Public PKCE, OAuth BYO Credentials, and Proton Mail Bridge with requirements and compatible services.
+  - [x] One-click provider presets for Gmail, Outlook, iCloud, Yahoo, Fastmail, and Proton to auto-fill host, port, and recommended auth mode.
+  - [x] Minimalist Apple-style segmented pill language selector (`EN` | `PT`) with translucent backdrop blur, active scale response, and zero layout shift.
+  - [x] Reactive Svelte 5 rune-based i18n store with locale persistence to `localStorage` and automatic browser language detection.
+  - [x] Synchronized bilingual Account Setup & Authentication Guide in `README.md` and `README.pt-br.md` maintaining 1:1 parity and zero heading emojis.
+  - [x] Full Definition of Done verified: 12 Vitest suites (66 tests passed), svelte-check 0 errors/0 warnings, clippy 0 warnings, formatting clean, secret scanner clean, git diff clean.
+
+---
+
 ## [v0.1.0] - 2026-11-01
 
 ### 📌 Task [99.1]: Public Transition Audit & Secret Scrubbing Verification

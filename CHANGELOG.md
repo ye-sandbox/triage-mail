@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-01
+
+### Added
+- Interactive in-app onboarding help guide (`AccountHelpGuide.svelte`) explaining App Password, OAuth Public PKCE, OAuth BYO Credentials, and Proton Mail Bridge with prerequisites, compatible services, and configuration tips.
+- One-click provider presets for Gmail, Outlook, iCloud, Yahoo, Fastmail, and Proton to auto-fill host, port, and recommended auth mode.
+- Minimalist Apple-style segmented pill language selector (`EN` | `PT`) with translucent backdrop blur, instant active response, and full accessibility support.
+- Reactive Svelte 5 rune-based i18n store (`en` / `pt-BR`) with automatic browser language detection and `localStorage` persistence.
+- Comprehensive Account Setup & Authentication Guide in both `README.md` and `README.pt-br.md` maintaining 1:1 bilingual parity.
+
 ## [0.1.0] - 2026-11-01
 
 ### Added

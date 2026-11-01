@@ -7,13 +7,7 @@
 
 ## Active Task
 
-None — Milestone v0.1.0 Released + Task [04.8] Completed (`7a09859`)
-
----
-
-## Completed Tasks Log
-
-- **[04.8] Account Onboarding Help Guide, Provider Presets & Apple-Style Language Selector:** Implemented in-app account onboarding assistance (interactive disclosure guide explaining App Password, OAuth Public PKCE, OAuth BYO Credentials, and Proton Mail Bridge, plus one-click provider presets for Gmail, Outlook, Yahoo, iCloud, Fastmail, and Proton), reactive Svelte 5 rune-based i18n store (`en` / `pt-BR`) with `localStorage` persistence, minimalist Apple-style segmented pill language selector (`EN` | `PT`), and full bilingual documentation in `README.md` and `README.pt-br.md`. Commit: `7a09859`.
+None — Milestone v0.1.1 Released (`v0.1.1` tag)
 
 ---
 
