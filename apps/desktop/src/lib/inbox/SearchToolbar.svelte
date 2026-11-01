@@ -6,6 +6,7 @@
 		mode = $bindable<SearchMode>('Lexical'),
 		toggleSidebar,
 		refresh,
+		openSettings,
 		sidebarOpen = true,
 		busy = false,
 		disabled = false,
@@ -15,6 +16,7 @@
 		mode?: SearchMode;
 		toggleSidebar: () => void;
 		refresh: () => void;
+		openSettings?: () => void;
 		sidebarOpen?: boolean;
 		busy?: boolean;
 		disabled?: boolean;
@@ -89,4 +91,15 @@
 			><Icon name="refresh" size={18} /></span
 		></button
 	>
+	{#if openSettings}
+		<button
+			type="button"
+			class="icon-button {sidebarOpen ? 'md:hidden' : ''}"
+			aria-label="Settings"
+			aria-haspopup="dialog"
+			title="Settings"
+			onclick={openSettings}
+			><Icon name="settings" size={18} /></button
+		>
+	{/if}
 </header>
