@@ -107,4 +107,19 @@ export interface Translations {
 			playbooks: GuidePlaybook[];
 		};
 	};
+	settingsModal: {
+		title: string;
+		close: string;
+		navAria: string;
+		tabs: {
+			general: string;
+			accounts: string;
+			search: string;
+			ai: string;
+			privacy: string;
+		};
+		unsavedChanges: string;
+		stay: string;
+		discard: string;
+	};
 }

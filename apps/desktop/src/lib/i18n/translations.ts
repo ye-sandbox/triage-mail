@@ -212,6 +212,21 @@ export const translations: Record<SupportedLocale, Translations> = {
 					}
 				]
 			}
+		},
+		settingsModal: {
+			title: 'Settings',
+			close: 'Close settings',
+			navAria: 'Settings navigation',
+			tabs: {
+				general: 'General',
+				accounts: 'Accounts',
+				search: 'Search',
+				ai: 'AI',
+				privacy: 'Privacy'
+			},
+			unsavedChanges: 'You have unsaved changes. Leaving will discard your draft credentials.',
+			stay: 'Stay on form',
+			discard: 'Discard changes'
 		}
 	},
 	'pt-BR': {
@@ -425,6 +440,21 @@ export const translations: Record<SupportedLocale, Translations> = {
 					}
 				]
 			}
+		},
+		settingsModal: {
+			title: 'Configurações',
+			close: 'Fechar configurações',
+			navAria: 'Navegação de configurações',
+			tabs: {
+				general: 'Geral',
+				accounts: 'Contas',
+				search: 'Busca',
+				ai: 'IA',
+				privacy: 'Privacidade'
+			},
+			unsavedChanges: 'Você tem alterações não salvas. Sair descartará as credenciais digitadas.',
+			stay: 'Continuar no formulário',
+			discard: 'Descartar alterações'
 		}
 	}
 };
