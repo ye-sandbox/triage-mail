@@ -148,7 +148,7 @@ fn setup<R: RemoteMail + 'static>(
     )
 }
 fn record() -> MessageRecord {
-    MessageRecord { id:"m-1".into(),account_id:"acct-1".into(),folder:"INBOX".into(),uid:1,message_id_header:Some("<message@example.org>".into()),in_reply_to:None,references_header:None,subject:"Invoice update".into(),sender:"billing@example.org".into(),recipients:"reader@example.com".into(),received_at_epoch_ms:1,is_read:false,has_attachments:true,category_badge:None,raw_headers:"From: billing@example.org\r\nSubject: Invoice update\r\nList-Unsubscribe: <https://example.org/unsubscribe>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n".into(),text_body:Some("Invoice for order".into()),html_body:Some("<p>Invoice</p>".into()),list_unsubscribe:Some("<https://example.org/unsubscribe>".into()),list_unsubscribe_post:Some("List-Unsubscribe=One-Click".into()),one_click_unsubscribe_supported:true,created_at_epoch_ms:1,attachments:vec![AttachmentRecord { id:"a-1".into(),message_id:"m-1".into(),part_id:"2".into(),filename:"invoice.pdf".into(),content_type:"application/pdf".into(),size_bytes:3,content_id:None,is_inline:false }],tags:vec![] }
+    MessageRecord { id:"m-1".into(),account_id:"acct-1".into(),folder:"INBOX".into(),uid:1,message_id_header:Some("<message@example.org>".into()),in_reply_to:None,references_header:None,subject:"Invoice update".into(),sender:"billing@example.org".into(),recipients:"reader@example.com".into(),received_at_epoch_ms:1,is_read:false,has_attachments:true,category_badge:Some("Financial".into()),triage_badges:vec![triage_ai::TriageBadge::UnsubscribeAvailable { supports_one_click: true }],raw_headers:"From: billing@example.org\r\nSubject: Invoice update\r\nList-Unsubscribe: <https://example.org/unsubscribe>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n".into(),text_body:Some("Invoice for order".into()),html_body:Some("<p>Invoice</p>".into()),list_unsubscribe:Some("<https://example.org/unsubscribe>".into()),list_unsubscribe_post:Some("List-Unsubscribe=One-Click".into()),one_click_unsubscribe_supported:true,created_at_epoch_ms:1,attachments:vec![AttachmentRecord { id:"a-1".into(),message_id:"m-1".into(),part_id:"2".into(),filename:"invoice.pdf".into(),content_type:"application/pdf".into(),size_bytes:3,content_id:None,is_inline:false }],tags:vec![] }
 }
 async fn seed(service: &Arc<DesktopService>, store: &SqliteMailStore) {
     service
@@ -324,6 +324,12 @@ async fn lexical_semantic_hybrid_and_details_map_existing_storage_contracts() {
         let rows = service.search_messages(query(mode)).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].id, "m-1");
+        assert_eq!(
+            rows[0].triage_badges,
+            vec![triage_ai::TriageBadge::UnsubscribeAvailable {
+                supports_one_click: true
+            }]
+        );
     }
     let body = service.get_message_body("m-1".into()).await.unwrap();
     assert!(body.headers.contains("List-Unsubscribe"));

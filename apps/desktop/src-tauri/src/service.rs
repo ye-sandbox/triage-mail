@@ -7,7 +7,10 @@ use storage::{
     desktop::LocalMutation, AccountRecord, MailRepository, SearchEngine, SearchMode,
     SqliteMailStore,
 };
-use triage_ai::{DefaultDeterministicTriage, DeterministicTriage, EmbeddingProvider};
+use triage_ai::{
+    DefaultDeterministicTriage, DeterministicTriage, DeterministicTriageResult, EmbeddingProvider,
+    TriageCategory,
+};
 use vault::{AccountAuthMaterial, SecretStore};
 use zeroize::{Zeroize, Zeroizing};
 
@@ -269,12 +272,31 @@ impl DesktopService {
                 .get_message_by_id(&id)
                 .map_err(storage_error)?
                 .ok_or(IpcError::NotFound)?;
-            let triage = DefaultDeterministicTriage.analyze(
-                &record.subject,
-                &record.sender,
-                record.text_body.as_deref().unwrap_or_default(),
-                record.one_click_unsubscribe_supported,
-            );
+            let triage = if !record.triage_badges.is_empty() || record.category_badge.is_some() {
+                let category = record
+                    .category_badge
+                    .as_deref()
+                    .and_then(|c| match c {
+                        "Security" => Some(TriageCategory::Security),
+                        "Financial" => Some(TriageCategory::Financial),
+                        "Shopping" => Some(TriageCategory::Shopping),
+                        "Newsletter" => Some(TriageCategory::Newsletter),
+                        "Personal" => Some(TriageCategory::Personal),
+                        _ => None,
+                    })
+                    .unwrap_or(TriageCategory::Personal);
+                DeterministicTriageResult {
+                    category,
+                    badges: record.triage_badges.clone(),
+                }
+            } else {
+                DefaultDeterministicTriage.analyze(
+                    &record.subject,
+                    &record.sender,
+                    record.text_body.as_deref().unwrap_or_default(),
+                    record.one_click_unsubscribe_supported,
+                )
+            };
             let attachments = record
                 .attachments
                 .into_iter()

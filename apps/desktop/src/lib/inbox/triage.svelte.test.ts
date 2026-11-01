@@ -1,9 +1,22 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { flushSync, mount, unmount } from 'svelte';
 import { InboxController } from './controller.svelte';
+import MessageList from './MessageList.svelte';
 import { validTag, shortcut } from './triage';
 import { BadgeLoader, badgeText } from './badges';
 import type { InboxTransport, MessageRowDto } from './types';
 import type { MessageDetailDto, ReaderTransport } from '../reader/types';
+
+beforeAll(() => {
+	vi.stubGlobal(
+		'ResizeObserver',
+		class {
+			observe() {}
+			unobserve() {}
+			disconnect() {}
+		}
+	);
+});
 const row: MessageRowDto = {
 	id: 'synthetic-message',
 	account_id: 'local',
@@ -193,6 +206,32 @@ describe('badge loading', () => {
 		expect(badgeText({ UnsubscribeAvailable: { supports_one_click: false } }).value).toBe(
 			'One-click unavailable'
 		);
+	});
+	it('renders triage badges directly from row summary without calling badgeLoader', () => {
+		const rowWithBadge: MessageRowDto = {
+			...row,
+			id: 'badge-row',
+			triage_badges: [{ OtpCode: { code: '998877' } }]
+		};
+		const body = vi.fn();
+		const loader = new BadgeLoader({ body, attachment: vi.fn() });
+		const target = document.createElement('div');
+		document.body.appendChild(target);
+		const inbox = new InboxController({
+			triage: async () => {},
+			search: async () => [rowWithBadge],
+			subscribe: async () => () => {}
+		});
+		inbox.rows = [rowWithBadge];
+		const instance = mount(MessageList, {
+			target,
+			props: { inbox, badgeLoader: loader }
+		});
+		flushSync();
+		expect(target.textContent).toContain('998877');
+		expect(body).not.toHaveBeenCalled();
+		unmount(instance);
+		target.remove();
 	});
 });
 describe('shortcuts', () => {

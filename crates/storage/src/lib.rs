@@ -123,6 +123,8 @@ pub struct MessageRowSummary {
     /// Display-only local move intent; folder/UID remain canonical server identity.
     #[serde(default)]
     pub folder_override: Option<String>,
+    #[serde(default)]
+    pub triage_badges: Vec<triage_ai::TriageBadge>,
 }
 
 /// Schema migration runner contract.

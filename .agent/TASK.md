@@ -7,6 +7,30 @@
 
 ## Active Task
 
+### 📌 Task [90.5]: Parallel Read Pool & Latency Target ADR
+
+- **Description:** Hybrid search runs lexical and semantic branches sequentially (~75ms warm p50).
+  The [90.4] rationale (pooling unsafe for ACID) is incorrect: WAL read-only connections are safe.
+  Global exact <15ms is physically infeasible (~42ms vector scan at 100k).
+  Investigate two read-only SQLCipher connections executing branches concurrently; measure memory
+  cost of per-connection page cache. Author ADR redefining targets:
+  p95 warm @100k — filtered semantic ≤15ms, lexical ≤40ms, global semantic ≤50ms, hybrid ≤60ms,
+  UI first page incl. IPC ≤100ms. No approximate (ANN) search in v0.1; binary-quantized
+  candidate + int8 rerank evaluated for v0.2.
+- **Systems Involved:** `crates/storage`, `docs/adr`.
+- **Action Type:** Investigation & Architecture; requires an approved plan.
+- **Status:** READY FOR PLANNING
+- **Scope:**
+  - Parallel read pool investigation for lexical and semantic concurrent query execution.
+  - Memory profiling of concurrent page-cache overhead.
+  - Author ADR redefining latency targets for v0.1.0 and future roadmap.
+- **Constraints:** Preserve encryption, exact ranking/candidate coverage, safety boundaries.
+- **Origin:** v0.1.0 readiness review (2026-10-31), finding I1.
+
+---
+
+## Completed Tasks
+
 ### 📌 Task [01.3]: Pre-Release Schema Consolidation & Persisted Triage
 
 - **Description:** ADR-006 duplicated the vector index solely to preserve an unreleased v4 schema.
@@ -17,20 +41,21 @@
   Verify global (unfiltered) vec0 KNN over partitions at 100k against the exact reference oracle.
 - **Systems Involved:** `crates/storage` (migrations, schema, search), `crates/mail-engine` (ingestion),
   `apps/desktop` (DTOs, triage persistence, list badges).
-- **Action Type:** Implementation; requires an approved plan.
-- **Status:** READY FOR PLANNING
-- **Scope:**
-  - Collapse migrations v1–v5 into a single canonical v1 schema with one account-partitioned vector index.
-  - Drop derived table, reconciliation triggers, and migration backfill logic.
-  - Persist triage category and badges at ingestion in SQLCipher; expose additively in `MessageRowDto`.
-  - Validate 100k global and filtered search against the exact reference oracle.
-- **Governance:** ADR-007 supersedes ADR-006. P1 schema immutability applies to released schemas; from tag `v0.1.0` migrations are append-only.
-- **Constraints:** P0 secrets isolation, strict typing, P1 IPC additive backwards-compatibility. Dev databases recreated from IMAP sync.
-- **Origin:** v0.1.0 readiness review (2026-10-31), findings C1 and I2.
-
----
-
-## Completed Tasks
+- **Action Type:** Implementation.
+- **Status:** DONE
+- **Plan:** Approved by user on 2026-10-31; implementation and validation complete.
+- **Commit:** `PENDING_COMMIT` (`feat(storage): consolidate canonical v1 schema and persist triage badges`).
+- **Next Task:** [90.5] Parallel Read Pool & Latency Target ADR (`READY FOR PLANNING`).
+- **Acceptance:**
+  - [x] ADR-007 authored and approved, superseding ADR-006; P1 schema immutability policy established for released schemas (append-only strictly from v0.1.0 tag onward).
+  - [x] Migrations v1–v5 consolidated into canonical v1 schema (`CURRENT_SCHEMA_VERSION = 1`) with account-partitioned `vec_messages(message_id TEXT PRIMARY KEY, account_id TEXT PARTITION KEY, embedding_int8 int8[384] distance_metric=cosine)`.
+  - [x] Dropped derived table `vec_messages_by_account`, reconciliation triggers (`messages_vector_insert`, `messages_vector_delete`, `messages_vector_account`, `messages_vector_account_insert`), and migration backfill logic.
+  - [x] `triage_badges TEXT NOT NULL DEFAULT '[]'` column added to `messages` table in SQLCipher; persisted at ingestion in sync worker.
+  - [x] Hydrated `triage_badges` into `MessageRowSummary` / `MessageRowDto`; list badges rendered directly without secondary IPC calls or email body transfers.
+  - [x] Reused stored `triage_badges` and `category_badge` in `get_message_body` to prevent recomputing regex/heuristics on detail views.
+  - [x] Validated 100k global and partition-filtered vector search against exact dot-product oracle in `search_performance.rs`.
+  - [x] Knowledge card `.agent/knowledge/k-018-pre-release-schema-consolidation-and-triage-persistence.md` recorded.
+  - [x] All automated checks pass (169 Rust tests, 59 Vitest tests, svelte-check 0 errors/0 warnings, clippy 0 warnings, fmt check clean, `! grep -rn "export let"` clean, `git diff --check` clean).
 
 ### 📌 Task [03.4]: Tier 2 Honest Labeling (Experimental Semantic Search)
 
@@ -931,16 +956,9 @@ Active task: [02.5] (see above). Proposed defaults marked *(confirm at plan appr
 - **Commit:** `96c52a9` (`feat(triage-ai): label experimental semantic search and expose sync embedding telemetry`).
 - **Outcome:** Marked Tier 2 experimental; hidden Semantic/Hybrid modes behind an explicit setting; honestly labeled feature-hash semantic projection in UI; exposed embedding failure telemetry in the sync worker (`SyncProgressEvent.embedding_errors_count`).
 
-### [01.3] Pre-Release Schema Consolidation & Persisted Triage — `READY FOR PLANNING`
-- **Gap:** ADR-006 duplicated the vector index solely to preserve an unreleased v4 schema.
-  Triage results are recomputed per detail request; list badges transfer full bodies over IPC.
-- **Scope:** Collapse migrations v1–v5 into a single clean v1 schema with one account-partitioned
-  `vec_messages` (`account_id` PARTITION KEY); drop the derived table, reconciliation triggers and
-  backfill. Persist triage category/badges at ingestion and expose them in `MessageRowDto`.
-  Verify global (unfiltered) vec0 KNN over partitions at 100k against the exact reference oracle.
-- **Governance:** ADR-007 supersedes ADR-006. Record policy: P1 schema immutability applies to
-  released schemas; from tag `v0.1.0` migrations are append-only. Update NOTES.md contracts first.
-- **Constraints:** P1 IPC change is additive. Dev databases must be recreated (re-sync from IMAP).
+### [01.3] Pre-Release Schema Consolidation & Persisted Triage — `DONE`
+- **Commit:** `PENDING_COMMIT` (`feat(storage): consolidate canonical v1 schema and persist triage badges`).
+- **Outcome:** Migrations v1–v5 consolidated into single canonical v1 schema; single account-partitioned `vec_messages` virtual table with zero duplicate vector tables or reconciliation triggers; deterministic triage badges persisted in SQLCipher at ingestion; `MessageRowDto` exposes `triage_badges` for zero-IPC-call list badge rendering; verified against 100k exact dot-product reference oracle.
 
 ### [90.5] Parallel Read Pool & Latency Target ADR — `PENDING`
 - **Gap:** Hybrid search runs lexical and semantic branches sequentially (~75ms warm p50).
