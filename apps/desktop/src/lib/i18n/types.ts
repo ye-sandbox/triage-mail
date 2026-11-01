@@ -1,5 +1,10 @@
 export type SupportedLocale = 'en' | 'pt-BR';
 
+export interface GuidePlaybook {
+	provider: string;
+	steps: string[];
+}
+
 export interface Translations {
 	app: {
 		title: string;
@@ -62,12 +67,16 @@ export interface Translations {
 		toggleClose: string;
 		requirementsLabel: string;
 		servicesLabel: string;
+		fieldsTitle: string;
+		stepsTitle: string;
 		appPassword: {
 			title: string;
 			summary: string;
 			requirements: string;
 			services: string;
 			hostTip: string;
+			fields: string[];
+			playbooks: GuidePlaybook[];
 		};
 		oauthPublic: {
 			title: string;
@@ -75,6 +84,8 @@ export interface Translations {
 			requirements: string;
 			services: string;
 			redirectTip: string;
+			fields: string[];
+			playbooks: GuidePlaybook[];
 		};
 		oauthByo: {
 			title: string;
@@ -82,6 +93,8 @@ export interface Translations {
 			requirements: string;
 			services: string;
 			gcpTip: string;
+			fields: string[];
+			playbooks: GuidePlaybook[];
 		};
 		proton: {
 			title: string;
@@ -89,6 +102,8 @@ export interface Translations {
 			requirements: string;
 			services: string;
 			warning: string;
+			fields: string[];
+			playbooks: GuidePlaybook[];
 		};
 	};
 }

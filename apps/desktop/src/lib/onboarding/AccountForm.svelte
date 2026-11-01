@@ -4,6 +4,7 @@
 	import type { AccountConfig, AuthMethod, AccountSubmission } from './types';
 	import { i18n } from '../i18n/index.svelte';
 	import AccountHelpGuide from './AccountHelpGuide.svelte';
+	import { providerPresets, type ProviderPreset } from './presets';
 
 	let { controller }: { controller: AccountController } = $props();
 	let method = $state<AuthMethod>('AppPassword');
@@ -18,34 +19,7 @@
 	const t = $derived(i18n.t.accountForm);
 	const oauth = $derived(method === 'OAuth2PublicPkce' || method === 'OAuth2ByoCredentials');
 
-	interface Preset {
-		name: string;
-		host: string;
-		port: number;
-		method: AuthMethod;
-		authEndpoint?: string;
-		tokenEndpoint?: string;
-		scopes?: string;
-	}
-
-	const presets: Preset[] = [
-		{ name: 'Gmail', host: 'imap.gmail.com', port: 993, method: 'AppPassword' },
-		{
-			name: 'Outlook',
-			host: 'outlook.office365.com',
-			port: 993,
-			method: 'OAuth2PublicPkce',
-			authEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
-			tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
-			scopes: 'offline_access https://outlook.office.com/IMAP.AccessAsUser.All'
-		},
-		{ name: 'iCloud', host: 'imap.mail.me.com', port: 993, method: 'AppPassword' },
-		{ name: 'Yahoo', host: 'imap.mail.yahoo.com', port: 993, method: 'AppPassword' },
-		{ name: 'Fastmail', host: 'imap.fastmail.com', port: 993, method: 'AppPassword' },
-		{ name: 'Proton', host: '127.0.0.1', port: 1143, method: 'ProtonBridgeLocal' }
-	];
-
-	function applyPreset(p: Preset) {
+	function applyPreset(p: ProviderPreset) {
 		presetHost = p.host;
 		presetPort = p.port;
 		presetAuth = p.authEndpoint ?? '';
@@ -117,7 +91,7 @@
 	<div class="space-y-2">
 		<span class="text-xs font-medium text-[var(--secondary)]">{t.quickFillLabel}</span>
 		<div class="flex flex-wrap gap-1.5">
-			{#each presets as p}
+			{#each providerPresets as p}
 				<button
 					type="button"
 					disabled={controller.busy}
@@ -179,9 +153,7 @@
 					</label>
 				</div>
 				{#if oauth}
-					<p class="text-sm text-[var(--secondary)]">
-						{t.oauthHelp}
-					</p>
+					<p class="text-sm text-[var(--secondary)]">{t.oauthHelp}</p>
 					<label class="block text-sm"
 						>{t.authEndpointLabel}
 						<input
@@ -217,9 +189,7 @@
 							value={presetScopes}
 						/>
 					</label>
-					<p id="scope-help" class="text-xs text-[var(--secondary)]">
-						{t.scopesHelp}
-					</p>
+					<p id="scope-help" class="text-xs text-[var(--secondary)]">{t.scopesHelp}</p>
 					<label class="block text-sm"
 						>{t.clientIdLabel}
 						<input
@@ -251,9 +221,7 @@
 					</label>
 				{/if}
 				{#if method === 'ProtonBridgeLocal'}
-					<p class="text-sm text-[var(--secondary)]">
-						{t.protonNotice}
-					</p>
+					<p class="text-sm text-[var(--secondary)]">{t.protonNotice}</p>
 				{/if}
 				<p class="text-xs leading-relaxed text-[var(--secondary)]">
 					{oauth ? t.oauthVaultNotice : t.connectVaultNotice}
@@ -269,9 +237,7 @@
 		</form>
 	{/key}
 	{#if controller.authorizing}
-		<p role="status" class="text-sm">
-			{t.browserAuthPending}
-		</p>
+		<p role="status" class="text-sm">{t.browserAuthPending}</p>
 		<button class="setup-secondary" type="button" onclick={() => void controller.cancel()}
 			>{t.cancelAuth}</button
 		>
