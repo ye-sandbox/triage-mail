@@ -10,8 +10,9 @@
 ### Task [04.1]: Unified Settings Modal
 
 - **Description:** Implement a unified, accessible, and responsive Settings dialog with typed modules, persistent mounted inbox shell, gear entry point, and embedded account management.
-- **Status:** RUNNING
+- **Status:** DONE
 - **Action Type:** Implementation across 2 parallel waves (`W1` and `W2`).
+- **Commits:** `e3b2ff4`, `6c21bbf`, `e9464eb`, `e59d45a`
 - **Plan and implementation tasks:** [Unified Settings Modal](plans/04.1-settings-modal.md).
 - **Scope:** Persistent inbox beneath dim overlay, gear trigger in sidebar footer and toolbar fallback, typed modules (General, Accounts, Search, AI, Privacy), unsaved-form guards, pending operation isolation, EN/PT-BR localization.
 
@@ -29,13 +30,13 @@
   - `Paths:` `apps/desktop/src/lib/inbox/Icon.svelte, apps/desktop/src/lib/inbox/Sidebar.svelte, apps/desktop/src/lib/inbox/SearchToolbar.svelte, apps/desktop/src/lib/onboarding/DesktopApp.svelte, apps/desktop/src/lib/onboarding/InboxSession.svelte, apps/desktop/src/lib/inbox/InboxView.svelte, apps/desktop/src/lib/inbox/settings-shell.svelte.test.ts`
   - `Verify:` `([ -e node_modules ] || ln -s /home/<user>/github/triage-mail/node_modules node_modules) && ([ -e apps/desktop/node_modules ] || cp -RP /home/<user>/github/triage-mail/apps/desktop/node_modules apps/desktop/node_modules) && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/inbox/settings-shell.svelte.test.ts && ! grep -rn "export let" apps/desktop/src/`
 
-- [ ] **[04.1.10]** `[APPROVED]` `[PARALLEL: W2]` Embed account management in Settings with reusable account list and add account flow
+- [x] **[04.1.10]** `[DONE: e9464eb]` `[PARALLEL: W2]` Embed account management in Settings with reusable account list and add account flow
   - `Model:` `gemini-3.8-flash-medium`
   - `Read:` `apps/desktop/src/lib/onboarding/OnboardingView.svelte, apps/desktop/src/lib/onboarding/AccountForm.svelte, apps/desktop/src/lib/onboarding/controller.svelte.ts`
   - `Paths:` `apps/desktop/src/lib/onboarding/AccountList.svelte, apps/desktop/src/lib/onboarding/OnboardingView.svelte, apps/desktop/src/lib/settings/modules/AccountsModule.svelte, apps/desktop/src/lib/settings/accounts-module.svelte.test.ts`
   - `Verify:` `([ -e node_modules ] || ln -s /home/<user>/github/triage-mail/node_modules node_modules) && ([ -e apps/desktop/node_modules ] || cp -RP /home/<user>/github/triage-mail/apps/desktop/node_modules apps/desktop/node_modules) && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/settings/accounts-module.svelte.test.ts src/lib/onboarding/onboarding.svelte.test.ts && ! grep -rn "export let" apps/desktop/src/`
 
-- [ ] **[04.1.11]** `[APPROVED]` `[PARALLEL: W2]` Add unsaved-form dirty guards, pending operation protection, responsive layout, EN/PT-BR copy, and active contracts
+- [x] **[04.1.11]** `[DONE: e59d45a]` `[PARALLEL: W2]` Add unsaved-form dirty guards, pending operation protection, responsive layout, EN/PT-BR copy, and active contracts
   - `Model:` `gemini-3.8-flash-medium`
   - `Read:` `apps/desktop/src/lib/i18n/translations.ts, apps/desktop/src/lib/settings/SettingsDialog.svelte, .agent/NOTES.md`
   - `Paths:` `apps/desktop/src/lib/settings/guards.ts, apps/desktop/src/lib/i18n/translations.ts, apps/desktop/src/lib/settings/modal-flow.svelte.test.ts, .agent/NOTES.md`
