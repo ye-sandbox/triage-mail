@@ -7,6 +7,42 @@
 
 ## Active Task
 
+### Task [04.1]: Unified Settings Modal
+
+- **Description:** Implement a unified, accessible, and responsive Settings dialog with typed modules, persistent mounted inbox shell, gear entry point, and embedded account management.
+- **Status:** RUNNING
+- **Action Type:** Implementation across 2 parallel waves (`W1` and `W2`).
+- **Plan and implementation tasks:** [Unified Settings Modal](plans/04.1-settings-modal.md).
+- **Scope:** Persistent inbox beneath dim overlay, gear trigger in sidebar footer and toolbar fallback, typed modules (General, Accounts, Search, AI, Privacy), unsaved-form guards, pending operation isolation, EN/PT-BR localization.
+
+#### Execution Queue (`W1` -> `W2`)
+
+- [ ] **[04.1.8]** `[APPROVED]` `[PARALLEL: W1]` Implement Settings dialog primitive and typed modules (General, Search, AI, Privacy)
+  - `Model:` `gemini-3.8-flash-medium`
+  - `Read:` `apps/desktop/src/lib/settings/SettingsView.svelte, apps/desktop/src/lib/settings/AiSettingsForm.svelte, apps/desktop/src/lib/settings/ModelSettings.svelte`
+  - `Paths:` `apps/desktop/src/lib/settings/types.ts, apps/desktop/src/lib/settings/SettingsDialog.svelte, apps/desktop/src/lib/settings/modules/GeneralModule.svelte, apps/desktop/src/lib/settings/modules/SearchModule.svelte, apps/desktop/src/lib/settings/modules/AiModule.svelte, apps/desktop/src/lib/settings/modules/PrivacyModule.svelte, apps/desktop/src/lib/settings/dialog.svelte.test.ts`
+  - `Verify:` `([ -e node_modules ] || ln -s /home/<user>/github/triage-mail/node_modules node_modules) && ([ -e apps/desktop/node_modules ] || cp -RP /home/<user>/github/triage-mail/apps/desktop/node_modules apps/desktop/node_modules) && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/settings/dialog.svelte.test.ts && ! grep -rn "export let" apps/desktop/src/`
+
+- [ ] **[04.1.9]** `[APPROVED]` `[PARALLEL: W1]` Implement persistent inbox shell, sidebar gear entry point, and live search preference synchronization
+  - `Model:` `gemini-3.8-flash-medium`
+  - `Read:` `apps/desktop/src/lib/inbox/Sidebar.svelte, apps/desktop/src/lib/inbox/SearchToolbar.svelte, apps/desktop/src/lib/onboarding/DesktopApp.svelte, apps/desktop/src/lib/onboarding/InboxSession.svelte`
+  - `Paths:` `apps/desktop/src/lib/inbox/Icon.svelte, apps/desktop/src/lib/inbox/Sidebar.svelte, apps/desktop/src/lib/inbox/SearchToolbar.svelte, apps/desktop/src/lib/onboarding/DesktopApp.svelte, apps/desktop/src/lib/onboarding/InboxSession.svelte, apps/desktop/src/lib/inbox/InboxView.svelte, apps/desktop/src/lib/inbox/settings-shell.svelte.test.ts`
+  - `Verify:` `([ -e node_modules ] || ln -s /home/<user>/github/triage-mail/node_modules node_modules) && ([ -e apps/desktop/node_modules ] || cp -RP /home/<user>/github/triage-mail/apps/desktop/node_modules apps/desktop/node_modules) && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/inbox/settings-shell.svelte.test.ts && ! grep -rn "export let" apps/desktop/src/`
+
+- [ ] **[04.1.10]** `[APPROVED]` `[PARALLEL: W2]` Embed account management in Settings with reusable account list and add account flow
+  - `Model:` `gemini-3.8-flash-medium`
+  - `Read:` `apps/desktop/src/lib/onboarding/OnboardingView.svelte, apps/desktop/src/lib/onboarding/AccountForm.svelte, apps/desktop/src/lib/onboarding/controller.svelte.ts`
+  - `Paths:` `apps/desktop/src/lib/onboarding/AccountList.svelte, apps/desktop/src/lib/onboarding/OnboardingView.svelte, apps/desktop/src/lib/settings/modules/AccountsModule.svelte, apps/desktop/src/lib/settings/accounts-module.svelte.test.ts`
+  - `Verify:` `([ -e node_modules ] || ln -s /home/<user>/github/triage-mail/node_modules node_modules) && ([ -e apps/desktop/node_modules ] || cp -RP /home/<user>/github/triage-mail/apps/desktop/node_modules apps/desktop/node_modules) && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/settings/accounts-module.svelte.test.ts src/lib/onboarding/onboarding.svelte.test.ts && ! grep -rn "export let" apps/desktop/src/`
+
+- [ ] **[04.1.11]** `[APPROVED]` `[PARALLEL: W2]` Add unsaved-form dirty guards, pending operation protection, responsive layout, EN/PT-BR copy, and active contracts
+  - `Model:` `gemini-3.8-flash-medium`
+  - `Read:` `apps/desktop/src/lib/i18n/translations.ts, apps/desktop/src/lib/settings/SettingsDialog.svelte, .agent/NOTES.md`
+  - `Paths:` `apps/desktop/src/lib/settings/guards.ts, apps/desktop/src/lib/i18n/translations.ts, apps/desktop/src/lib/settings/modal-flow.svelte.test.ts, .agent/NOTES.md`
+  - `Verify:` `([ -e node_modules ] || ln -s /home/<user>/github/triage-mail/node_modules node_modules) && ([ -e apps/desktop/node_modules ] || cp -RP /home/<user>/github/triage-mail/apps/desktop/node_modules apps/desktop/node_modules) && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/settings/modal-flow.svelte.test.ts && git diff --check && node scripts/ci-guard.mjs && ! grep -rn "export let" apps/desktop/src/`
+
+## Completed Tasks
+
 ### Task [04.9]: Application Title Bar
 
 - **Description:** Implement an application-styled title bar replacing OS decorations, with themed window controls and a persistent desktop shell.
@@ -19,21 +55,9 @@
 #### Execution Queue (`W1` -> `W2`)
 
 - [x] **[04.9.1]** `[DONE: 626aaba]` `[PARALLEL: W1]` Implement typed window adapter, Tauri transport, and themed/localized/accessible `TitleBar.svelte` component
-  - `Read:` `apps/desktop/src/lib/inbox/transport.ts, apps/desktop/src/lib/i18n/index.svelte.ts, apps/desktop/src/app.css`
-  - `Paths:` `apps/desktop/src/lib/window/types.ts, apps/desktop/src/lib/window/transport.ts, apps/desktop/src/lib/window/transport.test.ts, apps/desktop/src/lib/window/TitleBar.svelte, apps/desktop/src/lib/window/title-bar.svelte.test.ts`
-  - `Verify:` `([ -e node_modules ] || ln -s /home/<user>/github/triage-mail/node_modules node_modules) && ([ -e apps/desktop/node_modules ] || cp -RP /home/<user>/github/triage-mail/apps/desktop/node_modules apps/desktop/node_modules) && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/window/transport.test.ts src/lib/window/title-bar.svelte.test.ts && ! grep -rn "export let" apps/desktop/src/`
 - [x] **[04.9.2]** `[DONE: 4cb5658]` `[PARALLEL: W1]` Configure remaining-height desktop shell CSS, view viewport layouts, undecorated window, and minimal Tauri capabilities
-  - `Read:` `apps/desktop/src/app.css, apps/desktop/src/lib/inbox/InboxView.svelte, apps/desktop/src/lib/settings/SettingsView.svelte`
-  - `Paths:` `apps/desktop/src/app.css, apps/desktop/src/lib/inbox/InboxView.svelte, apps/desktop/src/lib/onboarding/OnboardingView.svelte, apps/desktop/src/lib/settings/SettingsView.svelte, apps/desktop/src-tauri/tauri.conf.json, apps/desktop/src-tauri/capabilities/main.json`
-  - `Verify:` `PATH="/home/<user>/AntigravityProfiles/<primary-profile>/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH" cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/inbox/inbox.svelte.test.ts src/lib/settings/settings.svelte.test.ts && ! grep -rn "export let" apps/desktop/src/`
 - [x] **[04.9.3]** `[DONE: 76973ef]` `[PARALLEL: W2]` Integrate persistent `TitleBar` in `+layout.svelte` global desktop shell and add shell/dialog regression tests
-  - `Read:` `apps/desktop/src/routes/+layout.svelte, apps/desktop/src/lib/window/TitleBar.svelte, apps/desktop/src/lib/window/transport.ts`
-  - `Paths:` `apps/desktop/src/routes/+layout.svelte, apps/desktop/src/lib/window/shell.svelte.test.ts`
-  - `Verify:` `([ -e node_modules ] || ln -s /home/<user>/github/triage-mail/node_modules node_modules) && ([ -e apps/desktop/node_modules ] || cp -RP /home/<user>/github/triage-mail/apps/desktop/node_modules apps/desktop/node_modules) && pnpm --filter desktop check && pnpm --filter desktop exec vitest run src/lib/window/ && pnpm --filter desktop build && ! grep -rn "export let" apps/desktop/src/`
 - [x] **[04.9.4]** `[DONE: ec087bc]` `[PARALLEL: W2]` Record Application Title Bar active contracts in `.agent/NOTES.md`
-  - `Read:` `.agent/NOTES.md, .agent/TASK.md`
-  - `Paths:` `.agent/NOTES.md`
-  - `Verify:` `git diff --check && node scripts/ci-guard.mjs`
 
 ## Retained Planning Queue (not active)
 
