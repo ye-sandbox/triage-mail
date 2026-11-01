@@ -4,6 +4,8 @@
 	import { SETTINGS_TABS } from './types';
 	import { nativeSettingsTransport } from './transport';
 	import type { AccountController } from '../onboarding/controller.svelte';
+	import { SettingsFormGuard } from './guards';
+	import { i18n } from '../i18n/index.svelte';
 	import GeneralModule from './modules/GeneralModule.svelte';
 	import AccountsModule from './modules/AccountsModule.svelte';
 	import SearchModule from './modules/SearchModule.svelte';
@@ -15,20 +17,26 @@
 		close,
 		initialTab = 'general',
 		transport = nativeSettingsTransport,
-		accountController
+		accountController,
+		guard = new SettingsFormGuard()
 	}: {
 		open?: boolean;
 		close: () => void;
 		initialTab?: SettingsTab;
 		transport?: SettingsTransport;
 		accountController?: AccountController;
+		guard?: SettingsFormGuard;
 	} = $props();
 
 	let activeTab = $state<SettingsTab>('general');
 	let settings = $state<Settings | null>(null);
 	let error = $state('');
+	let promptVisible = $state(false);
+	let pendingProceed = $state<(() => void) | null>(null);
 	let active = true;
 	let revision = 0;
+
+	const t = $derived(i18n.t.settingsModal);
 
 	$effect(() => {
 		if (open) {
@@ -62,9 +70,44 @@
 		};
 	});
 
+	function requestAction(action: () => void) {
+		if (guard.isBlocked()) {
+			return;
+		}
+		if (guard.needsConfirmation()) {
+			pendingProceed = action;
+			promptVisible = true;
+			return;
+		}
+		action();
+	}
+
+	function requestClose() {
+		requestAction(() => close());
+	}
+
+	function requestTabChange(tabId: SettingsTab) {
+		requestAction(() => {
+			activeTab = tabId;
+		});
+	}
+
+	function handleStay() {
+		promptVisible = false;
+		pendingProceed = null;
+	}
+
+	function handleDiscard() {
+		promptVisible = false;
+		guard.reset();
+		const proceed = pendingProceed;
+		pendingProceed = null;
+		proceed?.();
+	}
+
 	function handleWindowKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape' && open) {
-			close();
+			requestClose();
 		}
 	}
 </script>
@@ -75,7 +118,7 @@
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
 		onclick={(event) => {
-			if (event.target === event.currentTarget) close();
+			if (event.target === event.currentTarget) requestClose();
 		}}
 		role="presentation"
 	>
@@ -83,14 +126,46 @@
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="settings-dialog-title"
-			class="flex h-[80vh] max-h-[700px] w-full max-w-4xl flex-col rounded-xl border border-[var(--separator)] bg-[var(--reader)] shadow-2xl overflow-hidden text-[var(--text)]"
+			class="relative flex h-[80vh] max-h-[700px] w-full max-w-4xl flex-col rounded-xl border border-[var(--separator)] bg-[var(--reader)] shadow-2xl overflow-hidden text-[var(--text)]"
 		>
+			{#if promptVisible}
+				<div
+					class="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-6"
+					role="alertdialog"
+					aria-modal="true"
+					aria-labelledby="unsaved-prompt-title"
+				>
+					<div
+						class="max-w-md space-y-4 rounded-xl border border-[var(--separator)] bg-[var(--surface)] p-6 shadow-2xl text-[var(--text)]"
+					>
+						<h3 id="unsaved-prompt-title" class="text-base font-semibold">
+							{t.unsavedChanges}
+						</h3>
+						<div class="flex justify-end gap-3 pt-2">
+							<button
+								type="button"
+								class="rounded-lg border border-[var(--separator)] px-4 py-2 text-sm font-medium hover:bg-[var(--reader)]"
+								onclick={handleStay}
+							>
+								{t.stay}
+							</button>
+							<button
+								type="button"
+								class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+								onclick={handleDiscard}
+							>
+								{t.discard}
+							</button>
+						</div>
+					</div>
+				</div>
+			{/if}
 			<header class="flex items-center justify-between border-b border-[var(--separator)] px-6 py-4">
-				<h1 id="settings-dialog-title" class="text-xl font-semibold">Settings</h1>
+				<h1 id="settings-dialog-title" class="text-xl font-semibold">{t.title}</h1>
 				<button
 					type="button"
-					aria-label="Close settings"
-					onclick={close}
+					aria-label={t.close}
+					onclick={requestClose}
 					class="rounded-lg p-1.5 text-[var(--secondary)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
 				>
 					<svg
@@ -114,7 +189,7 @@
 			<div class="flex flex-1 min-h-0">
 				<div
 					role="tablist"
-					aria-label="Settings navigation"
+					aria-label={t.navAria}
 					class="w-48 shrink-0 border-r border-[var(--separator)] bg-[var(--surface)] p-3 space-y-1"
 				>
 					{#each SETTINGS_TABS as tab}
@@ -124,13 +199,13 @@
 							aria-selected={activeTab === tab.id}
 							aria-controls={`panel-${tab.id}`}
 							type="button"
-							onclick={() => (activeTab = tab.id)}
+							onclick={() => requestTabChange(tab.id)}
 							class="w-full text-left rounded-lg px-3 py-2 text-sm font-medium transition-colors {activeTab ===
 							tab.id
 								? 'bg-[var(--selection-soft)] text-[var(--accent)]'
 								: 'text-[var(--secondary)] hover:bg-[var(--reader)] hover:text-[var(--text)]'}"
 						>
-							{tab.label}
+							{t.tabs[tab.id] ?? tab.label}
 						</button>
 					{/each}
 				</div>
