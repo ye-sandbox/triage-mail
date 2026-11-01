@@ -121,7 +121,7 @@
 	{execute}
 	{restoreFocus}
 />
-<main bind:this={shell} class="flex h-dvh min-h-0 overflow-hidden text-[var(--text)]">
+<main bind:this={shell} class="flex h-full min-h-0 flex-1 overflow-hidden text-[var(--text)]">
 	<div
 		class="inbox-sidebar hidden shrink-0 md:block"
 		class:collapsed={!sidebarOpen}

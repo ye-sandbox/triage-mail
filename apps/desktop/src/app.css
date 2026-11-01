@@ -62,6 +62,23 @@
 		background: white;
 	}
 }
+.desktop-shell {
+	display: flex;
+	flex-direction: column;
+	height: 100dvh;
+	width: 100%;
+	overflow: hidden;
+	background: var(--canvas);
+	color: var(--text);
+}
+.desktop-shell-content {
+	flex: 1 1 0%;
+	min-height: 0;
+	width: 100%;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
 :focus-visible {
 	outline: 3px solid var(--accent);
 	outline-offset: 3px;
