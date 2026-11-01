@@ -3,17 +3,20 @@
 	import { nativeTransport } from '$lib/inbox/transport';
 	import { nativeSettingsTransport } from '$lib/settings/transport';
 	import type { SettingsTransport } from '$lib/settings/types';
+	import type { AccountController } from './controller.svelte';
 	import InboxView from '$lib/inbox/InboxView.svelte';
 	import SettingsDialog from '$lib/settings/SettingsDialog.svelte';
 
 	let {
 		connected,
 		manageAccounts,
-		settingsTransport = nativeSettingsTransport
+		settingsTransport = nativeSettingsTransport,
+		accountController
 	}: {
 		connected: boolean;
 		manageAccounts?: () => void;
 		settingsTransport?: SettingsTransport;
+		accountController?: AccountController;
 	} = $props();
 
 	const inbox = new InboxController(nativeTransport);
@@ -56,4 +59,5 @@
 	open={settingsOpen}
 	close={handleCloseSettings}
 	transport={settingsTransport}
+	{accountController}
 />

@@ -112,7 +112,13 @@ describe('SettingsDialog and typed modules', () => {
 	}
 
 	it('exports expected SETTINGS_TABS definitions', () => {
-		expect(SETTINGS_TABS.map((t) => t.id)).toEqual(['general', 'search', 'ai', 'privacy']);
+		expect(SETTINGS_TABS.map((t) => t.id)).toEqual([
+			'general',
+			'accounts',
+			'search',
+			'ai',
+			'privacy'
+		]);
 	});
 
 	it('does not render dialog content when open is false', () => {
