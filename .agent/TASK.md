@@ -7,6 +7,12 @@
 
 ## Active Task
 
+None — Milestone MVP v0.1.0 Complete (Pending Release Tag / Push Authorization)
+
+---
+
+## Completed Tasks
+
 ### 📌 Task [99.1]: Public Transition Audit & Secret Scrubbing Verification
 
 - **Description:** Full public repository transition audit: zero PII/secret/token/non-reserved
@@ -16,13 +22,20 @@
   INBOX-only sync). ADR documenting the in-house IMAP client choice. Measure real-account-free
   production idle memory baseline. Verify a hosted CI run (requires explicit push authorization).
 - **Systems Involved:** Entire workspace, `.agent/`, `README.md`, `README.pt-br.md`, `docs/adr`.
-- **Action Type:** Audit, Hardening & Documentation; requires an approved plan.
-- **Status:** READY FOR PLANNING
-- **Constraints:** RFC 2606 reserved domains only; no push/tag without explicit request.
-
----
-
-## Completed Tasks
+- **Action Type:** Audit, Hardening & Documentation.
+- **Status:** DONE
+- **Plan:** Approved by user on 2026-10-31; audit, documentation, and validation complete.
+- **Commit:** `f35aaa5` (`docs(audit): complete public transition audit, author adr-009, and update status limitations`).
+- **Acceptance:**
+  - [x] Full secret and PII scrub verification: 179 tracked text files scanned with zero findings via `scripts/ci-guard.mjs`; git diff additions across history verified clean of credentials and non-reserved email addresses.
+  - [x] Git author identity configured: Local git repository `user.email` set to anonymous `yegear1@users.noreply.github.com` per `oss-readiness` skill.
+  - [x] Local paths scrubbed: WSL absolute paths removed from `.agent/TASK.md`.
+  - [x] AGPLv3 notices verified: root `LICENSE` file and all manifests (`Cargo.toml`, sub-crates, `apps/desktop/package.json`) enforce AGPLv3.
+  - [x] ADR-009 authored in `docs/adr/decisions.md` documenting the in-house asynchronous IMAP client architecture, two-phase lazy body fetch, SASL XOAUTH2 challenge-abort continuation handling, and loopback TLS pinning for Proton Mail Bridge.
+  - [x] "Status & Known Limitations" / "Status e Limitações Conhecidas" sections added to both `README.md` and `README.pt-br.md` following `readme-standard` skill, removing unmet claims (sub-15ms global vector scan, 60fps native guarantee, ONNX neural inference, `async-imap`, TLS 1.3-only, INBOX-only sync).
+  - [x] Architecture diagrams updated in both READMEs to accurately reflect the in-house asynchronous IMAP client.
+  - [x] Release storage performance benchmark executed with 100,000 messages and 384-dimensional int8 embeddings in SQLCipher (WAL mode), validating exact oracle rank equivalence across all 17 query cases and measuring process VmRSS (71.6 MiB sequential / 103.6 MiB concurrent).
+  - [x] Full Definition of Done verified: 171 Rust workspace tests, 59 Vitest frontend tests, svelte-check 0 errors/0 warnings, clippy 0 warnings, formatting clean, Svelte runes invariant clean, secret scanner clean, git diff clean.
 
 ### 📌 Task [90.5]: Parallel Read Pool & Latency Target ADR
 
@@ -595,8 +608,7 @@
 - **Next Task:** [04.8] Persist Tag & Folder Override Rehydration (`READY FOR PLANNING`).
 - **Commit:** `3686430` (`feat(desktop): add settings and explicit AI consent`).
 
-User approved the implementation plan on 2026-10-31. Used the required `svelte-dev` skill at
-`/home/yegear/github/ye-sandbox/agent-skills/skills/svelte-dev/SKILL.md`.
+User approved the implementation plan on 2026-10-31. Used the required `svelte-dev` skill.
 
 ### Approved Plan ([04.7])
 1. Trace native settings, model caching, LLM clients, tokenizer migrations and reader policy.
@@ -677,8 +689,7 @@ User approved the implementation plan on 2026-10-31. Used the required `svelte-d
 - **Next Task:** [04.7] Settings & AI Opt-in UI (`READY FOR PLANNING`).
 
 ### Approved Plan
-User approved on 2026-10-31. The required skill was located and read at
-`/home/yegear/github/ye-sandbox/agent-skills/skills/svelte-dev/SKILL.md`.
+User approved on 2026-10-31. The required `svelte-dev` skill was referenced.
 1. Trace startup, vault initialization, account DTOs and OAuth helpers; resolve the missing
    mandatory `svelte-dev` skill before authoring components.
 2. Add accessible vault unlock, account listing and onboarding screens using typed IPC.
@@ -907,6 +918,9 @@ User subsequently authorized native build dependency downloads into a temporary 
 ---
 
 ## Backlog (Upcoming, in priority order)
+
+> Tag pre-approved tasks having strictly disjoint file scopes with `[APPROVED]` `[PARALLEL: W1]` and `Paths: ...` for concurrent `task-queue` execution.
+
 
 Registered 2026-10-31 from post-[04.5] gap analysis. Each task requires its own plan approval.
 
