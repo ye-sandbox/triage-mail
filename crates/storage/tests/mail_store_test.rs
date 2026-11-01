@@ -665,3 +665,83 @@ fn semantic_large_ties_and_deep_pages_survive_vec0_k_limit() {
         }
     }
 }
+
+#[test]
+fn test_parallel_hybrid_search_and_fallback_on_disk() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let db_path = temp_dir.path().join("parallel_hybrid_test.db");
+    let key = DatabaseKey::from_bytes([77u8; 32]);
+
+    let store =
+        SqliteMailStore::open(&db_path, &key, FtsTokenizerMode::Unicode61RemoveDiacritics).unwrap();
+
+    let acc = create_sample_account("acc_par", "parallel@example.com");
+    store.insert_account(&acc).unwrap();
+
+    for i in 1..=10 {
+        let msg = create_sample_message(
+            &format!("msg_{i}"),
+            "acc_par",
+            "INBOX",
+            i,
+            &format!("Parallel Subject {i}"),
+            &format!("Body text containing keyword alpha and beta for message {i}."),
+        );
+        store.insert_message(&msg).unwrap();
+
+        let mut emb = vec![0i8; 384];
+        emb[0] = (i * 10) as i8;
+        emb[1] = 42;
+        store
+            .insert_message_embedding(&format!("msg_{i}"), &emb)
+            .unwrap();
+    }
+
+    let mut query_emb = vec![0i8; 384];
+    query_emb[0] = 50;
+    query_emb[1] = 42;
+
+    let hybrid_query = HybridQuery {
+        query_text: "alpha".to_string(),
+        query_embedding_int8: Some(query_emb),
+        account_filter: Some("acc_par".to_string()),
+        mode: SearchMode::Hybrid,
+        limit: 5,
+        offset: 0,
+    };
+
+    // 1. Parallel execution via file-backed store (uses secondary_conn)
+    let par_results = store.search(&hybrid_query).unwrap();
+    assert_eq!(par_results.len(), 5);
+
+    // 2. Direct comparison between sequential and parallel search functions
+    let conn1 = storage::connection::open_encrypted_connection(&db_path, &key).unwrap();
+    let mut conn2 = storage::connection::open_encrypted_connection(&db_path, &key).unwrap();
+
+    let seq_direct = storage::search::execute_hybrid_search(&conn1, &hybrid_query).unwrap();
+    let par_direct =
+        storage::search::execute_hybrid_search_parallel(&conn1, &mut conn2, &hybrid_query).unwrap();
+
+    assert_eq!(
+        seq_direct.iter().map(|r| &r.id).collect::<Vec<_>>(),
+        par_direct.iter().map(|r| &r.id).collect::<Vec<_>>(),
+        "Direct parallel and sequential hybrid search must yield identical rankings"
+    );
+    assert_eq!(
+        par_results.iter().map(|r| &r.id).collect::<Vec<_>>(),
+        par_direct.iter().map(|r| &r.id).collect::<Vec<_>>(),
+        "Store search must match direct parallel results"
+    );
+
+    // 3. Fallback when secondary_conn is held by another thread
+    if let Some(sec_mutex) = store.secondary_connection() {
+        let lock_guard = sec_mutex.lock().unwrap();
+        // With secondary_conn locked, store.search must fall back to sequential without error or deadlock
+        let fallback_results = store.search(&hybrid_query).unwrap();
+        assert_eq!(
+            fallback_results.iter().map(|r| &r.id).collect::<Vec<_>>(),
+            par_results.iter().map(|r| &r.id).collect::<Vec<_>>()
+        );
+        drop(lock_guard);
+    }
+}

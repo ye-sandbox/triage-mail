@@ -256,6 +256,55 @@ pub fn execute_hybrid_search(
     }
 }
 
+/// Combines lexical and semantic candidates concurrently using two SQLCipher connections.
+pub fn execute_hybrid_search_parallel(
+    conn_lex: &Connection,
+    conn_sem: &mut Connection,
+    query: &HybridQuery,
+) -> Result<Vec<MessageRowSummary>, StorageError> {
+    query.validate()?;
+    match (
+        !query.query_text.trim().is_empty(),
+        query.query_embedding_int8.is_some(),
+    ) {
+        (false, false) | (true, false) => execute_lexical_search(conn_lex, query),
+        (false, true) => execute_semantic_search(conn_sem, query),
+        (true, true) => {
+            let candidates = HybridQuery {
+                limit: (query.limit + query.offset).max(50),
+                offset: 0,
+                ..query.clone()
+            };
+            let sem_candidates = &candidates;
+            let (lex_res, sem_res) = std::thread::scope(|s| {
+                let sem_handle = s.spawn(move || semantic_ids(conn_sem, sem_candidates));
+                let lex_res = lexical_ids(conn_lex, &candidates);
+                let sem_res = sem_handle.join().unwrap_or_else(|_| {
+                    Err(StorageError::Query(
+                        "semantic search thread panicked".into(),
+                    ))
+                });
+                (lex_res, sem_res)
+            });
+            let mut scores: HashMap<String, f64> = HashMap::with_capacity(candidates.limit * 2);
+            for ids in [lex_res?, sem_res?] {
+                for (rank, id) in ids.into_iter().enumerate() {
+                    *scores.entry(id).or_default() += 1.0 / (60.0 + rank as f64 + 1.0);
+                }
+            }
+            let mut ranked: Vec<_> = scores.into_iter().collect();
+            ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+            let ids: Vec<_> = ranked
+                .into_iter()
+                .skip(query.offset)
+                .take(query.limit)
+                .map(|(id, _)| id)
+                .collect();
+            load_summaries(conn_lex, &ids)
+        }
+    }
+}
+
 fn query_error(error: rusqlite::Error) -> StorageError {
     StorageError::Query(error.to_string())
 }

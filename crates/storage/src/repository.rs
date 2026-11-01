@@ -10,7 +10,8 @@ use crate::connection::{open_encrypted_connection, open_in_memory_connection, Da
 use crate::migrations::SchemaMigrator;
 use crate::models::{AccountRecord, AttachmentRecord, MessageRecord};
 use crate::search::{
-    execute_hybrid_search, execute_lexical_search, execute_semantic_search, int8_slice_to_bytes,
+    execute_hybrid_search, execute_hybrid_search_parallel, execute_lexical_search,
+    execute_semantic_search, int8_slice_to_bytes,
 };
 use crate::{
     FolderSyncState, FtsTokenizerMode, HybridQuery, MailRepository, MessageRowSummary,
@@ -20,6 +21,7 @@ use crate::{
 /// Encrypted SQLite repository with SQLCipher, WAL mode, FTS5, and sqlite-vec KNN search.
 pub struct SqliteMailStore {
     pub(crate) conn: Mutex<Connection>,
+    pub(crate) secondary_conn: Option<Mutex<Connection>>,
     pub(crate) tokenizer_mode: AtomicU8,
 }
 
@@ -30,15 +32,18 @@ impl SqliteMailStore {
         key: &DatabaseKey,
         tokenizer_mode: FtsTokenizerMode,
     ) -> Result<Self, StorageError> {
-        let mut conn = open_encrypted_connection(path, key)?;
+        let mut conn = open_encrypted_connection(&path, key)?;
         let migrator = SchemaMigrator::new(tokenizer_mode);
         migrator.migrate(&mut conn)?;
+
+        let secondary_conn = open_encrypted_connection(&path, key).ok().map(Mutex::new);
 
         Ok(Self {
             tokenizer_mode: AtomicU8::new(u8::from(
                 crate::settings::read_tokenizer(&conn)? == FtsTokenizerMode::Trigram,
             )),
             conn: Mutex::new(conn),
+            secondary_conn,
         })
     }
 
@@ -56,7 +61,13 @@ impl SqliteMailStore {
                 crate::settings::read_tokenizer(&conn)? == FtsTokenizerMode::Trigram,
             )),
             conn: Mutex::new(conn),
+            secondary_conn: None,
         })
+    }
+
+    /// Returns a reference to the secondary read connection mutex if available.
+    pub fn secondary_connection(&self) -> Option<&Mutex<Connection>> {
+        self.secondary_conn.as_ref()
     }
 
     /// Returns the active FTS5 tokenizer configuration mode.
@@ -482,15 +493,33 @@ impl SearchEngine for SqliteMailStore {
     fn search(&self, query: &HybridQuery) -> Result<Vec<MessageRowSummary>, StorageError> {
         query.validate()?;
 
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| StorageError::Query(format!("mutex poisoned: {e}")))?;
-
         match query.mode {
-            SearchMode::Lexical => execute_lexical_search(&conn, query),
-            SearchMode::Semantic => execute_semantic_search(&conn, query),
-            SearchMode::Hybrid => execute_hybrid_search(&conn, query),
+            SearchMode::Lexical => {
+                let conn = self
+                    .conn
+                    .lock()
+                    .map_err(|e| StorageError::Query(format!("mutex poisoned: {e}")))?;
+                execute_lexical_search(&conn, query)
+            }
+            SearchMode::Semantic => {
+                let conn = self
+                    .conn
+                    .lock()
+                    .map_err(|e| StorageError::Query(format!("mutex poisoned: {e}")))?;
+                execute_semantic_search(&conn, query)
+            }
+            SearchMode::Hybrid => {
+                let conn = self
+                    .conn
+                    .lock()
+                    .map_err(|e| StorageError::Query(format!("mutex poisoned: {e}")))?;
+                if let Some(ref sec_mutex) = self.secondary_conn {
+                    if let Ok(mut sec_conn) = sec_mutex.try_lock() {
+                        return execute_hybrid_search_parallel(&conn, &mut sec_conn, query);
+                    }
+                }
+                execute_hybrid_search(&conn, query)
+            }
         }
     }
 }
