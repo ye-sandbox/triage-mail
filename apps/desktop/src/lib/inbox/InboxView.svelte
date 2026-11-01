@@ -17,13 +17,15 @@
 		connected,
 		readerTransport,
 		manageAccounts,
-		openSettings
+		openSettings,
+		settingsOpen = false
 	}: {
 		inbox: InboxController;
 		connected: boolean;
 		readerTransport?: ReaderTransport;
 		manageAccounts?: () => void;
 		openSettings?: () => void;
+		settingsOpen?: boolean;
 	} = $props();
 	let query = $state('');
 	let mode = $state<SearchMode>('Lexical');
@@ -65,7 +67,7 @@
 		});
 	});
 	function openPalette(tag = false) {
-		if (!connected || !selected || inbox.mutating || inbox.loading) return;
+		if (settingsOpen || !connected || !selected || inbox.mutating || inbox.loading) return;
 		returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		actionTarget = { id: selected.id, subject: selected.subject };
 		tagging = tag;
@@ -89,7 +91,8 @@
 		if (actionTarget) void inbox.mutate(actionTarget.id, action);
 	}
 	function keyboard(event: KeyboardEvent) {
-		if (paletteOpen || !connected || !selected || inbox.mutating || inbox.loading) return;
+		if (settingsOpen || paletteOpen || !connected || !selected || inbox.mutating || inbox.loading)
+			return;
 		const action = shortcut(event);
 		if (!action) return;
 		event.preventDefault();
@@ -128,7 +131,7 @@
 		inert={!sidebarOpen}
 		aria-hidden={!sidebarOpen}
 	>
-		<div class="h-full w-56"><Sidebar status={inbox.syncStatus} /></div>
+		<div class="h-full w-56"><Sidebar status={inbox.syncStatus} {openSettings} /></div>
 	</div>
 	<div class="flex min-w-0 flex-1 flex-col">
 		<SearchToolbar
@@ -138,6 +141,7 @@
 			{busy}
 			toggleSidebar={() => (sidebarOpen = !sidebarOpen)}
 			refresh={() => void inbox.refresh()}
+			{openSettings}
 			disabled={!connected || inbox.loading}
 			experimentalSemanticSearch={inbox.experimentalSemanticSearch}
 		/>

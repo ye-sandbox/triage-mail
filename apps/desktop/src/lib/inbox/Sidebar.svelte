@@ -1,6 +1,12 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
-	let { status }: { status: string } = $props();
+	let {
+		status,
+		openSettings
+	}: {
+		status: string;
+		openSettings?: () => void;
+	} = $props();
 </script>
 
 <aside
@@ -34,6 +40,18 @@
 		<div class="flex items-center gap-2 text-xs text-[var(--secondary)]" role="status">
 			<span class="size-1.5 rounded-full bg-[var(--accent)]"></span>{status}
 		</div>
+		{#if openSettings}
+			<button
+				type="button"
+				class="flex w-full items-center gap-2 rounded-lg py-1.5 px-2 -mx-2 text-left text-xs text-[var(--secondary)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)]"
+				aria-label="Settings"
+				aria-haspopup="dialog"
+				onclick={openSettings}
+			>
+				<Icon name="settings" size={16} />
+				<span>Settings</span>
+			</button>
+		{/if}
 		<div
 			class="flex items-center gap-2 border-t border-[var(--separator)] pt-4 text-xs text-[var(--secondary)]"
 		>
