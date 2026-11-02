@@ -95,3 +95,15 @@ it('keeps photo commands separate from account metadata and sends no file path',
 		['cmd_remove_account_avatar', { accountId: 'a' }]
 	]);
 });
+
+it('keeps discovery offline by default and probing a separate explicit command', async () => {
+	const { nativeDiscoveryTransport } = await import('./discovery');
+	await nativeDiscoveryTransport.discover('reader@example.com', false);
+	await nativeDiscoveryTransport.discover('reader@example.com', true);
+	await nativeDiscoveryTransport.probe('imap.example.com');
+	expect(vi.mocked(invoke).mock.calls).toEqual([
+		['cmd_discover_email_provider', { email: 'reader@example.com', online: false }],
+		['cmd_discover_email_provider', { email: 'reader@example.com', online: true }],
+		['cmd_probe_email_provider', { host: 'imap.example.com' }]
+	]);
+});

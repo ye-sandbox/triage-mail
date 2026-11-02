@@ -27,6 +27,7 @@ All core domain crates MUST remain pure Rust (zero dependency on `tauri`) so the
 | IPC Command / Channel | Direction | Payload Schema | Performance / Security Invariant |
 |---|---|---|---|
 | `cmd_list_accounts` / `cmd_add_account` | UI $\rightarrow$ Rust | `AccountConfigDto` (supports App Password, OAuth2 Public PKCE, BYO-OAuth credentials, Proton Bridge; never returns raw secrets to UI) | Secrets stored immediately in `vault` (`keyring` or Argon2 fallback); UI only sees opaque `account_id` |
+| `cmd_discover_email_provider` | UI $\rightarrow$ Rust | `email: String, online?: bool` $\rightarrow$ `DiscoveredProviderDto { domain, provider_name, imap_host?, imap_port, use_ssl, recommended_auth, oauth_endpoints?, help_url?, source }` | Offline by default; explicit online action sends domain only to ISPDB with a 3s deadline and 64 KiB cap; no automatic probe |
 | `cmd_search_messages` | UI $\rightarrow$ Rust | `SearchQueryDto { query, mode: Lexical \| Semantic \| Hybrid, limit, offset, scope? }` $\rightarrow$ `Vec<MessageRowDto>` | Filtered semantic $\le 15$ms, lexical $\le 40$ms, global semantic $\le 50$ms, hybrid $\le 60$ms (ADR-008); mailbox budgets remain unmet in [04.1.7] |
 | `cmd_triage_action` | UI $\rightarrow$ Rust | `TriageMutationDto { message_ids, action: MarkRead \| Archive \| Trash \| Tag(String) \| OneClickUnsubscribe }` | Optimistic local SQLite update + queued async IMAP `STORE FLAGS` sync (or RFC 8058 HTTP POST on explicit unsubscribe) |
 | `cmd_get_message_body` | UI $\rightarrow$ Rust | `MessageId` $\rightarrow$ `MessageDetailDto { headers, text_plain, html_raw, triage_badges, attachments_meta }` | HTML sanitized in UI with `DOMPurify` + `<iframe sandbox="">` + normalized base dark-mode CSS |
@@ -475,3 +476,30 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   lexical/semantic/hybrid and native first-page budgets remain unmet and 60fps is unestablished;
   see "Closure with known deviations" in `docs/performance/mailbox-validation.md`. Targets are
   unchanged; revisit under [01.1] and a future native UI performance task.
+
+
+## Explicit Provider Discovery ([02.1])
+
+- `mail_engine::discovery` is headless and injectable through `DiscoveryTransport`.
+  Discovery never authenticates, initializes storage/vault, or starts sync workers.
+  Unknown domains return `source: Unresolved` and `imap_host: null`; no guessed host
+  is presented as a successful discovery. Static aliases match exact normalized domains.
+- `cmd_discover_email_provider(email, online?)` defaults to offline. Explicit online
+  lookup contacts only `https://autoconfig.thunderbird.net/v1.1/{domain}`. No redirects,
+  inherited proxies, full addresses, credentials, retries, or recursive discovery.
+  The connection-time resolver validates the exact public-only address set.
+- XML is capped at 64 KiB and depth 16. Only IMAP with `socketType: SSL` and valid DNS
+  host/u16 port is accepted. DTDs, unknown entities and host templates containing any
+  user-specific address part are rejected. XML never supplies trusted OAuth endpoints
+  or help URLs. OAuth metadata comes only from audited offline presets.
+- `cmd_probe_email_provider(host)` is a separate explicit confirmation action, restricted
+  to public DNS hosts on port 993 with a three-second deadline. It uses one validated
+  DNS snapshot, verified TLS and a bounded IMAP OK greeting; no commands or credentials
+  are sent. Probe success is not proof of sign-in. Manual Proton loopback remains separate.
+- Email blur debounces offline lookup by 200ms. Input changes, manual edits, preset
+  selection, credential entry and teardown invalidate pending results. No credential
+  enters reactive state/storage; actual detached inputs are cleared on mode changes.
+  Microsoft setup requires the user's own transient client ID and reuses native PKCE
+  cancellation/staging-vault behavior. EN/PT-BR labels remain paired.
+- User approved the narrow P0 discovery-network exception and user-provided Microsoft
+  client ID scope on 2026-11-02. No first-use shared application registration is implied.

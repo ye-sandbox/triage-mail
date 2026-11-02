@@ -3,6 +3,7 @@
 //! INVARIANT: Raw secrets, passwords, or OAuth tokens are never returned to the UI.
 //! All IPC DTOs expose only opaque `account_id` identifiers and sanitized metadata.
 
+pub use mail_engine::discovery::DiscoveredProvider as DiscoveredProviderDto;
 use mail_engine::{AttachmentMeta, AuthMethod, ImapEndpointConfig};
 use serde::{Deserialize, Serialize};
 use storage::{HybridQuery, MessageRowSummary, SearchMode};

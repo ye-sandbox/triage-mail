@@ -1,44 +1,55 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { clearCredentialInputs } from './forms';
 	import type { AccountController } from './controller.svelte';
-	import type { AccountConfig, AuthMethod, AccountSubmission } from './types';
+	import type { AccountConfig, AccountSubmission } from './types';
 	import { i18n } from '../i18n/index.svelte';
 	import AccountHelpGuide from './AccountHelpGuide.svelte';
-	import { providerPresets, type ProviderPreset } from './presets';
+	import AccountConnectionFields from './AccountConnectionFields.svelte';
+	import AccountCredentialFields from './AccountCredentialFields.svelte';
+	import { microsoftPreset, providerPresets, type ProviderPreset } from './presets';
+	import { nativeDiscoveryTransport, type DiscoveryTransport } from './discovery';
+	import { DiscoveryController } from './discovery-controller.svelte';
 
-	let { controller }: { controller: AccountController } = $props();
-	let selectedPreset = $state<string>('Gmail');
-	let method = $state<AuthMethod>('AppPassword');
+	let {
+		controller,
+		discoveryTransport = nativeDiscoveryTransport
+	}: {
+		controller: AccountController;
+		discoveryTransport?: DiscoveryTransport;
+	} = $props();
+	const discovery = new DiscoveryController(
+		untrack(() => discoveryTransport),
+		() => clearCredentialInputs(form)
+	);
 	let form = $state<HTMLFormElement>();
-
-	let presetHost = $state('imap.gmail.com');
-	let presetPort = $state(993);
-	let presetAuth = $state('');
-	let presetToken = $state('');
-	let presetScopes = $state('');
-
+	let emailInput = $state<HTMLInputElement>();
 	const t = $derived(i18n.t.accountForm);
+	const method = $derived(discovery.settings.method);
 	const oauth = $derived(method === 'OAuth2PublicPkce' || method === 'OAuth2ByoCredentials');
 
-	function applyPreset(p: ProviderPreset) {
-		selectedPreset = p.name;
-		presetHost = p.host;
-		presetPort = p.port;
-		presetAuth = p.authEndpoint ?? '';
-		presetToken = p.tokenEndpoint ?? '';
-		presetScopes = p.scopes ?? '';
-		method = p.method;
+	function applyPreset(preset: ProviderPreset) {
+		clearCredentialInputs(form);
+		discovery.preset(preset);
 	}
-
 	$effect(() => {
 		const current = form;
-		// INVARIANT: Capture the old form so a mode switch clears even detached inputs.
-		return () => clearCredentialInputs(current);
+		const currentMethod = method;
+		const inputs = current?.querySelectorAll<HTMLInputElement>('[data-credential]');
+		// INVARIANT: Capture the actual inputs, including ones detached by a mode change.
+		return () => {
+			if (currentMethod)
+				inputs?.forEach((input) => {
+					input.value = '';
+				});
+		};
 	});
+	$effect(() => () => discovery.dispose());
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		if (controller.busy || !form) return;
+		if (controller.busy || discovery.busy || !form) return;
+		discovery.invalidate();
 		const data = new FormData(form);
 		const value = (key: string) => String(data.get(key) ?? '').trim();
 		const config: AccountConfig = {
@@ -81,180 +92,96 @@
 <section aria-labelledby="add-account-title" class="space-y-6">
 	<div>
 		<h2 id="add-account-title" class="text-xl font-semibold">{t.title}</h2>
-		<p class="mt-2 text-sm text-[var(--secondary)]">
-			{t.subtitle}
-		</p>
+		<p class="mt-2 text-sm text-[var(--secondary)]">{t.discoveryIntro}</p>
 	</div>
-
-	<!-- Provider Presets -->
-	<div class="space-y-2">
-		<span class="text-xs font-medium text-[var(--secondary)]">{t.quickFillLabel}</span>
-		<div class="flex flex-wrap gap-1.5">
-			{#each providerPresets as p}
+	<form bind:this={form} onsubmit={submit} autocomplete="off" class="space-y-4">
+		<fieldset disabled={controller.busy} class="space-y-4">
+			<label class="block text-sm"
+				>{method === 'ProtonBridgeLocal' ? t.emailLabelBridge : t.emailLabel}
+				<input
+					bind:this={emailInput}
+					class="setup-input mt-2"
+					name="email"
+					type="text"
+					required
+					maxlength="320"
+					autocomplete="off"
+					oninput={() => {
+						clearCredentialInputs(form);
+						discovery.input();
+					}}
+					onblur={(event) => discovery.blur(event.currentTarget.value)}
+				/>
+			</label>
+			<div class="space-y-2">
+				<span class="text-xs font-medium text-[var(--secondary)]">{t.quickFillLabel}</span>
+				<div class="flex flex-wrap gap-2">
+					{#each providerPresets as preset}
+						<button
+							type="button"
+							class="setup-secondary text-sm aria-pressed:bg-[var(--selection-soft)] aria-pressed:text-[var(--accent)]"
+							aria-pressed={discovery.selectedPreset === preset.name}
+							onclick={() => applyPreset(preset)}>{preset.name}</button
+						>
+					{/each}
+				</div>
+			</div>
+			<button type="button" class="setup-secondary" onclick={() => applyPreset(microsoftPreset)}
+				>{t.microsoftSetup}</button
+			>
+			<p class="text-xs text-[var(--secondary)]">{t.microsoftSetupHelp}</p>
+			<div class="space-y-2" aria-busy={discovery.busy}>
+				<p class="text-xs text-[var(--secondary)]">{t.onlineLookupHelp}</p>
 				<button
 					type="button"
-					disabled={controller.busy}
-					class="rounded-full border px-2.5 py-1 text-xs font-medium transition-all active:scale-95 disabled:opacity-50 {selectedPreset === p.name
-						? 'border-[var(--accent)] bg-[var(--selection-soft)] text-[var(--accent)] font-semibold shadow-xs'
-						: 'border-[var(--separator)] bg-[var(--surface)] text-[var(--secondary)] hover:border-[var(--accent)] hover:text-[var(--text)]'}"
-					aria-pressed={selectedPreset === p.name}
-					onclick={() => applyPreset(p)}
+					class="setup-secondary"
+					disabled={discovery.busy}
+					onclick={() => void discovery.online(emailInput?.value ?? '')}>{t.onlineLookup}</button
 				>
-					{p.name}
-				</button>
-			{/each}
-		</div>
-	</div>
-
-	<!-- Interactive Login Methods Guide -->
-	<AccountHelpGuide selectedMethod={method} {selectedPreset} />
-
-	<label class="block text-sm"
-		>{t.methodLabel}
-		<select
-			class="setup-input mt-2"
-			value={method}
-			disabled={controller.busy}
-			onchange={(e) => {
-				const val = (e.currentTarget as HTMLSelectElement).value as AuthMethod;
-				method = val;
-				if (selectedPreset) {
-					const cur = providerPresets.find((p) => p.name === selectedPreset);
-					if (cur && cur.method !== val) {
-						selectedPreset = '';
-					}
-				}
-			}}
-		>
-			<option value="AppPassword">{t.methodAppPassword}</option>
-			<option value="OAuth2PublicPkce">{t.methodOAuthPublic}</option>
-			<option value="OAuth2ByoCredentials">{t.methodOAuthByo}</option>
-			<option value="ProtonBridgeLocal">{t.methodProton}</option>
-		</select>
-	</label>
-
-	{#key method}
-		<form bind:this={form} onsubmit={submit} autocomplete="off" class="space-y-4">
-			<fieldset disabled={controller.busy} class="space-y-4">
-				<label class="block text-sm"
-					>{method === 'ProtonBridgeLocal' ? t.emailLabelBridge : t.emailLabel}
-					<input
-						class="setup-input mt-2"
-						name="email"
-						type="text"
-						required
-						maxlength="320"
-						autocomplete="off"
-					/>
-				</label>
-				<div class="grid grid-cols-[minmax(0,1fr)_6rem] gap-4">
-					<label class="block text-sm"
-						>{t.hostLabel}
-						<input
-							class="setup-input mt-2"
-							name="host"
-							required
-							maxlength="253"
-							value={method === 'ProtonBridgeLocal' ? '127.0.0.1' : presetHost}
-						/>
-					</label>
-					<label class="block text-sm"
-						>{t.portLabel}
-						<input
-							class="setup-input mt-2 tabular-nums"
-							name="port"
-							type="number"
-							required
-							min="1"
-							max="65535"
-							value={method === 'ProtonBridgeLocal' ? 1143 : presetPort}
-						/>
-					</label>
-				</div>
-				{#if oauth}
-					<p class="text-sm text-[var(--secondary)]">{t.oauthHelp}</p>
-					<label class="block text-sm"
-						>{t.authEndpointLabel}
-						<input
-							class="setup-input mt-2"
-							name="authorize"
-							type="url"
-							required
-							pattern="https://.*"
-							maxlength="2048"
-							value={presetAuth}
-						/>
-					</label>
-					<label class="block text-sm"
-						>{t.tokenEndpointLabel}
-						<input
-							class="setup-input mt-2"
-							name="token"
-							type="url"
-							required
-							pattern="https://.*"
-							maxlength="2048"
-							value={presetToken}
-						/>
-					</label>
-					<label class="block text-sm"
-						>{t.scopesLabel}
-						<input
-							class="setup-input mt-2"
-							name="scopes"
-							required
-							maxlength="4096"
-							aria-describedby="scope-help"
-							value={presetScopes}
-						/>
-					</label>
-					<p id="scope-help" class="text-xs text-[var(--secondary)]">{t.scopesHelp}</p>
-					<label class="block text-sm"
-						>{t.clientIdLabel}
-						<input
-							class="setup-input mt-2"
-							name="client"
-							data-credential
-							required
-							maxlength="4096"
-							autocomplete="off"
-						/>
-					</label>
+				{#if discovery.settings.host && discovery.settings.port === 993 && method !== 'ProtonBridgeLocal'}
+					<p class="text-xs text-[var(--secondary)]">{t.probeHelp}</p>
+					<button
+						type="button"
+						class="setup-secondary"
+						disabled={discovery.busy}
+						onclick={() => void discovery.probe()}
+						>{t.confirmProbe} {discovery.settings.host}:993</button
+					>
 				{/if}
-				{#if method !== 'OAuth2PublicPkce'}
-					<label class="block text-sm"
-						>{method === 'OAuth2ByoCredentials'
-							? t.clientSecretLabel
-							: method === 'ProtonBridgeLocal'
-								? t.bridgePasswordLabel
-								: t.appPasswordLabel}
-						<input
-							class="setup-input mt-2"
-							name="secret"
-							type="password"
-							data-credential
-							required
-							maxlength="8192"
-							autocomplete="off"
-						/>
-					</label>
-				{/if}
-				{#if method === 'ProtonBridgeLocal'}
-					<p class="text-sm text-[var(--secondary)]">{t.protonNotice}</p>
-				{/if}
-				<p class="text-xs leading-relaxed text-[var(--secondary)]">
-					{oauth ? t.oauthVaultNotice : t.connectVaultNotice}
+				<p role="status" class="text-sm text-[var(--secondary)]">
+					{#if discovery.busy}{t.discovering}
+					{:else if discovery.status === 'found'}{t.providerFound}
+						{discovery.provider?.provider_name} · {discovery.settings.host}:{discovery.settings
+							.port}
+					{:else if discovery.status === 'unresolved'}{t.discoveryUnresolved}
+					{:else if discovery.status === 'invalid'}{t.discoveryInvalid}
+					{:else if discovery.status === 'unavailable'}{t.discoveryUnavailable}
+					{:else if discovery.status === 'probeSuccess'}{t.probeSuccess}
+					{:else if discovery.status === 'probeFailed'}{t.probeFailed}{/if}
 				</p>
-				<button type="submit" class="setup-primary"
-					>{controller.busy
-						? t.connecting
-						: oauth
-							? t.authorizeAndConnect
-							: t.connectAccount}</button
+			</div>
+			{#if discovery.selectedPreset === 'Gmail' && method === 'AppPassword'}
+				<a
+					class="text-sm text-[var(--accent)] underline"
+					href="https://myaccount.google.com/apppasswords"
+					target="_blank"
+					rel="noopener noreferrer">{t.gmailAppPasswordHelp}</a
 				>
-			</fieldset>
-		</form>
-	{/key}
+			{/if}
+			<AccountConnectionFields {discovery} beforeEdit={() => clearCredentialInputs(form)} />
+			{#key method}<AccountCredentialFields
+					{method}
+					onEdit={() => discovery.protectCredentials()}
+				/>{/key}
+			<p class="text-xs leading-relaxed text-[var(--secondary)]">
+				{oauth ? t.oauthVaultNotice : t.connectVaultNotice}
+			</p>
+			<button type="submit" class="setup-primary" disabled={discovery.busy}
+				>{controller.busy ? t.connecting : oauth ? t.authorizeAndConnect : t.connectAccount}</button
+			>
+		</fieldset>
+	</form>
+	<AccountHelpGuide selectedMethod={method} selectedPreset={discovery.selectedPreset} />
 	{#if controller.authorizing}
 		<p role="status" class="text-sm">{t.browserAuthPending}</p>
 		<button class="setup-secondary" type="button" onclick={() => void controller.cancel()}

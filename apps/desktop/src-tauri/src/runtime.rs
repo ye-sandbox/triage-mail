@@ -134,6 +134,26 @@ pub async fn cmd_unlock_vault(
     Ok(())
 }
 
+/// Omitted `online` keeps existing callers strictly offline.
+#[tauri::command]
+pub async fn cmd_discover_email_provider(
+    email: String,
+    online: Option<bool>,
+) -> Result<DiscoveredProviderDto, IpcError> {
+    onboarding::discover_provider(
+        &email,
+        online.unwrap_or(false),
+        &mail_engine::discovery::NativeDiscovery,
+    )
+    .await
+}
+
+/// Invoked only by the explicit confirmation button for the displayed host (TLS port 993).
+#[tauri::command]
+pub async fn cmd_probe_email_provider(host: String) -> Result<bool, IpcError> {
+    onboarding::probe_provider(&host, &mail_engine::discovery::NativeDiscovery).await
+}
+
 #[tauri::command]
 pub async fn cmd_list_accounts(
     state: State<'_, RuntimeState>,
@@ -396,6 +416,8 @@ pub fn run() {
             cmd_summarize_message,
             cmd_unlock_vault,
             cmd_list_accounts,
+            cmd_discover_email_provider,
+            cmd_probe_email_provider,
             cmd_list_folders,
             cmd_get_account_avatar,
             cmd_set_account_avatar,
@@ -490,6 +512,8 @@ mod tests {
             .manage(state)
             .invoke_handler(tauri::generate_handler![
                 cmd_list_accounts,
+                cmd_discover_email_provider,
+                cmd_probe_email_provider,
                 cmd_get_account_avatar,
                 cmd_set_account_avatar,
                 cmd_remove_account_avatar,
@@ -510,6 +534,24 @@ mod tests {
         let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()
             .unwrap();
+        // INVARIANT: Omitting online must not perform even a DNS lookup for an unknown domain.
+        let discovery = invoke(
+            &window,
+            "cmd_discover_email_provider",
+            json!({"email":"reader@example.com"}),
+        )
+        .unwrap();
+        assert_eq!(discovery["source"], "Unresolved");
+        assert!(discovery["imap_host"].is_null());
+        assert!(!discovery.to_string().contains("reader@"));
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_probe_email_provider",
+                json!({"host":"127.0.0.1"})
+            ),
+            Err(json!("InvalidRequest"))
+        );
         let settings = invoke(&window, "cmd_get_settings", json!({})).unwrap();
         assert_eq!(settings["ai"]["enabled"], false);
         assert_eq!(settings["has_api_key"], false);

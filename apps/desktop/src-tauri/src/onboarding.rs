@@ -350,3 +350,30 @@ pub fn open_browser(url: &str) -> Result<(), IpcError> {
 
 #[cfg(test)]
 mod tests;
+
+/// Secret-free discovery does not initialize the vault or start sync workers.
+pub async fn discover_provider(
+    email: &str,
+    online: bool,
+    transport: &dyn mail_engine::discovery::DiscoveryTransport,
+) -> Result<crate::DiscoveredProviderDto, IpcError> {
+    mail_engine::discovery::discover(email, online, transport)
+        .await
+        .map_err(discovery_error)
+}
+
+pub async fn probe_provider(
+    host: &str,
+    transport: &dyn mail_engine::discovery::DiscoveryTransport,
+) -> Result<bool, IpcError> {
+    mail_engine::discovery::probe_confirmed_host(host, transport)
+        .await
+        .map_err(discovery_error)
+}
+
+fn discovery_error(error: mail_engine::discovery::DiscoveryError) -> IpcError {
+    match error {
+        mail_engine::discovery::DiscoveryError::InvalidInput => IpcError::InvalidRequest,
+        mail_engine::discovery::DiscoveryError::Unavailable => IpcError::RemoteUnavailable,
+    }
+}

@@ -17,6 +17,7 @@ use vault::VaultError;
 pub mod auth;
 pub mod bodystructure;
 pub mod connector;
+pub mod discovery;
 pub mod idle;
 pub mod mime_parser;
 pub mod mutations;
