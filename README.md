@@ -210,6 +210,27 @@ pnpm --filter desktop build
 cargo build --release --package triage-mail-desktop
 ```
 
+### Saved searches and virtual folders
+
+Use **Saved searches** in the sidebar to create a named view, save the current search
+and mailbox scope, or edit a starter for unread clients, invoices or upcoming bills.
+Views support all accounts or a selected set, query text/mode, read/star/attachment
+states, required tags, exact parsed sender/domain, extraction type and boleto due dates.
+All filters must match. Empty account selection means all accounts; selecting accounts
+never silently broadens after account removal. Edit an unavailable view to repair its
+references. An existing mailbox scope can be cleared in the editor to span accounts.
+
+Definitions stay in SQLCipher. Native search applies membership before ranking and
+pagination; selecting a view never moves mail or runs rules. Sync, triage, focus/resume
+and UTC midnight refresh active membership. Upcoming bills includes today through the
+next 30 UTC calendar days; missing dates do not match, and extraction does not indicate
+payment. Choose a sender or tag for the unread-client starter; clients are not inferred.
+Sender matching does not authenticate identity. Semantic modes retain the existing
+experimental opt-in and local model requirement. Edit to rename or change filters;
+deleting the active view returns to All Mail. No reminder or scheduled delivery is added.
+Synthetic performance results and limits are in
+[`docs/performance/saved-views.md`](docs/performance/saved-views.md).
+
 ### Local rules and automatic filters
 
 Open **Settings → Rules** to create, edit, disable or reorder local filters. The message

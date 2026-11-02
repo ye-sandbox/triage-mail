@@ -618,3 +618,33 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - Existing acceptance/duplicate/active-runner limits apply. Revoke credentials manually
   in BotFather/Discord; local disable/delete does not revoke them or recall messages.
   Offline validation does not establish live provider interoperability. See k-027.
+
+## Saved Searches and Virtual Folders ([04.10] / ADR-015)
+
+- Append-only migration v5 adds `saved_views` and `saved_view_deleted_ids`. Version-1
+  definitions contain ID/revision/name, persisted query/mode, account selection, optional
+  existing mailbox scope and typed AND filters. Empty account selection means all;
+  missing explicit accounts/scopes fail closed at save/search, never broaden. Listing
+  and deletion remain possible. Revision-zero creates; updates/delete compare-and-swap;
+  deleted identities cannot be reused. At most 200 definitions; no account limit added.
+- Additive IPC: `cmd_list_saved_views`, `cmd_save_saved_view(view)`,
+  `cmd_delete_saved_view(id,revision)`, `cmd_search_saved_view(id,revision,limit,offset)`.
+  Search resolves stored text/mode before embedding and rechecks revision during execution.
+  Existing SearchQueryDto, MailboxScope, HybridQuery and SearchEngine are unchanged.
+- Scoped ranking now internally accepts general SQL eligibility while retaining original
+  mailbox SQL/account index behavior. Saved predicates precede branch LIMIT/OFFSET and
+  hybrid candidate windows. Definition validation, eligibility/ranking/hydration share one
+  read snapshot and UTC clock. Sender parsing reuses triage-ai; missing/invalid extraction
+  facts fail closed. Registered deterministic SQL closure is removed after each search.
+  Tags use exact all-required matching; sender domains are exact, unauthenticated.
+- Date bounds refer to one valid extracted boleto date; relative upcoming windows include
+  today through N days, default 30, in UTC calendar dates. No payment inference. Semantic
+  consent/model gates and exact cosine NULL/tie behavior remain authoritative. No vectors,
+  credentials or mail facts enter browser persistence; definitions stay SQLCipher-only.
+- EN/PT-BR sidebar CRUD/starter drafts use a guarded Bits UI dialog. Active edits reset
+  search generation/selection/reader/pagination; late reads cannot overwrite another view.
+  Deleting active views returns to All Mail. Existing sync/triage/focus refresh applies;
+  a rearmed UTC-midnight timer updates date membership. No rules, moves or deliveries run.
+- Synthetic large-fixture measurements are in `docs/performance/saved-views.md`; narrow
+  starred workloads do not establish arbitrary-predicate latency or native 60fps. Existing
+  [04.1.7] known deviations and budgets remain unchanged. See k-028 for lifecycle/SQL details.

@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use crate::{FtsTokenizerMode, StorageError};
 
 /// Current database schema version.
-pub const CURRENT_SCHEMA_VERSION: u32 = 4;
+pub const CURRENT_SCHEMA_VERSION: u32 = 5;
 
 /// Executes database schema migrations idempotently.
 pub struct SchemaMigrator {
@@ -62,6 +62,14 @@ impl SchemaMigrator {
 
         if current_version < 4 {
             self.apply_v4(&tx)?;
+            applied_count += 1;
+        }
+
+        if current_version < 5 {
+            tx.execute_batch("CREATE TABLE saved_views (id TEXT PRIMARY KEY NOT NULL, revision INTEGER NOT NULL, definition_json TEXT NOT NULL);
+                CREATE TABLE saved_view_deleted_ids (id TEXT PRIMARY KEY NOT NULL);")
+                .map_err(|_| StorageError::Migration("saved views migration failed".into()))?;
+            self.record_migration(&tx, 5, "005_saved_views")?;
             applied_count += 1;
         }
 
@@ -427,7 +435,7 @@ mod tests {
                 VALUES ('old','a','INBOX',1,'Old','sender@example.org','reader@example.com',0,'',0)").unwrap();
             tx.commit().unwrap();
         }
-        assert_eq!(migrator.migrate(&mut conn).unwrap(), 2);
+        assert_eq!(migrator.migrate(&mut conn).unwrap(), 3);
         assert_eq!(migrator.migrate(&mut conn).unwrap(), 0);
         assert_eq!(
             conn.query_row("SELECT subject FROM messages WHERE id='old'", [], |r| {
@@ -445,7 +453,7 @@ mod tests {
             conn.query_row("SELECT max(version) FROM schema_migrations", [], |r| r
                 .get::<_, u32>(0))
                 .unwrap(),
-            4
+            5
         );
     }
 
@@ -456,7 +464,7 @@ mod tests {
 
         let migrator = SchemaMigrator::new(FtsTokenizerMode::Unicode61RemoveDiacritics);
         let applied_first = migrator.migrate(&mut conn).expect("first migration");
-        assert_eq!(applied_first, 4);
+        assert_eq!(applied_first, 5);
 
         let applied_second = migrator.migrate(&mut conn).expect("second migration");
         assert_eq!(applied_second, 0, "subsequent migration must be a no-op");

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SavedViews from '../saved-views/SavedViews.svelte';
 	import { tick, untrack } from 'svelte';
 	import type { InboxController } from './controller.svelte';
 	import { i18n } from '../i18n/index.svelte';
@@ -41,7 +42,9 @@
 		photoRevision?: number;
 	} = $props();
 	const mailboxes = new Mailboxes(untrack(() => inbox.listFolders));
-	const context = $derived(scopeLabel(inbox.scope, accounts, i18n.t.mailboxes, mailboxes.catalogs));
+	const context = $derived(
+		inbox.savedView?.name ?? scopeLabel(inbox.scope, accounts, i18n.t.mailboxes, mailboxes.catalogs)
+	);
 	let snoozing = $state(false);
 	function selectScope(scope?: MailboxScope) {
 		paletteOpen = false;
@@ -50,6 +53,14 @@
 	}
 	let query = $state('');
 	let mode = $state<SearchMode>('Lexical');
+	$effect(() => {
+		const view = inbox.savedView;
+		if (view)
+			untrack(() => {
+				query = view.query;
+				mode = view.mode;
+			});
+	});
 	let sidebarOpen = $state(true);
 	let paletteOpen = $state(false);
 	let tagging = $state(false);
@@ -124,7 +135,7 @@
 	$effect(() => {
 		const text = query.trim();
 		const matching = mode;
-		if (!connected) return;
+		if (!connected || inbox.savedView) return;
 		if (
 			!text &&
 			matching === 'Lexical' &&
@@ -160,6 +171,7 @@
 	>
 		<div class="h-full w-56">
 			<Sidebar
+				savedActive={!!inbox.savedView}
 				status={inbox.syncStatus}
 				{openSettings}
 				{accounts}
@@ -168,12 +180,13 @@
 				select={selectScope}
 				{avatarTransport}
 				{photoRevision}
-				dismiss={() => (sidebarOpen = false)}
-			/>
+				dismiss={() => (sidebarOpen = false)}><SavedViews {inbox} {accounts} {connected} /></Sidebar
+			>
 		</div>
 	</div>
 	<div class="flex min-w-0 flex-1 flex-col">
 		<SearchToolbar
+			savedActive={!!inbox.savedView}
 			bind:query
 			{context}
 			bind:mode

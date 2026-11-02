@@ -212,6 +212,29 @@ pnpm --filter desktop build
 cargo build --release --package triage-mail-desktop
 ```
 
+### Buscas salvas e pastas virtuais
+
+Use **Buscas salvas** na barra lateral para criar uma visualização nomeada, salvar a busca
+atual e seu escopo de caixa ou editar um modelo de clientes não lidos, notas fiscais ou
+próximos boletos. As visualizações aceitam todas as contas ou um conjunto selecionado,
+texto/modo de busca, estados de leitura/estrela/anexos, etiquetas obrigatórias, remetente
+e domínio exatos, tipo de extração e vencimentos de boletos. Todos os filtros devem
+corresponder. Seleção vazia significa todas as contas; uma seleção explícita nunca se
+amplia silenciosamente após excluir uma conta. Edite referências inválidas para corrigir
+uma visualização indisponível. Remova o escopo de caixa no editor para abranger contas.
+
+As definições ficam no SQLCipher. A busca nativa filtra antes de ordenar e paginar;
+selecionar uma visualização não move mensagens nem executa regras. Sincronização,
+triagem, foco/retomada e meia-noite UTC atualizam os resultados ativos. Próximos boletos
+inclui hoje até os próximos 30 dias UTC; datas ausentes não correspondem e a extração
+não indica pagamento. Escolha remetente ou etiqueta no modelo de clientes não lidos;
+clientes não são inferidos. Correspondência de remetente não autentica identidade.
+Modos semânticos mantêm o consentimento experimental e o requisito de modelo local.
+Edite para renomear ou mudar filtros; excluir a visualização ativa retorna a Todas as
+mensagens. Nenhum lembrete ou envio agendado é adicionado. Resultados sintéticos de
+desempenho e limitações estão em
+[`docs/performance/saved-views.md`](docs/performance/saved-views.md).
+
 ### Regras locais e filtros automáticos
 
 Abra **Configurações → Regras** para criar, editar, desativar ou reordenar filtros locais.

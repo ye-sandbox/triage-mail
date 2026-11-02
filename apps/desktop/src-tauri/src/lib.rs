@@ -10,6 +10,7 @@ pub mod remote;
 pub mod rules;
 #[cfg(feature = "native-runtime")]
 pub mod runtime;
+pub mod saved_views;
 pub mod service;
 pub mod settings;
 pub mod worker;

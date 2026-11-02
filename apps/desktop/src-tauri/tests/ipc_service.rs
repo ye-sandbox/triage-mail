@@ -1596,3 +1596,59 @@ async fn rules_observe_new_arrivals_without_replaying_history_or_duplicate_sync(
     assert_eq!(remote.unsubscribes.load(Ordering::SeqCst), 0);
     assert!(remote.mutations.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn saved_view_search_retains_semantic_consent_and_never_delivers_or_fetches() {
+    use storage::saved_views::{SavedView, ViewFilters};
+    let remote = Arc::new(FakeRemote::default());
+    let (service, store, _) = setup(remote.clone());
+    seed(&service, &store).await;
+    let view = service
+        .save_saved_view(SavedView {
+            version: 1,
+            id: "saved".into(),
+            revision: 0,
+            name: "Invoices".into(),
+            query: "Invoice".into(),
+            mode: SearchMode::Semantic,
+            accounts: vec!["acct-1".into()],
+            scope: None,
+            filters: ViewFilters::default(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        service
+            .search_saved_view(view.id.clone(), view.revision, 200, 0)
+            .await
+            .unwrap_err(),
+        IpcError::InvalidRequest
+    );
+    service
+        .set_experimental_semantic_search(true)
+        .await
+        .unwrap();
+    assert!(service
+        .search_saved_view(view.id.clone(), view.revision, 200, 0)
+        .await
+        .is_ok());
+    let mut updated = view.clone();
+    updated.mode = SearchMode::Lexical;
+    let updated = service.save_saved_view(updated).await.unwrap();
+    assert_eq!(
+        service
+            .search_saved_view(view.id, view.revision, 200, 0)
+            .await
+            .unwrap_err(),
+        IpcError::InvalidRequest
+    );
+    let rows = service
+        .search_saved_view(updated.id, updated.revision, 200, 0)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, "m-1");
+    assert_eq!(remote.attachments.load(Ordering::SeqCst), 0);
+    assert_eq!(remote.unsubscribes.load(Ordering::SeqCst), 0);
+    assert!(remote.mutations.lock().unwrap().is_empty());
+}

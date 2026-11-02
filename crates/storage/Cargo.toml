@@ -12,7 +12,7 @@ all = { level = "deny", priority = -1 }
 
 [dependencies]
 sha2 = "0.10"
-rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl", "vtab"] }
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl", "vtab", "functions"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlite-vec = "0.1.9"

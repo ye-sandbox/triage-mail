@@ -47,6 +47,7 @@ export type SyncProgressEvent = {
 	embedding_errors_count?: number;
 };
 export interface InboxTransport {
+	savedViews?: import('../saved-views/types').SavedViewTransport;
 	listFolders?(accountId: string): Promise<FolderDto[]>;
 	triage(mutation: import('./triage').TriageMutation): Promise<void>;
 	search(query: SearchQueryDto): Promise<MessageRowDto[]>;

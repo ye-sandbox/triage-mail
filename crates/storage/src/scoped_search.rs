@@ -107,7 +107,7 @@ fn messages_source(
     Ok("messages m INDEXED BY idx_messages_account_provider_msgid")
 }
 
-fn eligibility(view: &MailboxView) -> &'static str {
+pub(crate) fn eligibility(view: &MailboxView) -> &'static str {
     match view {
         MailboxView::Starred => "m.is_starred = 1",
         MailboxView::Snoozed => "m.snooze_until_epoch_ms > ?3",
@@ -128,7 +128,7 @@ fn eligibility(view: &MailboxView) -> &'static str {
     }
 }
 
-fn validate_scope(
+pub(crate) fn validate_scope(
     conn: &Connection,
     account: &str,
     view: &MailboxView,
@@ -161,17 +161,17 @@ fn validate_scope(
         .ok_or_else(invalid_scope)
 }
 
-struct ScopedSearch<'connection> {
-    conn: &'connection Connection,
-    account_id: &'connection str,
-    folder: &'connection str,
-    eligibility: &'static str,
-    messages: &'static str,
-    now: i64,
+pub(crate) struct ScopedSearch<'connection> {
+    pub(crate) conn: &'connection Connection,
+    pub(crate) account_id: &'connection str,
+    pub(crate) folder: &'connection str,
+    pub(crate) eligibility: &'connection str,
+    pub(crate) messages: &'static str,
+    pub(crate) now: i64,
 }
 
 impl ScopedSearch<'_> {
-    fn execute(&self, query: &HybridQuery) -> Result<Vec<String>, StorageError> {
+    pub(crate) fn execute(&self, query: &HybridQuery) -> Result<Vec<String>, StorageError> {
         let lexical = !query.query_text.trim().is_empty();
         let semantic = query.query_embedding_int8.is_some();
         if query.mode != SearchMode::Hybrid || !lexical || !semantic {
@@ -214,15 +214,15 @@ impl ScopedSearch<'_> {
         let selection = if semantic {
             // INVARIANT: Rank every eligible vector before LIMIT; a global top-k can omit mailbox results.
             "SELECT m.id FROM {messages} CROSS JOIN vec_messages v
-             WHERE m.account_id=?1 AND v.message_id=m.id AND ({eligibility})
+             WHERE {account} AND v.message_id=m.id AND ({eligibility})
              ORDER BY vec_distance_cosine(v.embedding_int8, vec_int8(?5)), m.id LIMIT ?6 OFFSET ?7"
         } else if query.query_text.trim().is_empty() {
-            "SELECT m.id FROM {messages} WHERE m.account_id=?1 AND ({eligibility})
+            "SELECT m.id FROM {messages} WHERE {account} AND ({eligibility})
              ORDER BY m.received_at_epoch_ms DESC, m.id LIMIT ?6 OFFSET ?7"
         } else {
             "WITH ranked AS (SELECT rowid AS rid, rank AS score FROM messages_fts
              WHERE messages_fts MATCH ?4 AND +rowid IN (
-                SELECT m.rowid FROM {messages} WHERE m.account_id=?1 AND ({eligibility}))
+                SELECT m.rowid FROM {messages} WHERE {account} AND ({eligibility}))
              ORDER BY rank, rowid LIMIT ?6 OFFSET ?7)
              SELECT m.id FROM ranked r JOIN messages m ON m.rowid=r.rid ORDER BY r.score, r.rid"
         };
@@ -230,6 +230,14 @@ impl ScopedSearch<'_> {
         // entire account per candidate. Snoozed uses bounded metadata estimates to
         // choose an account scan or active-deadline range without changing eligibility.
         selection
+            .replace(
+                "{account}",
+                if self.account_id.is_empty() {
+                    "1"
+                } else {
+                    "m.account_id=?1"
+                },
+            )
             .replace("{eligibility}", self.eligibility)
             .replace("{messages}", self.messages)
     }
