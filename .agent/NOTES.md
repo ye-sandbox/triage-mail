@@ -452,3 +452,17 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   timer moves mail or changes read flags. EN/PT-BR labels cover added views and controls.
 - [04.1.7] still owns full visual/browser verification and scoped performance measurement;
   component regressions and the existing 100k-message DOM-window test are not timing evidence.
+
+## Mailbox Validation Gate ([04.1.7])
+
+- The 2026-11-02 disposable 100k-message/200k-membership fixture exposes an account-only
+  correlated membership scan in blank Inbox. Its 180-second process budget expired
+  before the first sample returned; native validation reached ready state but did not
+  complete its first scoped batch. See `docs/performance/mailbox-validation.md` and k-020.
+- Completed Global/Starred/Snoozed samples pass independent eligible-order/count/identity
+  oracles. Snoozed semantic first-page p95 is 23.540ms (2,500 eligible), above the 15ms
+  filtered budget; global deep exact fallbacks also exceed first-page reference bounds.
+  These results do not establish dense mailbox or native first-page/60fps acceptance.
+- Feature closure remains open. A separately approved scoped storage fix and completed
+  native/visual matrix are required. No production schema, trait, IPC or timing target
+  changed during validation. Historical frame cadence is not first-page timing evidence.

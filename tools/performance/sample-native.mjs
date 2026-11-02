@@ -12,7 +12,12 @@ if (!binary)
 	throw new Error(
 		'Usage: node tools/performance/sample-native.mjs BINARY [DURATION_MS]'
 	);
-const child = spawn(binary, [], { stdio: ['ignore', 'pipe', 'inherit'] });
+// INVARIANT: Give this disposable fixture its own process group so a wrapper timeout
+// also terminates native/WebKit descendants that retain inherited stdout pipes.
+const child = spawn(binary, [], {
+	stdio: ['ignore', 'pipe', 'inherit'],
+	detached: process.platform !== 'win32'
+});
 let phase = 'startup';
 const reports = [];
 const memory = [];
@@ -90,7 +95,12 @@ const timer = setInterval(() => {
 }, 250);
 const timeout = setTimeout(() => {
 	timedStop = true;
-	child.kill('SIGTERM');
+	try {
+		if (process.platform === 'win32') child.kill('SIGTERM');
+		else if (child.pid) process.kill(-child.pid, 'SIGTERM');
+	} catch (error) {
+		if (error.code !== 'ESRCH') throw error;
+	}
 }, durationMs);
 child.on('error', (error) => {
 	process.stderr.write(`${error}\n`);

@@ -1,0 +1,8 @@
+Command: timeout 180 target/release/examples/mailbox_performance Inbox
+Exit: 124
+Process budget: 180 seconds, including disposable seeding and oracle construction
+Completed query samples: 0
+No latency percentile or correctness pass accepted.
+
+# rows=100000, dimensions=384, bytes=120233984, sqlite=3.45.3, cipher=4.5.7 community, vec=v0.1.9
+view,mode,blank,offset,eligible,cache,sample,ms,results

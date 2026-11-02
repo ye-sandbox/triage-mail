@@ -248,6 +248,10 @@ native WebKitGTK inbox fixture, with frame timing and process-tree memory sampli
 [methodology, commands and measured limits](docs/performance/native-validation.md).
 These tools do not contact providers or download models; rebuild the ordinary SPA after the
 fixture build before producing an application binary.
+Mailbox-specific correctness and latency validation uses
+`cargo run --offline --release -p storage --example mailbox_performance`.
+See the [mailbox validation report](docs/performance/mailbox-validation.md) for scoped
+workloads, native IPC timings, screenshots, and remaining acceptance gaps.
 
 ## License
 
