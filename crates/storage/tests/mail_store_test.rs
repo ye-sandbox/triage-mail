@@ -1,8 +1,9 @@
 use std::time::Instant;
 
 use storage::{
-    AccountRecord, AttachmentRecord, DatabaseKey, FolderSyncState, FtsTokenizerMode, HybridQuery,
-    MailRepository, MessageRecord, SearchEngine, SearchMode, SqliteMailStore,
+    desktop, AccountRecord, AttachmentRecord, DatabaseKey, FolderSyncState, FtsTokenizerMode,
+    HybridQuery, MailRepository, MessageFlagsDelta, MessageRecord, SearchEngine, SearchMode,
+    SqliteMailStore,
 };
 
 fn create_sample_account(id: &str, email: &str) -> AccountRecord {
@@ -941,4 +942,178 @@ fn test_same_account_deduplication_and_cross_account_isolation() {
         store.get_message_by_id("msg-a-1").unwrap().is_some(),
         "Message must survive as long as it has memberships"
     );
+}
+
+#[test]
+fn test_starred_and_snooze_persistence_reconciliation_and_reopen() {
+    let key = DatabaseKey::from_bytes([42u8; 32]);
+    let dir = tempfile::tempdir().unwrap();
+    let db_path = dir.path().join("starred_snooze.db");
+
+    let account = create_sample_account("acc_starred", "starred@example.com");
+    let state = FolderSyncState {
+        account_id: "acc_starred".to_string(),
+        folder_name: "INBOX".to_string(),
+        uidvalidity: 100,
+        uidnext: 10,
+        highest_modseq: None,
+    };
+
+    // 1. Initial creation and persistence
+    {
+        let store =
+            SqliteMailStore::open(&db_path, &key, FtsTokenizerMode::Unicode61RemoveDiacritics)
+                .unwrap();
+        store.insert_account(&account).unwrap();
+        store.upsert_folder_sync_state(&state).unwrap();
+
+        let mut msg =
+            create_sample_message("m_star_1", "acc_starred", "INBOX", 1, "Subject 1", "Body 1");
+        msg.is_starred = false;
+        msg.snooze_until_epoch_ms = None;
+        store.insert_message(&msg).unwrap();
+
+        // Check default summary
+        let summaries = store
+            .search(&HybridQuery {
+                query_text: "".to_string(),
+                query_embedding_int8: None,
+                account_filter: Some("acc_starred".to_string()),
+                mode: SearchMode::Lexical,
+                limit: 10,
+                offset: 0,
+            })
+            .unwrap();
+        assert_eq!(summaries.len(), 1);
+        assert!(!summaries[0].is_starred);
+        assert_eq!(summaries[0].snooze_until_epoch_ms, None);
+
+        // Apply LocalMutation::Star and Snooze
+        let future_deadline = 2_000_000_000_000;
+        store
+            .apply_local_mutations(&[
+                (
+                    "m_star_1".to_string(),
+                    desktop::LocalMutation::Star(true),
+                    Some("{\"action\":\"Star\"}".into()),
+                ),
+                (
+                    "m_star_1".to_string(),
+                    desktop::LocalMutation::Snooze(Some(future_deadline)),
+                    None,
+                ),
+            ])
+            .unwrap();
+
+        let fetched = store.get_message_by_id("m_star_1").unwrap().unwrap();
+        assert!(fetched.is_starred);
+        assert_eq!(fetched.snooze_until_epoch_ms, Some(future_deadline));
+
+        // Background sync flag delta must NOT overwrite optimistic star while mutation is pending
+        store
+            .commit_sync_batch(
+                &[],
+                &[MessageFlagsDelta {
+                    uid: 1,
+                    is_read: true,
+                    is_starred: false,
+                }],
+                &state,
+                false,
+            )
+            .unwrap();
+        let fetched = store.get_message_by_id("m_star_1").unwrap().unwrap();
+        assert!(fetched.is_starred);
+        assert_eq!(fetched.snooze_until_epoch_ms, Some(future_deadline));
+
+        // Complete the outbox mutation
+        let mutations = store.pending_mutations().unwrap();
+        assert_eq!(mutations.len(), 1);
+        store.complete_mutation(mutations[0].0).unwrap();
+
+        // Now background sync delta reconciles cleanly
+        store
+            .commit_sync_batch(
+                &[],
+                &[MessageFlagsDelta {
+                    uid: 1,
+                    is_read: true,
+                    is_starred: false,
+                }],
+                &state,
+                false,
+            )
+            .unwrap();
+        let fetched = store.get_message_by_id("m_star_1").unwrap().unwrap();
+        assert!(!fetched.is_starred);
+        // Local snooze remains intact during sync
+        assert_eq!(fetched.snooze_until_epoch_ms, Some(future_deadline));
+
+        // Test snooze reconciliation
+        let expired = store
+            .reconcile_expired_snoozes(future_deadline - 1000)
+            .unwrap();
+        assert!(expired.is_empty());
+        assert_eq!(
+            store
+                .get_message_by_id("m_star_1")
+                .unwrap()
+                .unwrap()
+                .snooze_until_epoch_ms,
+            Some(future_deadline)
+        );
+
+        let expired = store
+            .reconcile_expired_snoozes(future_deadline + 1000)
+            .unwrap();
+        assert_eq!(expired, vec!["m_star_1"]);
+        assert_eq!(
+            store
+                .get_message_by_id("m_star_1")
+                .unwrap()
+                .unwrap()
+                .snooze_until_epoch_ms,
+            None
+        );
+    }
+
+    // 2. Reopen encrypted database and verify schema integrity
+    {
+        let store =
+            SqliteMailStore::open(&db_path, &key, FtsTokenizerMode::Unicode61RemoveDiacritics)
+                .unwrap();
+        let fetched = store.get_message_by_id("m_star_1").unwrap().unwrap();
+        assert!(!fetched.is_starred);
+        assert_eq!(fetched.snooze_until_epoch_ms, None);
+
+        // Star it again and verify persistence across summary
+        store
+            .apply_local_mutations(&[
+                (
+                    "m_star_1".to_string(),
+                    desktop::LocalMutation::Star(true),
+                    None,
+                ),
+                (
+                    "m_star_1".to_string(),
+                    desktop::LocalMutation::Snooze(Some(3_000_000_000_000)),
+                    None,
+                ),
+            ])
+            .unwrap();
+
+        let summaries = store
+            .search(&HybridQuery {
+                query_text: "".to_string(),
+                query_embedding_int8: None,
+                account_filter: Some("acc_starred".to_string()),
+                mode: SearchMode::Lexical,
+                limit: 10,
+                offset: 0,
+            })
+            .unwrap();
+        assert_eq!(summaries.len(), 1);
+        assert!(summaries[0].is_starred);
+        assert_eq!(summaries[0].snooze_until_epoch_ms, Some(3_000_000_000_000));
+    }
 }

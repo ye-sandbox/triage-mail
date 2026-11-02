@@ -318,7 +318,7 @@ fn load_summaries(
     for chunk in ids.chunks(500) {
         let sql = format!(
             "SELECT id, account_id, folder, uid, subject, sender, received_at_epoch_ms,
-             is_read, has_attachments, category_badge, triage_badges FROM messages WHERE id IN ({})",
+             is_read, has_attachments, category_badge, triage_badges, is_starred, snooze_until_epoch_ms FROM messages WHERE id IN ({})",
             vec!["?"; chunk.len()].join(",")
         );
         let mut stmt = conn.prepare_cached(&sql).map_err(query_error)?;
@@ -354,6 +354,8 @@ fn row_to_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageRowSummary
         tags: Vec::new(),
         folder_override: None,
         triage_badges,
+        is_starred: row.get::<_, i64>(11)? != 0,
+        snooze_until_epoch_ms: row.get(12)?,
     })
 }
 

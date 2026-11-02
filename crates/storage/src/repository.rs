@@ -150,7 +150,7 @@ impl SqliteMailStore {
                 recipients = excluded.recipients,
                 received_at_epoch_ms = excluded.received_at_epoch_ms,
                 is_read = CASE WHEN EXISTS (
-                    SELECT 1 FROM pending_mutations p WHERE p.message_id = messages.id
+                    SELECT 1 FROM pending_mutations p WHERE p.message_id = messages.id AND p.payload_json LIKE '%Read%'
                 ) THEN messages.is_read ELSE excluded.is_read END,
                 has_attachments = excluded.has_attachments,
                 category_badge = excluded.category_badge,
@@ -161,8 +161,10 @@ impl SqliteMailStore {
                 list_unsubscribe = excluded.list_unsubscribe,
                 list_unsubscribe_post = excluded.list_unsubscribe_post,
                 one_click_unsubscribe_supported = excluded.one_click_unsubscribe_supported,
-                is_starred = excluded.is_starred,
-                snooze_until_epoch_ms = excluded.snooze_until_epoch_ms,
+                is_starred = CASE WHEN EXISTS (
+                    SELECT 1 FROM pending_mutations p WHERE p.message_id = messages.id AND (p.payload_json LIKE '%Star%' OR p.payload_json LIKE '%Unstar%')
+                ) THEN messages.is_starred ELSE excluded.is_starred END,
+                snooze_until_epoch_ms = messages.snooze_until_epoch_ms,
                 provider_message_id = excluded.provider_message_id;",
             rusqlite::params![
                 message.id,

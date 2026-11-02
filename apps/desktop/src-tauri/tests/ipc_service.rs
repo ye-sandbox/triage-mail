@@ -387,7 +387,16 @@ async fn triage_is_atomic_durable_and_preserves_original_server_identity() {
         .unwrap()
         .unwrap();
     store
-        .commit_sync_batch(&[], &[(1, false)], &checkpoint, false)
+        .commit_sync_batch(
+            &[],
+            &[storage::MessageFlagsDelta {
+                uid: 1,
+                is_read: false,
+                is_starred: false,
+            }],
+            &checkpoint,
+            false,
+        )
         .unwrap();
     assert!(store.get_message_by_id("m-1").unwrap().unwrap().is_read);
     triage_mail_desktop_lib::worker::process_outbox_once(&service)
@@ -802,7 +811,16 @@ async fn move_acknowledgement_rebases_later_actions_and_preserves_tags_and_attac
         highest_modseq: Some(99),
     };
     let stored = store
-        .commit_sync_batch(&[refreshed], &[(77, false)], &state, false)
+        .commit_sync_batch(
+            &[refreshed],
+            &[storage::MessageFlagsDelta {
+                uid: 77,
+                is_read: false,
+                is_starred: false,
+            }],
+            &state,
+            false,
+        )
         .unwrap();
     assert_eq!(stored[0].id, "m-1");
     assert_eq!(
@@ -1238,4 +1256,216 @@ async fn test_desktop_service_discovers_and_lists_folders() {
     assert_eq!(folders[1].role, "sent");
     assert_eq!(folders[2].folder_name, "[Gmail]");
     assert!(!folders[2].is_selectable);
+}
+
+#[tokio::test]
+async fn test_starred_and_unstarred_triage_actions_and_outbox() {
+    let remote = Arc::new(FakeRemote::default());
+    let (service, store, _) = setup(remote.clone());
+    seed(&service, &store).await;
+
+    assert!(!store.get_message_by_id("m-1").unwrap().unwrap().is_starred);
+
+    // 1. Optimistic Star mutation
+    service
+        .triage_action(mutation(TriageActionDto::Star))
+        .await
+        .unwrap();
+    assert!(store.get_message_by_id("m-1").unwrap().unwrap().is_starred);
+    assert_eq!(store.pending_mutations().unwrap().len(), 1);
+
+    // 2. Incoming background flag sync with is_starred=false must NOT override pending star
+    let checkpoint = store
+        .get_folder_sync_state("acct-1", "INBOX")
+        .unwrap()
+        .unwrap();
+    store
+        .commit_sync_batch(
+            &[],
+            &[storage::MessageFlagsDelta {
+                uid: 1,
+                is_read: true,
+                is_starred: false,
+            }],
+            &checkpoint,
+            false,
+        )
+        .unwrap();
+    assert!(store.get_message_by_id("m-1").unwrap().unwrap().is_starred);
+
+    // 3. Process outbox sends Star to remote
+    triage_mail_desktop_lib::worker::process_outbox_once(&service)
+        .await
+        .unwrap();
+    assert!(store.pending_mutations().unwrap().is_empty());
+    assert_eq!(
+        remote.mutations.lock().unwrap()[0].action,
+        TriageActionDto::Star
+    );
+
+    // 4. After outbox completes, remote flag updates reconcile cleanly
+    store
+        .commit_sync_batch(
+            &[],
+            &[storage::MessageFlagsDelta {
+                uid: 1,
+                is_read: true,
+                is_starred: false,
+            }],
+            &checkpoint,
+            false,
+        )
+        .unwrap();
+    assert!(!store.get_message_by_id("m-1").unwrap().unwrap().is_starred);
+
+    // 5. Unstar mutation
+    service
+        .triage_action(mutation(TriageActionDto::Unstar))
+        .await
+        .unwrap();
+    assert!(!store.get_message_by_id("m-1").unwrap().unwrap().is_starred);
+    assert_eq!(store.pending_mutations().unwrap().len(), 1);
+    triage_mail_desktop_lib::worker::process_outbox_once(&service)
+        .await
+        .unwrap();
+    assert!(store.pending_mutations().unwrap().is_empty());
+    assert_eq!(
+        remote.mutations.lock().unwrap()[1].action,
+        TriageActionDto::Unstar
+    );
+}
+
+#[tokio::test]
+async fn test_snooze_unsnooze_and_expiration_reconciliation() {
+    let remote = Arc::new(FakeRemote::default());
+    let (service, store, _) = setup(remote);
+    seed(&service, &store).await;
+
+    let now = storage::now_epoch_ms();
+
+    // 1. Reject past deadline
+    let past_res = service
+        .triage_action(mutation(TriageActionDto::Snooze {
+            until_epoch_ms: now - 1000,
+        }))
+        .await;
+    assert_eq!(past_res.unwrap_err(), IpcError::InvalidRequest);
+
+    // 2. Reject excessively far deadline (> 1 year)
+    let far_res = service
+        .triage_action(mutation(TriageActionDto::Snooze {
+            until_epoch_ms: now + 400 * 24 * 3600 * 1000,
+        }))
+        .await;
+    assert_eq!(far_res.unwrap_err(), IpcError::InvalidRequest);
+
+    // 3. Valid future deadline
+    let deadline = now + 3_600_000;
+    service
+        .triage_action(mutation(TriageActionDto::Snooze {
+            until_epoch_ms: deadline,
+        }))
+        .await
+        .unwrap();
+    let current = store.get_message_by_id("m-1").unwrap().unwrap();
+    assert_eq!(current.snooze_until_epoch_ms, Some(deadline));
+    // INVARIANT: Snooze is local metadata and never queues remote mutations
+    assert!(store.pending_mutations().unwrap().is_empty());
+
+    // 4. Detail DTO and row summary expose snooze and star fields
+    let detail = service.get_message_body("m-1".into()).await.unwrap();
+    assert_eq!(detail.snooze_until_epoch_ms, Some(deadline));
+    assert!(!detail.is_starred);
+
+    let search_res = service
+        .search_messages(dto::SearchQueryDto {
+            query: String::new(),
+            mode: storage::SearchMode::Lexical,
+            limit: 10,
+            offset: 0,
+        })
+        .await
+        .unwrap();
+    assert_eq!(search_res[0].snooze_until_epoch_ms, Some(deadline));
+    assert!(!search_res[0].is_starred);
+
+    // 5. Reconcile before deadline does not clear
+    let expired = store.reconcile_expired_snoozes(now + 1000).unwrap();
+    assert!(expired.is_empty());
+    assert_eq!(
+        store
+            .get_message_by_id("m-1")
+            .unwrap()
+            .unwrap()
+            .snooze_until_epoch_ms,
+        Some(deadline)
+    );
+
+    // 6. Reconcile at/after deadline clears snooze
+    let expired = store.reconcile_expired_snoozes(deadline + 1).unwrap();
+    assert_eq!(expired, vec!["m-1"]);
+    assert_eq!(
+        store
+            .get_message_by_id("m-1")
+            .unwrap()
+            .unwrap()
+            .snooze_until_epoch_ms,
+        None
+    );
+
+    // 7. Snooze then Unsnooze
+    service
+        .triage_action(mutation(TriageActionDto::Snooze {
+            until_epoch_ms: deadline,
+        }))
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .get_message_by_id("m-1")
+            .unwrap()
+            .unwrap()
+            .snooze_until_epoch_ms,
+        Some(deadline)
+    );
+    service
+        .triage_action(mutation(TriageActionDto::Unsnooze))
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .get_message_by_id("m-1")
+            .unwrap()
+            .unwrap()
+            .snooze_until_epoch_ms,
+        None
+    );
+
+    // 8. Snooze then Archive immediately clears snooze
+    service
+        .triage_action(mutation(TriageActionDto::Snooze {
+            until_epoch_ms: deadline,
+        }))
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .get_message_by_id("m-1")
+            .unwrap()
+            .unwrap()
+            .snooze_until_epoch_ms,
+        Some(deadline)
+    );
+    service
+        .triage_action(mutation(TriageActionDto::Archive))
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .get_message_by_id("m-1")
+            .unwrap()
+            .unwrap()
+            .snooze_until_epoch_ms,
+        None
+    );
 }

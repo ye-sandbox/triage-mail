@@ -113,6 +113,7 @@ impl DesktopService {
         embedding: Option<Arc<dyn EmbeddingProvider>>,
     ) -> Arc<Self> {
         crate::onboarding::clean_orphaned_staging(vault.as_ref());
+        let _ = store.reconcile_expired_snoozes(storage::now_epoch_ms());
         Arc::new(Self {
             store,
             vault,
@@ -335,6 +336,8 @@ impl DesktopService {
                 triage_badges: triage.badges.clone(),
                 triage_result: triage,
                 attachments_meta: attachments,
+                is_starred: record.is_starred,
+                snooze_until_epoch_ms: record.snooze_until_epoch_ms,
             })
         })
         .await
@@ -407,6 +410,12 @@ impl DesktopService {
                 return Err(IpcError::InvalidRequest);
             }
         }
+        if let TriageActionDto::Snooze { until_epoch_ms } = &mutation.action {
+            let now = storage::now_epoch_ms();
+            if *until_epoch_ms <= now || *until_epoch_ms > now + 365 * 24 * 3600 * 1000 {
+                return Err(IpcError::InvalidRequest);
+            }
+        }
         if mutation.action == TriageActionDto::OneClickUnsubscribe {
             return self.unsubscribe_messages(mutation.message_ids).await;
         }
@@ -430,9 +439,20 @@ impl DesktopService {
                 TriageActionDto::Archive => LocalMutation::Folder("Archive"),
                 TriageActionDto::Trash => LocalMutation::Folder("Trash"),
                 TriageActionDto::Tag(tag) => LocalMutation::Tag(tag),
+                TriageActionDto::Star => LocalMutation::Star(true),
+                TriageActionDto::Unstar => LocalMutation::Star(false),
+                TriageActionDto::Snooze { until_epoch_ms } => {
+                    LocalMutation::Snooze(Some(*until_epoch_ms))
+                }
+                TriageActionDto::Unsnooze => LocalMutation::Snooze(None),
                 _ => return Err(IpcError::InvalidRequest),
             };
-            let remote = if matches!(mutation.action, TriageActionDto::Tag(_)) {
+            let remote = if matches!(
+                mutation.action,
+                TriageActionDto::Tag(_)
+                    | TriageActionDto::Snooze { .. }
+                    | TriageActionDto::Unsnooze
+            ) {
                 None
             } else {
                 let checkpoint = self
@@ -463,7 +483,12 @@ impl DesktopService {
         for account in accounts {
             self.events.publish(SyncProgressEvent {
                 account_id: account,
-                state: if matches!(mutation.action, TriageActionDto::Tag(_)) {
+                state: if matches!(
+                    mutation.action,
+                    TriageActionDto::Tag(_)
+                        | TriageActionDto::Snooze { .. }
+                        | TriageActionDto::Unsnooze
+                ) {
                     SyncState::ResyncRequired
                 } else {
                     SyncState::MutationPending
@@ -474,6 +499,30 @@ impl DesktopService {
             });
         }
         Ok(())
+    }
+
+    pub async fn reconcile_snoozes(self: &Arc<Self>) -> Result<usize, IpcError> {
+        let now = storage::now_epoch_ms();
+        let expired_ids = self
+            .blocking(move |s| {
+                s.store
+                    .reconcile_expired_snoozes(now)
+                    .map_err(storage_error)
+            })
+            .await?;
+        if !expired_ids.is_empty() {
+            let accounts = self.list_accounts().await?;
+            for acct in accounts {
+                self.events.publish(SyncProgressEvent {
+                    account_id: acct.account_id,
+                    state: SyncState::ResyncRequired,
+                    new_messages_count: 0,
+                    triage_alerts: Vec::new(),
+                    embedding_errors_count: 0,
+                });
+            }
+        }
+        Ok(expired_ids.len())
     }
 
     async fn unsubscribe_messages(self: &Arc<Self>, ids: Vec<String>) -> Result<(), IpcError> {

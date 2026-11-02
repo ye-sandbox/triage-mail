@@ -134,6 +134,8 @@ impl RemoteMail for NativeRemoteMail {
             TriageActionDto::MarkUnread => ImapMutation::Read(false),
             TriageActionDto::Archive => ImapMutation::MoveTo(SpecialFolderRole::Archive),
             TriageActionDto::Trash => ImapMutation::MoveTo(SpecialFolderRole::Trash),
+            TriageActionDto::Star => ImapMutation::Star(true),
+            TriageActionDto::Unstar => ImapMutation::Star(false),
             _ => return Err(IpcError::InvalidRequest),
         };
         let (mut session, caps) = self.session(config).await?;
