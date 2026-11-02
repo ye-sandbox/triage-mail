@@ -25,11 +25,11 @@
   - `Paths:` `crates/mail-engine/src/**, crates/storage/src/**, apps/desktop/src-tauri/src/**`
   - `Verify:` `cargo test --workspace`
 
-- [ ] **[04.1.3]** `[READY FOR PLANNING]` `[SEQ: W3]` Add persisted Starred and local Snoozed behavior
+- [x] **[04.1.3]** `[DONE: 8779527]` `[SEQ: W3]` Add persisted Starred and local Snoozed behavior
   - `Paths:` `crates/storage/src/**, crates/mail-engine/src/**, apps/desktop/src-tauri/src/**`
   - `Verify:` `cargo test --workspace`
 
-- [ ] **[04.1.4]** `[PLANNED]` `[SEQ: W4]` Expose account-scoped mailbox search
+- [ ] **[04.1.4]** `[READY FOR PLANNING]` `[SEQ: W4]` Expose account-scoped mailbox search
   - `Paths:` `crates/storage/src/**, apps/desktop/src-tauri/src/**`
   - `Verify:` `cargo test --workspace`
 
