@@ -59,6 +59,14 @@ pub struct MessageFolderMembershipRecord {
     pub created_at_epoch_ms: i64,
 }
 
+/// Flag delta for reconciling read and starred flags for a message UID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MessageFlagsDelta {
+    pub uid: u32,
+    pub is_read: bool,
+    pub is_starred: bool,
+}
+
 /// Inbound email message record persisted in SQLite.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MessageRecord {

@@ -245,13 +245,16 @@ pub async fn sync_account_once(
                     let flags: Vec<_> = result
                         .flag_deltas
                         .into_iter()
-                        .map(|f| {
-                            (
-                                f.uid,
-                                f.flags
-                                    .iter()
-                                    .any(|flag| flag.eq_ignore_ascii_case("\\Seen")),
-                            )
+                        .map(|f| storage::MessageFlagsDelta {
+                            uid: f.uid,
+                            is_read: f
+                                .flags
+                                .iter()
+                                .any(|flag| flag.eq_ignore_ascii_case("\\Seen")),
+                            is_starred: f
+                                .flags
+                                .iter()
+                                .any(|flag| flag.eq_ignore_ascii_case("\\Flagged")),
                         })
                         .collect();
                     let records = s
@@ -402,6 +405,7 @@ fn message_record(
 async fn outbox_loop(service: Arc<DesktopService>) {
     loop {
         let _ = process_outbox_once(&service).await;
+        let _ = service.reconcile_snoozes().await;
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
 }

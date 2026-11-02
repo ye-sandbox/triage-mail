@@ -12,6 +12,8 @@ pub enum LocalMutation<'a> {
     Read(bool),
     Folder(&'a str),
     Tag(&'a str),
+    Star(bool),
+    Snooze(Option<i64>),
 }
 
 impl SqliteMailStore {
@@ -113,8 +115,14 @@ impl SqliteMailStore {
                 match action {
                     LocalMutation::Read(value) => { tx.execute("UPDATE messages SET is_read=?1 WHERE id=?2", params![value, id]).map_err(query_error)?; }
                     // INVARIANT: Optimistic moves never replace the canonical server folder/UID.
-                    LocalMutation::Folder(folder) => { tx.execute("INSERT INTO message_folder_overrides VALUES (?1, ?2) ON CONFLICT(message_id) DO UPDATE SET folder=excluded.folder", params![id, folder]).map_err(query_error)?; }
+                    LocalMutation::Folder(folder) => {
+                        tx.execute("INSERT INTO message_folder_overrides VALUES (?1, ?2) ON CONFLICT(message_id) DO UPDATE SET folder=excluded.folder", params![id, folder]).map_err(query_error)?;
+                        // Moving to Archive or Trash immediately clears any active snooze deadline.
+                        tx.execute("UPDATE messages SET snooze_until_epoch_ms=NULL WHERE id=?1", params![id]).map_err(query_error)?;
+                    }
                     LocalMutation::Tag(tag) => { tx.execute("INSERT INTO tags VALUES (?1, ?2, ?3, 0) ON CONFLICT(message_id, tag_name) DO NOTHING", params![format!("{id}:tag:{tag}"), id, tag]).map_err(query_error)?; }
+                    LocalMutation::Star(value) => { tx.execute("UPDATE messages SET is_starred=?1 WHERE id=?2", params![if *value { 1 } else { 0 }, id]).map_err(query_error)?; }
+                    LocalMutation::Snooze(deadline) => { tx.execute("UPDATE messages SET snooze_until_epoch_ms=?1 WHERE id=?2", params![deadline, id]).map_err(query_error)?; }
                 }
                 if let Some(payload) = remote_payload {
                     tx.execute("INSERT INTO pending_mutations(message_id,payload_json) VALUES (?1,?2)", params![id,payload]).map_err(query_error)?;
@@ -223,7 +231,7 @@ impl SqliteMailStore {
     pub fn commit_sync_batch(
         &self,
         messages: &[crate::MessageRecord],
-        flags: &[(u32, bool)],
+        flags: &[crate::MessageFlagsDelta],
         state: &crate::FolderSyncState,
         reset: bool,
     ) -> Result<Vec<crate::MessageRecord>, StorageError> {
@@ -322,11 +330,71 @@ impl SqliteMailStore {
                     persisted.push(message);
                 }
             }
-            for (uid, read) in flags {
-                tx.execute("UPDATE messages SET is_read=?1 WHERE account_id=?2 AND folder=?3 AND uid=?4 AND NOT EXISTS(SELECT 1 FROM pending_mutations p WHERE p.message_id=messages.id)", params![read,state.account_id,state.folder_name,uid]).map_err(query_error)?;
+            for flag in flags {
+                tx.execute(
+                    "UPDATE messages SET
+                        is_read = CASE
+                            WHEN EXISTS (
+                                SELECT 1 FROM pending_mutations p
+                                WHERE (p.message_id = messages.id OR p.message_id IN (
+                                    SELECT message_id FROM message_folder_memberships m
+                                    WHERE m.account_id=?2 AND m.folder=?3 AND m.uid=?4
+                                )) AND p.payload_json LIKE '%Read%'
+                            ) THEN messages.is_read
+                            ELSE ?1
+                        END,
+                        is_starred = CASE
+                            WHEN EXISTS (
+                                SELECT 1 FROM pending_mutations p
+                                WHERE (p.message_id = messages.id OR p.message_id IN (
+                                    SELECT message_id FROM message_folder_memberships m
+                                    WHERE m.account_id=?2 AND m.folder=?3 AND m.uid=?4
+                                )) AND (p.payload_json LIKE '%Star%' OR p.payload_json LIKE '%Unstar%')
+                            ) THEN messages.is_starred
+                            ELSE ?5
+                        END
+                     WHERE (account_id=?2 AND folder=?3 AND uid=?4)
+                        OR id IN (
+                            SELECT message_id FROM message_folder_memberships
+                            WHERE account_id=?2 AND folder=?3 AND uid=?4
+                        )",
+                    params![
+                        if flag.is_read { 1 } else { 0 },
+                        state.account_id,
+                        state.folder_name,
+                        flag.uid,
+                        if flag.is_starred { 1 } else { 0 },
+                    ],
+                )
+                .map_err(query_error)?;
             }
             tx.execute("INSERT INTO folder_sync_state VALUES (?1,?2,?3,?4,?5,0) ON CONFLICT(account_id,folder_name) DO UPDATE SET uidvalidity=excluded.uidvalidity,uidnext=excluded.uidnext,highest_modseq=excluded.highest_modseq", params![state.account_id,state.folder_name,state.uidvalidity,state.uidnext,state.highest_modseq]).map_err(query_error)?;
             Ok(persisted)
+        })
+    }
+
+    /// Reconciles expired snooze deadlines by clearing them back to NULL.
+    /// Returns the message IDs that expired so decoupled workers can trigger view refresh.
+    pub fn reconcile_expired_snoozes(&self, now_ms: i64) -> Result<Vec<String>, StorageError> {
+        self.transaction(|tx| {
+            let mut stmt = tx
+                .prepare(
+                    "SELECT id FROM messages WHERE snooze_until_epoch_ms IS NOT NULL AND snooze_until_epoch_ms <= ?1",
+                )
+                .map_err(query_error)?;
+            let ids: Vec<String> = stmt
+                .query_map(params![now_ms], |r| r.get(0))
+                .map_err(query_error)?
+                .collect::<Result<_, _>>()
+                .map_err(query_error)?;
+            if !ids.is_empty() {
+                tx.execute(
+                    "UPDATE messages SET snooze_until_epoch_ms = NULL WHERE snooze_until_epoch_ms IS NOT NULL AND snooze_until_epoch_ms <= ?1",
+                    params![now_ms],
+                )
+                .map_err(query_error)?;
+            }
+            Ok(ids)
         })
     }
 

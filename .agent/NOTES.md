@@ -361,3 +361,18 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   - File picker reads local raster images only (JPEG/PNG/WebP, max 2MB, max 1024x1024).
   - Native worker decodes, strips EXIF/metadata, resizes to 128x128 thumbnail, and stores encrypted in `account_avatars`.
   - Accounts without custom images use deterministic initials and accent colors. Third-party fetches (Gravatar, OAuth avatars) are strictly forbidden under Rule P0.
+
+## Starred & Local Snoozed Contracts ([04.1.3])
+
+- **Starred Flag Synchronization:**
+  - `TriageActionDto::Star` and `Unstar` commit optimistic local updates (`is_starred = 1/0`) and enqueue durable `RemoteMutation` records.
+  - Desktop worker executes IMAP `UID STORE <uid> +/-FLAGS.SILENT (\Flagged)` via `ImapMutation::Star(bool)`.
+  - Inbound background flag delta updates via `commit_sync_batch` update `is_starred` using `MessageFlagsDelta` while guarding pending local mutations (`p.payload_json LIKE '%Star%' OR p.payload_json LIKE '%Unstar%'`).
+- **Local Snooze Lifecycle & Invariants:**
+  - `TriageActionDto::Snooze { until_epoch_ms }` natively validates deadlines: strictly rejects past timestamps (`until_epoch_ms <= now`) or deadlines beyond 1 year in the future (`until_epoch_ms > now + 365 days`).
+  - Snooze is 100% local metadata (`messages.snooze_until_epoch_ms`): it never generates remote outbox mutations or network requests.
+  - Archive or Trash mutations immediately clear `snooze_until_epoch_ms = NULL`.
+  - Explicit `TriageActionDto::Unsnooze` clears `snooze_until_epoch_ms = NULL`.
+  - `reconcile_expired_snoozes(now_ms)` runs on startup, during periodic outbox loops, and can be invoked manually; it resets expired deadlines to `NULL` and emits `SyncProgressEvent(ResyncRequired)` to refresh reactive views.
+  - Remote sync message upsert queries preserve `messages.snooze_until_epoch_ms` so remote refreshes never wipe local deadlines.
+  - `MessageRowSummary` / `MessageRowDto` and `MessageDetailDto` additively expose `#[serde(default)] is_starred: bool` and `#[serde(default)] snooze_until_epoch_ms: Option<i64>`.

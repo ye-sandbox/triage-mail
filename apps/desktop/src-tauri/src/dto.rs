@@ -74,6 +74,10 @@ pub enum TriageActionDto {
     Trash,
     Tag(String),
     OneClickUnsubscribe,
+    Star,
+    Unstar,
+    Snooze { until_epoch_ms: i64 },
+    Unsnooze,
 }
 
 /// Full message detail DTO returned by `cmd_get_message_body`.
@@ -88,6 +92,10 @@ pub struct MessageDetailDto {
     pub triage_result: DeterministicTriageResult,
     pub triage_badges: Vec<TriageBadge>,
     pub attachments_meta: Vec<AttachmentMeta>,
+    #[serde(default)]
+    pub is_starred: bool,
+    #[serde(default)]
+    pub snooze_until_epoch_ms: Option<i64>,
 }
 
 /// Returns a deterministic baseline health summary of all linked core workspace crates.
@@ -106,6 +114,8 @@ pub fn workspace_bridge_health() -> (&'static str, MessageRowSummary, TriageBadg
         tags: Vec::new(),
         folder_override: None,
         triage_badges: Vec::new(),
+        is_starred: false,
+        snooze_until_epoch_ms: None,
     };
     let sample_badge = TriageBadge::UnsubscribeAvailable {
         supports_one_click: true,

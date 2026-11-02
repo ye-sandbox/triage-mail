@@ -22,7 +22,8 @@ pub mod vec_ext;
 
 pub use connection::DatabaseKey;
 pub use models::{
-    AccountRecord, AttachmentRecord, FolderRecord, MessageFolderMembershipRecord, MessageRecord,
+    now_epoch_ms, AccountRecord, AttachmentRecord, FolderRecord, MessageFlagsDelta,
+    MessageFolderMembershipRecord, MessageRecord,
 };
 pub use repository::SqliteMailStore;
 
@@ -127,6 +128,10 @@ pub struct MessageRowSummary {
     pub folder_override: Option<String>,
     #[serde(default)]
     pub triage_badges: Vec<triage_ai::TriageBadge>,
+    #[serde(default)]
+    pub is_starred: bool,
+    #[serde(default)]
+    pub snooze_until_epoch_ms: Option<i64>,
 }
 
 /// Schema migration runner contract.

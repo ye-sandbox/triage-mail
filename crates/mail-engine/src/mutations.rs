@@ -17,10 +17,11 @@ pub enum MutationError {
     InvalidRequest,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImapMutation {
     Read(bool),
     MoveTo(SpecialFolderRole),
+    Star(bool),
 }
 
 pub struct ImapMutationRequest<'a> {
@@ -88,6 +89,18 @@ pub async fn execute_imap_mutation<S: AsyncRead + AsyncWrite + Unpin + Send>(
             checked_command(
                 session,
                 &format!("UID STORE {} {operator}FLAGS.SILENT (\\Seen)", request.uid),
+            )
+            .await?;
+            Ok(MutationOutcome::FlagsUpdated)
+        }
+        ImapMutation::Star(starred) => {
+            let operator = if starred { '+' } else { '-' };
+            checked_command(
+                session,
+                &format!(
+                    "UID STORE {} {operator}FLAGS.SILENT (\\Flagged)",
+                    request.uid
+                ),
             )
             .await?;
             Ok(MutationOutcome::FlagsUpdated)
@@ -360,6 +373,63 @@ mod wire_tests {
                 .unwrap(),
             b"abc"
         );
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn star_and_unstar_flags_are_stored_on_remote_imap() {
+        let (mut session, server) = server(vec![
+            (
+                "A0001 SELECT \"INBOX\"\r\n",
+                "* OK [UIDVALIDITY 42]\r\nA0001 OK selected\r\n",
+            ),
+            (
+                "A0002 UID STORE 10 +FLAGS.SILENT (\\Flagged)\r\n",
+                "A0002 OK stored\r\n",
+            ),
+            (
+                "A0003 SELECT \"INBOX\"\r\n",
+                "* OK [UIDVALIDITY 42]\r\nA0003 OK selected\r\n",
+            ),
+            (
+                "A0004 UID STORE 10 -FLAGS.SILENT (\\Flagged)\r\n",
+                "A0004 OK stored\r\n",
+            ),
+        ]);
+        let star_req = ImapMutationRequest {
+            folder: "INBOX",
+            uid: 10,
+            uidvalidity: 42,
+            action: ImapMutation::Star(true),
+        };
+        assert!(matches!(
+            execute_imap_mutation(
+                &mut session,
+                &ServerCapabilities::default(),
+                ProviderKind::GenericRfc,
+                &star_req
+            )
+            .await
+            .unwrap(),
+            MutationOutcome::FlagsUpdated
+        ));
+        let unstar_req = ImapMutationRequest {
+            folder: "INBOX",
+            uid: 10,
+            uidvalidity: 42,
+            action: ImapMutation::Star(false),
+        };
+        assert!(matches!(
+            execute_imap_mutation(
+                &mut session,
+                &ServerCapabilities::default(),
+                ProviderKind::GenericRfc,
+                &unstar_req
+            )
+            .await
+            .unwrap(),
+            MutationOutcome::FlagsUpdated
+        ));
         server.await.unwrap();
     }
 }
