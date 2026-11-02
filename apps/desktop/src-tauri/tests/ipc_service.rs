@@ -94,6 +94,19 @@ impl RemoteMail for FakeRemote {
     ) -> Result<bool, IpcError> {
         Ok(false)
     }
+    async fn discover_folders(
+        &self,
+        _: &AccountConfigDto,
+    ) -> Result<Vec<mail_engine::DiscoveredFolder>, IpcError> {
+        Ok(vec![mail_engine::DiscoveredFolder {
+            name: "INBOX".into(),
+            display_name: "INBOX".into(),
+            delimiter: Some("/".into()),
+            attributes: vec!["\\HasNoChildren".into()],
+            role: Some(mail_engine::SpecialFolderRole::Inbox),
+            is_selectable: true,
+        }])
+    }
 }
 struct FakeEmbedding;
 impl EmbeddingProvider for FakeEmbedding {
@@ -148,7 +161,7 @@ fn setup<R: RemoteMail + 'static>(
     )
 }
 fn record() -> MessageRecord {
-    MessageRecord { id:"m-1".into(),account_id:"acct-1".into(),folder:"INBOX".into(),uid:1,message_id_header:Some("<message@example.org>".into()),in_reply_to:None,references_header:None,subject:"Invoice update".into(),sender:"billing@example.org".into(),recipients:"reader@example.com".into(),received_at_epoch_ms:1,is_read:false,has_attachments:true,category_badge:Some("Financial".into()),triage_badges:vec![triage_ai::TriageBadge::UnsubscribeAvailable { supports_one_click: true }],raw_headers:"From: billing@example.org\r\nSubject: Invoice update\r\nList-Unsubscribe: <https://example.org/unsubscribe>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n".into(),text_body:Some("Invoice for order".into()),html_body:Some("<p>Invoice</p>".into()),list_unsubscribe:Some("<https://example.org/unsubscribe>".into()),list_unsubscribe_post:Some("List-Unsubscribe=One-Click".into()),one_click_unsubscribe_supported:true,created_at_epoch_ms:1,attachments:vec![AttachmentRecord { id:"a-1".into(),message_id:"m-1".into(),part_id:"2".into(),filename:"invoice.pdf".into(),content_type:"application/pdf".into(),size_bytes:3,content_id:None,is_inline:false }],tags:vec![] }
+    MessageRecord { id:"m-1".into(),account_id:"acct-1".into(),folder:"INBOX".into(),uid:1,message_id_header:Some("<message@example.org>".into()),in_reply_to:None,references_header:None,subject:"Invoice update".into(),sender:"billing@example.org".into(),recipients:"reader@example.com".into(),received_at_epoch_ms:1,is_read:false,has_attachments:true,category_badge:Some("Financial".into()),triage_badges:vec![triage_ai::TriageBadge::UnsubscribeAvailable { supports_one_click: true }],raw_headers:"From: billing@example.org\r\nSubject: Invoice update\r\nList-Unsubscribe: <https://example.org/unsubscribe>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n".into(),text_body:Some("Invoice for order".into()),html_body:Some("<p>Invoice</p>".into()),list_unsubscribe:Some("<https://example.org/unsubscribe>".into()),list_unsubscribe_post:Some("List-Unsubscribe=One-Click".into()),one_click_unsubscribe_supported:true,created_at_epoch_ms:1,attachments:vec![AttachmentRecord { id:"a-1".into(),message_id:"m-1".into(),part_id:"2".into(),filename:"invoice.pdf".into(),content_type:"application/pdf".into(),size_bytes:3,content_id:None,is_inline:false }],tags:vec![],is_starred:false,snooze_until_epoch_ms:None,provider_message_id:None }
 }
 async fn seed(service: &Arc<DesktopService>, store: &SqliteMailStore) {
     service
@@ -850,6 +863,7 @@ fn mock_parsed_message(uid: u32) -> mail_engine::ParsedInboundMessage {
     mail_engine::ParsedInboundMessage {
         uid,
         modseq: Some(10),
+        provider_message_id: None,
         message_id_header: Some(format!("<msg-{}@example.org>", uid)),
         in_reply_to: None,
         references: vec![],
@@ -950,6 +964,19 @@ async fn test_worker_sync_account_once_batches_and_commits_sequentially() {
         ) -> Result<bool, IpcError> {
             Ok(false)
         }
+        async fn discover_folders(
+            &self,
+            _: &AccountConfigDto,
+        ) -> Result<Vec<mail_engine::DiscoveredFolder>, IpcError> {
+            Ok(vec![mail_engine::DiscoveredFolder {
+                name: "INBOX".into(),
+                display_name: "INBOX".into(),
+                delimiter: Some("/".into()),
+                attributes: vec!["\\HasNoChildren".into()],
+                role: Some(mail_engine::SpecialFolderRole::Inbox),
+                is_selectable: true,
+            }])
+        }
     }
 
     let remote = Arc::new(BatchedRemote {
@@ -1040,6 +1067,19 @@ async fn test_worker_sync_account_once_retains_committed_batches_on_interruption
         ) -> Result<bool, IpcError> {
             Ok(false)
         }
+        async fn discover_folders(
+            &self,
+            _: &AccountConfigDto,
+        ) -> Result<Vec<mail_engine::DiscoveredFolder>, IpcError> {
+            Ok(vec![mail_engine::DiscoveredFolder {
+                name: "INBOX".into(),
+                display_name: "INBOX".into(),
+                delimiter: Some("/".into()),
+                attributes: vec!["\\HasNoChildren".into()],
+                role: Some(mail_engine::SpecialFolderRole::Inbox),
+                is_selectable: true,
+            }])
+        }
     }
 
     let remote = Arc::new(FailingBatchRemote {
@@ -1095,4 +1135,107 @@ async fn sync_worker_tracks_embedding_failure_telemetry() {
         }
     }
     assert_eq!(error_count, 1);
+}
+
+#[tokio::test]
+async fn test_desktop_service_discovers_and_lists_folders() {
+    struct FolderDiscoveryRemote;
+    #[async_trait]
+    impl RemoteMail for FolderDiscoveryRemote {
+        async fn fetch_attachment(
+            &self,
+            _: &AccountConfigDto,
+            _: &str,
+            _: u32,
+            _: &str,
+            _: u32,
+        ) -> Result<Vec<u8>, IpcError> {
+            Ok(vec![])
+        }
+        async fn mutate(
+            &self,
+            _: &AccountConfigDto,
+            _: &RemoteMutation,
+        ) -> Result<MutationOutcome, IpcError> {
+            Ok(MutationOutcome::FlagsUpdated)
+        }
+        async fn unsubscribe(&self, _: &UnsubscribeDescriptor) -> Result<(), IpcError> {
+            Ok(())
+        }
+        async fn sync(
+            &self,
+            _: &AccountConfigDto,
+            checkpoint: &FolderSyncState,
+            _: &dyn SyncEventSink,
+        ) -> Result<IncrementalSyncResult, IpcError> {
+            Ok(IncrementalSyncResult {
+                folder: checkpoint.folder_name.clone(),
+                uidvalidity: 100,
+                uidvalidity_reset: false,
+                new_last_uid: 0,
+                highest_modseq: Some(1),
+                new_messages: vec![],
+                flag_deltas: vec![],
+            })
+        }
+        async fn wait_for_change(
+            &self,
+            _: &AccountConfigDto,
+            _: &FolderSyncState,
+        ) -> Result<bool, IpcError> {
+            Ok(false)
+        }
+        async fn discover_folders(
+            &self,
+            _: &AccountConfigDto,
+        ) -> Result<Vec<mail_engine::DiscoveredFolder>, IpcError> {
+            Ok(vec![
+                mail_engine::DiscoveredFolder {
+                    name: "INBOX".into(),
+                    display_name: "INBOX".into(),
+                    delimiter: Some("/".into()),
+                    attributes: vec!["\\HasNoChildren".into()],
+                    role: Some(mail_engine::SpecialFolderRole::Inbox),
+                    is_selectable: true,
+                },
+                mail_engine::DiscoveredFolder {
+                    name: "[Gmail]/Sent Mail".into(),
+                    display_name: "Sent Mail".into(),
+                    delimiter: Some("/".into()),
+                    attributes: vec!["\\HasNoChildren".into(), "\\Sent".into()],
+                    role: Some(mail_engine::SpecialFolderRole::Sent),
+                    is_selectable: true,
+                },
+                mail_engine::DiscoveredFolder {
+                    name: "[Gmail]".into(),
+                    display_name: "[Gmail]".into(),
+                    delimiter: Some("/".into()),
+                    attributes: vec!["\\Noselect".into(), "\\HasChildren".into()],
+                    role: None,
+                    is_selectable: false,
+                },
+            ])
+        }
+    }
+
+    let remote = Arc::new(FolderDiscoveryRemote);
+    let (service, _store, _) = setup(remote);
+    service
+        .add_account(config("acct-1"), credentials())
+        .await
+        .unwrap();
+
+    let count = triage_mail_desktop_lib::worker::sync_account_once(&service, &config("acct-1"))
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+
+    let folders = service.list_folders("acct-1".into()).await.unwrap();
+    assert_eq!(folders.len(), 3);
+    assert_eq!(folders[0].folder_name, "INBOX");
+    assert_eq!(folders[0].role, "inbox");
+    assert_eq!(folders[1].folder_name, "[Gmail]/Sent Mail");
+    assert_eq!(folders[1].role, "sent");
+    assert_eq!(folders[2].folder_name, "[Gmail]");
+    assert!(!folders[2].is_selectable);
 }

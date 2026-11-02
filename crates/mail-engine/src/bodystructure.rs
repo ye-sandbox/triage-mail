@@ -813,6 +813,7 @@ pub fn assemble_parsed_inbound_message(
     Ok(ParsedInboundMessage {
         uid,
         modseq,
+        provider_message_id: None,
         message_id_header,
         in_reply_to,
         references,

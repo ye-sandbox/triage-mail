@@ -93,7 +93,7 @@ pub async fn execute_incremental_sync<S: AsyncRead + AsyncWrite + Unpin + Send>(
                 Some(raw.text_bytes.as_slice())
             };
 
-            if let Ok(parsed) = crate::bodystructure::assemble_parsed_inbound_message(
+            if let Ok(mut parsed) = crate::bodystructure::assemble_parsed_inbound_message(
                 raw.uid,
                 raw.modseq,
                 &raw.header_bytes,
@@ -101,6 +101,9 @@ pub async fn execute_incremental_sync<S: AsyncRead + AsyncWrite + Unpin + Send>(
                 &raw.sections,
                 fallback_body,
             ) {
+                if parsed.provider_message_id.is_none() {
+                    parsed.provider_message_id = raw.provider_message_id;
+                }
                 parsed_messages.push(parsed);
             }
         }

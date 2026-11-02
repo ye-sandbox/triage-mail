@@ -598,6 +598,7 @@ mod tests {
                 Ok(vec![ParsedInboundMessage {
                     uid: last_uid + 1,
                     modseq: Some(10),
+                    provider_message_id: None,
                     message_id_header: Some("<poll-1@example.com>".to_string()),
                     in_reply_to: None,
                     references: Vec::new(),

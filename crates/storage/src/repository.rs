@@ -139,9 +139,11 @@ impl SqliteMailStore {
                 id, account_id, folder, uid, message_id_header, in_reply_to, references_header,
                 subject, sender, recipients, received_at_epoch_ms, is_read, has_attachments,
                 category_badge, triage_badges, raw_headers, text_body, html_body, list_unsubscribe,
-                list_unsubscribe_post, one_click_unsubscribe_supported, created_at_epoch_ms
+                list_unsubscribe_post, one_click_unsubscribe_supported, created_at_epoch_ms,
+                is_starred, snooze_until_epoch_ms, provider_message_id
              ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
+                ?23, ?24, ?25
              ) ON CONFLICT(account_id, folder, uid) DO UPDATE SET
                 subject = excluded.subject,
                 sender = excluded.sender,
@@ -158,7 +160,10 @@ impl SqliteMailStore {
                 html_body = excluded.html_body,
                 list_unsubscribe = excluded.list_unsubscribe,
                 list_unsubscribe_post = excluded.list_unsubscribe_post,
-                one_click_unsubscribe_supported = excluded.one_click_unsubscribe_supported;",
+                one_click_unsubscribe_supported = excluded.one_click_unsubscribe_supported,
+                is_starred = excluded.is_starred,
+                snooze_until_epoch_ms = excluded.snooze_until_epoch_ms,
+                provider_message_id = excluded.provider_message_id;",
             rusqlite::params![
                 message.id,
                 message.account_id,
@@ -181,7 +186,10 @@ impl SqliteMailStore {
                 message.list_unsubscribe,
                 message.list_unsubscribe_post,
                 if message.one_click_unsubscribe_supported { 1 } else { 0 },
-                message.created_at_epoch_ms
+                message.created_at_epoch_ms,
+                if message.is_starred { 1 } else { 0 },
+                message.snooze_until_epoch_ms,
+                message.provider_message_id,
             ],
         )
         .map_err(|e| StorageError::Query(format!("failed to insert message: {e}")))?;
@@ -287,7 +295,8 @@ impl SqliteMailStore {
                 "SELECT id, account_id, folder, uid, message_id_header, in_reply_to, references_header,
                         subject, sender, recipients, received_at_epoch_ms, is_read, has_attachments,
                         category_badge, triage_badges, raw_headers, text_body, html_body, list_unsubscribe,
-                        list_unsubscribe_post, one_click_unsubscribe_supported, created_at_epoch_ms
+                        list_unsubscribe_post, one_click_unsubscribe_supported, created_at_epoch_ms,
+                        is_starred, snooze_until_epoch_ms, provider_message_id
                  FROM messages WHERE id = ?1;",
             )
             .map_err(|e| StorageError::Query(format!("failed to prepare select message: {e}")))?;
@@ -396,6 +405,16 @@ impl SqliteMailStore {
                 .map_err(|e| StorageError::Query(e.to_string()))?,
             attachments,
             tags,
+            is_starred: row
+                .get::<_, i64>(22)
+                .map_err(|e| StorageError::Query(e.to_string()))?
+                != 0,
+            snooze_until_epoch_ms: row
+                .get(23)
+                .map_err(|e| StorageError::Query(e.to_string()))?,
+            provider_message_id: row
+                .get(24)
+                .map_err(|e| StorageError::Query(e.to_string()))?,
         }))
     }
 }

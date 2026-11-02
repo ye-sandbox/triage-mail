@@ -57,6 +57,9 @@ fn create_sample_message(
             is_inline: false,
         }],
         tags: vec!["boleto".to_string(), "priority".to_string()],
+        is_starred: false,
+        snooze_until_epoch_ms: None,
+        provider_message_id: None,
     }
 }
 
@@ -744,4 +747,198 @@ fn test_parallel_hybrid_search_and_fallback_on_disk() {
         );
         drop(lock_guard);
     }
+}
+
+#[test]
+fn test_folders_persistence_and_catalog_listing() {
+    let key = DatabaseKey::from_bytes([91u8; 32]);
+    let store =
+        SqliteMailStore::open_in_memory(&key, storage::FtsTokenizerMode::Unicode61RemoveDiacritics)
+            .expect("store init");
+    let account_id = "acct-folders-1";
+
+    store
+        .insert_account(&AccountRecord {
+            id: account_id.to_string(),
+            email: "user@example.com".to_string(),
+            auth_type: "app_password".to_string(),
+            created_at_epoch_ms: 1000,
+            updated_at_epoch_ms: 1000,
+        })
+        .expect("insert account");
+
+    let folders = vec![
+        storage::FolderRecord {
+            account_id: account_id.to_string(),
+            folder_name: "Archive".to_string(),
+            display_name: "Archive".to_string(),
+            delimiter: Some("/".to_string()),
+            role: "archive".to_string(),
+            is_selectable: true,
+            total_messages: Some(42),
+            unread_messages: Some(0),
+            updated_at_epoch_ms: 1000,
+        },
+        storage::FolderRecord {
+            account_id: account_id.to_string(),
+            folder_name: "INBOX".to_string(),
+            display_name: "Inbox".to_string(),
+            delimiter: Some("/".to_string()),
+            role: "inbox".to_string(),
+            is_selectable: true,
+            total_messages: Some(10),
+            unread_messages: Some(3),
+            updated_at_epoch_ms: 1000,
+        },
+        storage::FolderRecord {
+            account_id: account_id.to_string(),
+            folder_name: "Spam".to_string(),
+            display_name: "Spam".to_string(),
+            delimiter: Some("/".to_string()),
+            role: "spam".to_string(),
+            is_selectable: true,
+            total_messages: None,
+            unread_messages: None,
+            updated_at_epoch_ms: 1000,
+        },
+    ];
+
+    store
+        .save_folders(account_id, &folders)
+        .expect("save folders");
+
+    let listed = store.list_folders(account_id).expect("list folders");
+    assert_eq!(listed.len(), 3);
+    assert_eq!(listed[0].role, "inbox", "Inbox must sort first in list");
+    assert_eq!(listed[0].total_messages, Some(10));
+    assert_eq!(listed[0].unread_messages, Some(3));
+}
+
+#[test]
+fn test_same_account_deduplication_and_cross_account_isolation() {
+    let key = DatabaseKey::from_bytes([92u8; 32]);
+    let store =
+        SqliteMailStore::open_in_memory(&key, storage::FtsTokenizerMode::Unicode61RemoveDiacritics)
+            .expect("store init");
+
+    let acct_a = "acct-dedup-a";
+    let acct_b = "acct-dedup-b";
+
+    for acct in [acct_a, acct_b] {
+        store
+            .insert_account(&AccountRecord {
+                id: acct.to_string(),
+                email: format!("{acct}@example.com"),
+                auth_type: "oauth2".to_string(),
+                created_at_epoch_ms: 1000,
+                updated_at_epoch_ms: 1000,
+            })
+            .expect("insert account");
+    }
+
+    let mut msg_inbox =
+        create_sample_message("msg-a-1", acct_a, "INBOX", 101, "Same Subject", "Body");
+    msg_inbox.provider_message_id = Some("gmail-provider-999".to_string());
+    msg_inbox.message_id_header = Some("<unique-rfc-id@example.com>".to_string());
+
+    let state_inbox = storage::FolderSyncState {
+        account_id: acct_a.to_string(),
+        folder_name: "INBOX".to_string(),
+        uidvalidity: 10,
+        uidnext: 102,
+        highest_modseq: None,
+    };
+
+    let batch1 = store
+        .commit_sync_batch(&[msg_inbox.clone()], &[], &state_inbox, false)
+        .expect("batch 1 commit");
+    assert_eq!(batch1.len(), 1, "Initial message should be newly persisted");
+
+    // Message arrives in All Mail for acct_a with same provider_message_id but different folder/UID
+    let mut msg_all_mail = create_sample_message(
+        "msg-a-all",
+        acct_a,
+        "[Gmail]/All Mail",
+        202,
+        "Same Subject",
+        "Body",
+    );
+    msg_all_mail.provider_message_id = Some("gmail-provider-999".to_string());
+    msg_all_mail.message_id_header = Some("<unique-rfc-id@example.com>".to_string());
+
+    let state_all = storage::FolderSyncState {
+        account_id: acct_a.to_string(),
+        folder_name: "[Gmail]/All Mail".to_string(),
+        uidvalidity: 20,
+        uidnext: 203,
+        highest_modseq: None,
+    };
+
+    let batch2 = store
+        .commit_sync_batch(&[msg_all_mail], &[], &state_all, false)
+        .expect("batch 2 commit");
+    assert_eq!(batch2.len(), 1);
+    assert_eq!(
+        batch2[0].id, "msg-a-1",
+        "Deduplicated message resolves to canonical message ID"
+    );
+
+    // Verify memberships for acct_a
+    let folders_for_msg = store.get_message_folders("msg-a-1").expect("get folders");
+    assert_eq!(folders_for_msg, vec!["INBOX", "[Gmail]/All Mail"]);
+
+    let found_inbox = store
+        .find_membership(acct_a, "INBOX", 101)
+        .expect("find membership");
+    assert_eq!(found_inbox, Some("msg-a-1".to_string()));
+
+    let found_all = store
+        .find_membership(acct_a, "[Gmail]/All Mail", 202)
+        .expect("find membership");
+    assert_eq!(found_all, Some("msg-a-1".to_string()));
+
+    // SEGREGATION INVARIANT: acct_b ingests a message with identical provider_message_id
+    let mut msg_b = create_sample_message("msg-b-1", acct_b, "INBOX", 55, "Same Subject", "Body");
+    msg_b.provider_message_id = Some("gmail-provider-999".to_string());
+    msg_b.message_id_header = Some("<unique-rfc-id@example.com>".to_string());
+
+    let state_b = storage::FolderSyncState {
+        account_id: acct_b.to_string(),
+        folder_name: "INBOX".to_string(),
+        uidvalidity: 30,
+        uidnext: 56,
+        highest_modseq: None,
+    };
+
+    let batch_b = store
+        .commit_sync_batch(&[msg_b], &[], &state_b, false)
+        .expect("batch b commit");
+    assert_eq!(
+        batch_b.len(),
+        1,
+        "Cross-account message MUST be treated as separate and newly persisted"
+    );
+
+    assert_eq!(
+        store.find_membership(acct_b, "INBOX", 55).unwrap(),
+        Some("msg-b-1".to_string())
+    );
+    assert_eq!(store.get_message_folders("msg-b-1").unwrap(), vec!["INBOX"]);
+
+    // Test UIDVALIDITY reset on INBOX for acct_a:
+    // Memberships in INBOX are wiped, but message msg-a-1 SURVIVES because it has membership in [Gmail]/All Mail!
+    store
+        .commit_sync_batch(&[], &[], &state_inbox, true)
+        .expect("reset inbox");
+    assert_eq!(store.find_membership(acct_a, "INBOX", 101).unwrap(), None);
+    assert_eq!(
+        store
+            .find_membership(acct_a, "[Gmail]/All Mail", 202)
+            .unwrap(),
+        Some("msg-a-1".to_string())
+    );
+    assert!(
+        store.get_message_by_id("msg-a-1").unwrap().is_some(),
+        "Message must survive as long as it has memberships"
+    );
 }

@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use crate::{FtsTokenizerMode, StorageError};
 
 /// Current database schema version.
-pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 /// Executes database schema migrations idempotently.
 pub struct SchemaMigrator {
@@ -47,6 +47,11 @@ impl SchemaMigrator {
 
         if current_version < 1 {
             self.apply_v1(&tx)?;
+            applied_count += 1;
+        }
+
+        if current_version < 2 {
+            self.apply_v2(&tx)?;
             applied_count += 1;
         }
 
@@ -235,6 +240,126 @@ impl SchemaMigrator {
         self.record_migration(tx, 1, "001_canonical_schema")?;
         Ok(())
     }
+
+    fn apply_v2(&self, tx: &rusqlite::Transaction<'_>) -> Result<(), StorageError> {
+        // INVARIANT: Append-only Migration v2 (ADR-010). Adds folder catalog, message folder memberships,
+        // message flag and snooze columns, and encrypted account avatars.
+        tx.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS folders (
+                account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                folder_name TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                delimiter TEXT,
+                role TEXT NOT NULL DEFAULT 'other',
+                is_selectable INTEGER NOT NULL DEFAULT 1,
+                total_messages INTEGER,
+                unread_messages INTEGER,
+                updated_at_epoch_ms INTEGER NOT NULL,
+                PRIMARY KEY (account_id, folder_name)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_folders_account_role
+            ON folders(account_id, role);
+
+            CREATE TABLE IF NOT EXISTS message_folder_memberships (
+                account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                folder TEXT NOT NULL,
+                uid INTEGER NOT NULL,
+                message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+                created_at_epoch_ms INTEGER NOT NULL,
+                PRIMARY KEY (account_id, folder, uid)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_memberships_message_id
+            ON message_folder_memberships(message_id);
+
+            CREATE INDEX IF NOT EXISTS idx_memberships_account_folder
+            ON message_folder_memberships(account_id, folder);
+
+            CREATE TABLE IF NOT EXISTS account_avatars (
+                account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+                avatar_bytes BLOB NOT NULL,
+                mime_type TEXT NOT NULL,
+                width INTEGER NOT NULL,
+                height INTEGER NOT NULL,
+                updated_at_epoch_ms INTEGER NOT NULL
+            );
+            ",
+        )
+        .map_err(|e| StorageError::Migration(format!("failed to execute v2 tables: {e}")))?;
+
+        // Conditionally add columns to messages if they don't already exist
+        let columns: Vec<String> = tx
+            .prepare("PRAGMA table_info(messages);")
+            .map_err(|e| {
+                StorageError::Migration(format!("failed to inspect messages columns: {e}"))
+            })?
+            .query_map([], |row| row.get(1))
+            .map_err(|e| StorageError::Migration(format!("failed to query messages columns: {e}")))?
+            .collect::<Result<_, _>>()
+            .map_err(|e| {
+                StorageError::Migration(format!("failed to collect messages columns: {e}"))
+            })?;
+
+        if !columns.iter().any(|c| c == "is_starred") {
+            tx.execute(
+                "ALTER TABLE messages ADD COLUMN is_starred INTEGER NOT NULL DEFAULT 0;",
+                [],
+            )
+            .map_err(|e| {
+                StorageError::Migration(format!("failed to add is_starred column: {e}"))
+            })?;
+        }
+
+        if !columns.iter().any(|c| c == "snooze_until_epoch_ms") {
+            tx.execute(
+                "ALTER TABLE messages ADD COLUMN snooze_until_epoch_ms INTEGER;",
+                [],
+            )
+            .map_err(|e| {
+                StorageError::Migration(format!("failed to add snooze_until_epoch_ms column: {e}"))
+            })?;
+        }
+
+        if !columns.iter().any(|c| c == "provider_message_id") {
+            tx.execute(
+                "ALTER TABLE messages ADD COLUMN provider_message_id TEXT;",
+                [],
+            )
+            .map_err(|e| {
+                StorageError::Migration(format!("failed to add provider_message_id column: {e}"))
+            })?;
+        }
+
+        tx.execute_batch(
+            "
+            CREATE INDEX IF NOT EXISTS idx_messages_account_starred_received
+            ON messages(account_id, is_starred, received_at_epoch_ms DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_messages_snooze_until
+            ON messages(snooze_until_epoch_ms);
+
+            CREATE INDEX IF NOT EXISTS idx_messages_account_provider_msgid
+            ON messages(account_id, provider_message_id);
+
+            -- Backfill memberships for messages already existing in v1
+            INSERT OR IGNORE INTO message_folder_memberships (account_id, folder, uid, message_id, created_at_epoch_ms)
+            SELECT account_id, folder, uid, id, created_at_epoch_ms FROM messages;
+
+            -- Backfill folders from folder_sync_state
+            INSERT OR IGNORE INTO folders (account_id, folder_name, display_name, delimiter, role, is_selectable, total_messages, unread_messages, updated_at_epoch_ms)
+            SELECT account_id, folder_name, folder_name, '/',
+                CASE WHEN lower(folder_name) = 'inbox' THEN 'inbox' ELSE 'other' END,
+                1, NULL, NULL, updated_at_epoch_ms
+            FROM folder_sync_state;
+            ",
+        )
+        .map_err(|e| StorageError::Migration(format!("failed to execute v2 indices and backfill: {e}")))?;
+
+        self.record_migration(tx, 2, "002_account_mailboxes_v2")?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -249,7 +374,7 @@ mod tests {
 
         let migrator = SchemaMigrator::new(FtsTokenizerMode::Unicode61RemoveDiacritics);
         let applied_first = migrator.migrate(&mut conn).expect("first migration");
-        assert_eq!(applied_first, 1);
+        assert_eq!(applied_first, 2);
 
         let applied_second = migrator.migrate(&mut conn).expect("second migration");
         assert_eq!(applied_second, 0, "subsequent migration must be a no-op");
@@ -273,6 +398,22 @@ mod tests {
         assert!(tables.contains(&"message_folder_overrides".to_string()));
         assert!(tables.contains(&"messages_fts".to_string()));
         assert!(tables.contains(&"vec_messages".to_string()));
+        assert!(tables.contains(&"folders".to_string()));
+        assert!(tables.contains(&"message_folder_memberships".to_string()));
+        assert!(tables.contains(&"account_avatars".to_string()));
         assert!(!tables.contains(&"vec_messages_by_account".to_string()));
+
+        // Verify messages columns
+        let columns: Vec<String> = conn
+            .prepare("PRAGMA table_info(messages);")
+            .unwrap()
+            .query_map([], |r| r.get(1))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert!(columns.contains(&"is_starred".to_string()));
+        assert!(columns.contains(&"snooze_until_epoch_ms".to_string()));
+        assert!(columns.contains(&"provider_message_id".to_string()));
     }
 }

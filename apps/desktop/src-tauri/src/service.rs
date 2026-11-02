@@ -223,6 +223,17 @@ impl DesktopService {
         .await
     }
 
+    pub async fn list_folders(
+        self: &Arc<Self>,
+        account_id: String,
+    ) -> Result<Vec<FolderDto>, IpcError> {
+        self.blocking(move |s| {
+            let folders = s.store.list_folders(&account_id).map_err(storage_error)?;
+            Ok(folders.into_iter().map(FolderDto::from).collect())
+        })
+        .await
+    }
+
     pub async fn search_messages(
         self: &Arc<Self>,
         query: SearchQueryDto,

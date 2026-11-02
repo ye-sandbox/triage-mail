@@ -142,6 +142,14 @@ pub async fn cmd_list_accounts(
 }
 
 #[tauri::command]
+pub async fn cmd_list_folders(
+    state: State<'_, RuntimeState>,
+    account_id: String,
+) -> Result<Vec<FolderDto>, IpcError> {
+    state.initialize(None).await?.list_folders(account_id).await
+}
+
+#[tauri::command]
 pub async fn cmd_add_account(
     state: State<'_, RuntimeState>,
     config: AccountConfigDto,
@@ -348,6 +356,7 @@ pub fn run() {
             cmd_summarize_message,
             cmd_unlock_vault,
             cmd_list_accounts,
+            cmd_list_folders,
             cmd_add_account,
             cmd_authorize_account,
             cmd_cancel_authorization,
