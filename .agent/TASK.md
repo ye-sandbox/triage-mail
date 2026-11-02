@@ -39,6 +39,20 @@ A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
 
 ---
 
+## Follow-up [04.1]: Inbox Settings Cleanup (2026-11-02)
+
+- **Status:** IMPLEMENTED; full workspace validation blocked by concurrent discovery work.
+- **User-requested scope:** Remove redundant Accounts and Settings buttons from message
+  actions; keep the responsive settings gear and manage accounts inside its modal.
+- **Commit:** `ff23564` (`fix(inbox): centralize account management in settings`).
+- **Validation:** Desktop check (zero errors/warnings), all 126 frontend tests, production
+  build, updated onboarding regression, Svelte syntax invariant, and diff check passed.
+  Rust formatting reports discovery changes; Clippy reports discovery XML type errors.
+  Cargo check/test were stopped after that blocker; existing [02.1] work and local
+  edits remain owned by that task.
+
+---
+
 ## Future Backlog / Ideas (Unprioritized)
 
 - Headless CLI / Docker daemon runner consuming `crates/*` without GUI
