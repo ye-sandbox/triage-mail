@@ -224,8 +224,39 @@ UIDVALIDITY rebuilds do not trigger rules. Saving or enabling a rule never chang
 mail. Select an inbox message and use **Simulate selected messages** to inspect matches
 and planned actions without changing mail. Missing cached facts never match positive
 conditions, attachment bytes are never fetched, and a sender match does not authenticate
-identity. Processing requires the app to be running. Notifications and webhooks remain
-separate future work.
+identity. Processing requires the app to be running. Alert destinations can also be selected
+as rule actions after configuration.
+
+### Local notifications and webhook alerts
+
+Open **Settings → Alerts** to add a destination. Destinations start disabled. Local notices
+are generic and may appear on the lock screen; this build uses the Linux desktop notification
+service and reports unavailable/denied service explicitly. Other operating systems currently
+report unavailable. Webhooks accept public DNS HTTPS endpoints on port 443, including public
+user-owned n8n workflows; private-network, loopback, IP-literal and HTTP endpoints are unsupported.
+Complete URLs and optional bearer credentials are stored only in vault; lists show public origins.
+
+Select exported fields and confirm the displayed destination before enabling it, then choose
+it in a rule. Defaults contain only schema version, opaque event ID, event timestamp and
+truncation status. Sender, subject, account ID, excerpt, boleto amounts/dates, attachment
+metadata and plain-text body each require selection. Body/excerpt may expose verification
+or payment data. Body export is limited to 6,000 UTF-8 bytes, excerpts to 512 bytes, metadata
+collections to 16 entries and JSON to 64 KiB; truncation is explicit. HTML, raw headers,
+attachment bytes and raw OTP/Pix extraction values are excluded. Missing content is never fetched.
+
+**Test delivery** sends a synthetic event only after confirmation. **Replay selected messages**
+requires explicit message/destination selection and confirmation; it sends current selected
+fields without applying mail actions. Simulation never sends. Initial history never alerts.
+Changing/disablement cancels pending destination revisions; enabling never replays canceled work.
+Deleting a message/account cancels its pending alerts, including cache deletion after some moves.
+
+Keep the app active and unlocked for processing; a runnable headless CLI is future work.
+Retries use stable event IDs/Idempotency-Key, bounded backoff and rate limits (six starts/minute
+per destination), with at most eight attempts/24 hours. Timeouts/crashes can produce duplicates;
+receivers should deduplicate by event ID. Accepted means receiver/service acceptance, not human
+visibility. Disabling waits for an already-started request (at most ten seconds), which cannot
+be recalled. Execution history contains safe statuses/counts/times, retained up to 30 days and
+1,000 records per destination. Completed payloads are cleared. No live test is sent automatically.
 
 ## Development
 

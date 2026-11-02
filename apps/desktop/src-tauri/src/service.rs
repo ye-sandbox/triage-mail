@@ -102,6 +102,8 @@ pub struct DesktopService {
     pub(crate) settings_gate: Mutex<()>,
     pub(crate) download_gate: tokio::sync::Mutex<()>,
     pub(crate) mutation_gate: tokio::sync::Mutex<()>,
+    pub(crate) alert_gate: tokio::sync::Mutex<()>,
+    pub(crate) alert_adapter: Arc<dyn crate::alerts::AlertTransport>,
     pub(crate) outbox_gate: tokio::sync::Mutex<()>,
 }
 
@@ -124,6 +126,8 @@ impl DesktopService {
             settings_gate: Mutex::new(()),
             download_gate: tokio::sync::Mutex::new(()),
             mutation_gate: tokio::sync::Mutex::new(()),
+            alert_gate: tokio::sync::Mutex::new(()),
+            alert_adapter: Arc::new(crate::alerts::NativeAlerts),
             outbox_gate: tokio::sync::Mutex::new(()),
         })
     }

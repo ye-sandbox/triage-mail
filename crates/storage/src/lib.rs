@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use vault::VaultError;
 
+pub mod alerts;
 pub mod avatars;
 pub mod connection;
 pub mod desktop;

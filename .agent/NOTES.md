@@ -553,3 +553,41 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - All core code stays headless; desktop composes RuleObserver through TriageEventHook
   once per committed batch and retries bounded durable jobs in the existing outbox loop.
   Errors emit fixed MutationFailed feedback. No network policy exception is introduced.
+
+## Consent-Bound Alerts ([03.6] / ADR-013)
+
+- `triage_ai::alerts` owns destination/field/outcome contracts, a headless DeliveryAdapter
+  and bounded allowlist serialization. `RuleAction::Alert(String)` is additive to v1 rules.
+  The planner deduplicates destinations; rule order/stop semantics remain authoritative.
+- Migration v4 adds `alert_destinations`, `alert_deleted_ids`, `alert_secret_intents`,
+  `alert_dedup` and `alert_jobs`; rule_jobs gains default-empty destination revision/event
+  snapshots. Pre-upgrade jobs cannot send alerts. New ingestion freezes enabled destination
+  revisions; enqueue and rule completion/mutations share one transaction. Automatic markers
+  survive history pruning until account/destination deletion; ID tombstones prevent reuse.
+- `cmd_list_alert_destinations`, `cmd_save_alert_destination(destination,secret?,consent)`,
+  `cmd_delete_alert_destination(id,revision)`, `cmd_alert_history`, `cmd_test_alert(id,revision,consent)`,
+  `cmd_replay_alert(ids,destination,revision,consent)` and `cmd_local_alert_available` are additive.
+  DTOs use snake_case fields and existing camelCase invoke argument conventions. Complete
+  URL/bearer material is input-only with fixed deserialization errors; list/save returns safe
+  metadata/public origin and presence flags. Enabling confirms origin and selected fields.
+- Desktop gates CRUD/dispatch against concurrent configuration changes; stale test/replay
+  confirmation fails. Vault immutable secret revisions are registered in SQL before writing,
+  referenced atomically and cleaned when unreferenced. Cleanup retries after restart.
+  Changing any destination revision cancels pending work; re-enabling never replays it.
+- Queue leases/rate gates persist across restart. One start/ten seconds/destination; desktop
+  runs one globally serial attempt per worker tick, <=10s each. Up to eight attempts/24h,
+  bounded jitter/backoff and Retry-After. 2xx means accepted, transport/408/429/5xx retry,
+  redirects/other 4xx fail. Event ID/Idempotency-Key stays stable; duplicate receipt is possible.
+- HTTPS public DNS/443 only; pinned validated address sets, verified TLS1.2+, no inherited
+  proxy or redirects. DNS lookup occurs only during consented dispatch. Responses are not
+  read into payload/history. Full URL and auth live only in vault; no private-network bypass.
+- Payload defaults to schema/event/time/truncation. Optional fields are allowlisted; bodies
+  bounded to 6,000 bytes, excerpts 512, attachment/extraction collections 16. Raw HTML/headers,
+  OTP/Pix badges and binary attachments never export implicitly or trigger lazy fetches.
+  Terminal jobs clear payload; history is <=30 days/1,000 records per destination, DTO <=200.
+  Account/message removal deletes jobs; compact automatic deduplication survives message removal.
+- EN/PT-BR Alerts settings supports destination CRUD/consent, field previews, explicit test/replay
+  confirmation and safe history. Rule editor selects destinations, including removal of stale
+  references. Credentials remain detached inputs with cleanup; modal dirty/busy guards persist.
+  Local notices use Linux D-Bus and generic text only; unavailable/denied platforms fail visibly.
+  Runtime must stay unlocked/active. No runnable headless CLI or provider-specific connector added.

@@ -9,6 +9,7 @@
 //!   is scheduled for v0.2.
 //! - Tier 3 (Optional Generative LLM): Local Ollama (`http://127.0.0.1:11434`) or explicit BYOK.
 
+pub mod alerts;
 pub mod boleto;
 pub mod classifier;
 pub mod embeddings;

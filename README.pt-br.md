@@ -227,8 +227,42 @@ acionam regras. Salvar ou ativar uma regra nunca altera mensagens antigas. Selec
 mensagem na caixa de entrada e use **Simular mensagens selecionadas** para conferir
 correspondências e ações sem alterar mensagens. Dados ausentes no cache não satisfazem
 condições positivas, anexos binários nunca são baixados e uma correspondência de remetente
-não autentica identidade. O processamento exige o aplicativo em execução. Notificações
-e webhooks permanecem como trabalho futuro separado.
+não autentica identidade. O processamento exige o aplicativo em execução. Após configurar
+os destinos de alerta, eles também podem ser selecionados como ações das regras.
+
+### Notificações locais e alertas por webhook
+
+Abra **Configurações → Alertas** para adicionar um destino. Destinos começam desativados.
+Notificações locais são genéricas e podem aparecer na tela bloqueada; esta versão usa o serviço
+de notificações do desktop Linux e informa indisponibilidade/negação explicitamente. Outros
+sistemas operacionais atualmente retornam indisponível. Webhooks aceitam hosts DNS públicos
+HTTPS na porta 443, incluindo fluxos n8n públicos próprios; rede privada, loopback, IP literal
+e HTTP não são suportados. URLs completas e credenciais bearer opcionais ficam apenas no vault;
+as listas exibem origens públicas.
+
+Selecione os campos exportados e confirme o destino exibido antes de ativá-lo; depois, selecione-o
+em uma regra. Por padrão, o payload contém somente versão do esquema, ID opaco do evento, data/hora
+e indicação de truncamento. Remetente, assunto, ID da conta, trecho, valores/vencimentos de boletos,
+metadados de anexos e corpo em texto simples exigem seleção individual. Corpo/trecho podem expor
+dados de verificação ou pagamento. O corpo limita-se a 6.000 bytes UTF-8, trechos a 512 bytes,
+coleções a 16 itens e JSON a 64 KiB, com truncamento explícito. HTML, cabeçalhos brutos, anexos
+binários e valores brutos de OTP/Pix extraídos são excluídos. Conteúdo ausente nunca é buscado.
+
+**Testar entrega** envia um evento sintético somente após confirmação. **Reenviar mensagens
+selecionadas** exige seleção explícita de mensagens/destino e confirmação; envia os campos
+selecionados atuais sem aplicar ações nas mensagens. Simulação nunca envia. O histórico inicial
+nunca gera alertas. Edição/desativação cancela revisões pendentes; ativação nunca reenvia trabalho
+cancelado. Excluir mensagem/conta cancela seus alertas pendentes, inclusive exclusão de cache após
+algumas movimentações.
+
+Mantenha o aplicativo ativo e desbloqueado para processamento; um CLI headless executável é
+trabalho futuro. Tentativas usam IDs estáveis/Idempotency-Key, espera e taxa limitadas (seis
+inícios/minuto por destino), com no máximo oito tentativas/24 horas. Timeouts/falhas podem gerar
+duplicatas; destinatários devem deduplicar pelo ID do evento. Aceito indica aceitação pelo
+serviço/destinatário, não visualização humana. Desativar aguarda uma requisição iniciada (até dez
+segundos), que não pode ser recolhida. O histórico contém estados/contagens/horários seguros por
+até 30 dias e 1.000 registros por destino. Payloads concluídos são apagados. Nenhum teste real é
+enviado automaticamente.
 
 ## Development
 

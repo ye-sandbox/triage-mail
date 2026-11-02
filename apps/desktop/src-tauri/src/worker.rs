@@ -424,6 +424,7 @@ async fn outbox_loop(service: Arc<DesktopService>) {
         if service.process_rules().await.is_err() {
             status(&service, "", SyncState::MutationFailed);
         }
+        let _ = service.process_alerts().await;
         let _ = process_outbox_once(&service).await;
         let _ = service.reconcile_snoozes().await;
         tokio::time::sleep(Duration::from_secs(5)).await;

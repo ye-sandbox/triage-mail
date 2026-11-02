@@ -6,6 +6,7 @@
 //! All credentials (App Passwords, OAuth2 tokens, user-supplied BYO OAuth `client_id`/`client_secret`)
 //! reside strictly inside the secret store and are referenced by opaque identifiers.
 
+pub mod alerts;
 pub mod auth;
 pub mod auto_store;
 pub mod cipher;

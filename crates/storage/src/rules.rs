@@ -29,7 +29,7 @@ pub(crate) fn read_rules(conn: &Connection) -> Result<Vec<Rule>, StorageError> {
         .collect()
 }
 
-fn facts(conn: &Connection, id: &str) -> Result<MessageFacts, StorageError> {
+pub(crate) fn facts(conn: &Connection, id: &str) -> Result<MessageFacts, StorageError> {
     let (mut f, badges): (MessageFacts, String) = conn
         .query_row(
             "SELECT account_id,sender,subject,text_body,triage_badges FROM messages WHERE id=?1",
@@ -92,6 +92,11 @@ impl SqliteMailStore {
                 if let Condition::Account(id) = c {
                     let exists: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?1)",[id],|r| r.get(0)).map_err(error)?;
                     if !exists { return Err(invalid()); }
+                }
+            }
+            for action in &rule.actions {
+                if let RuleAction::Alert(id) = action {
+                    if !crate::alerts::destinations(tx)?.iter().any(|d| d.id == *id) { return Err(invalid()); }
                 }
             }
             rule.revision += 1;
@@ -290,8 +295,8 @@ pub(crate) fn enqueue(
         let rules = read_rules(tx)?;
         // INVARIANT: Freeze rule revisions at ingestion, so later edits cannot act on old mail.
         tx.execute(
-            "INSERT OR IGNORE INTO rule_jobs(message_id,rules_json) VALUES (?1,?2)",
-            params![message.id, serde_json::to_string(&rules).map_err(error)?],
+            "INSERT OR IGNORE INTO rule_jobs(message_id,rules_json,alert_revisions,event_key) VALUES (?1,?2,?3,?4)",
+            params![message.id, serde_json::to_string(&rules).map_err(error)?, crate::alerts::revisions(tx)?, key],
         )
         .map_err(error)?;
     }
@@ -306,10 +311,15 @@ fn apply_plan(
 ) -> Result<(), StorageError> {
     let (account,folder,uid,validity): (String,String,u32,u32) = tx.query_row("SELECT m.account_id,m.folder,m.uid,s.uidvalidity FROM messages m JOIN folder_sync_state s ON s.account_id=m.account_id AND s.folder_name=m.folder WHERE m.id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).map_err(error)?;
     for action in &plan.actions {
+        if let RuleAction::Alert(destination) = action {
+            crate::alerts::enqueue_auto(tx, id, destination, crate::now_epoch_ms())?;
+            continue;
+        }
         let local = match action {
             RuleAction::Tag(t) => LocalMutation::Tag(t),
             RuleAction::Star => LocalMutation::Star(true),
             RuleAction::Archive => LocalMutation::Folder("Archive"),
+            RuleAction::Alert(_) => unreachable!("alert handled above"),
         };
         SqliteMailStore::apply_mutation_in_transaction(tx, id, &local)?;
         if !matches!(action, RuleAction::Tag(_)) {
@@ -410,6 +420,85 @@ mod tests {
         action: &RuleAction,
     ) -> Result<String, StorageError> {
         Ok(serde_json::to_string(action).unwrap())
+    }
+
+    fn alert_destination() -> triage_ai::alerts::Destination {
+        triage_ai::alerts::Destination {
+            id: "d".into(),
+            revision: 0,
+            name: "Synthetic".into(),
+            kind: triage_ai::alerts::DestinationKind::Webhook,
+            enabled: true,
+            fields: vec![triage_ai::alerts::ExportField::Subject],
+            public_origin: Some("https://example.com".into()),
+            has_credentials: false,
+        }
+    }
+    #[test]
+    fn alerts_share_atomic_rule_completion_and_never_replay_history() {
+        let s = store();
+        s.save_alert_destination(alert_destination(), None, 0)
+            .unwrap();
+        let mut r = rule();
+        r.actions.push(RuleAction::Alert("d".into()));
+        s.save_rule(r).unwrap();
+        s.establish_rule_baseline("a", "INBOX", 7, 2).unwrap();
+        s.commit_sync_batch(
+            &[message("old", 1), message("new", 2)],
+            &[],
+            &state(3),
+            false,
+        )
+        .unwrap();
+        let failure = |_: &str, _: &str, _: &str, _: u32, _: u32, _: &RuleAction| {
+            Err(StorageError::Query("synthetic failure".into()))
+        };
+        assert!(s.process_rule_jobs(100, failure).is_err());
+        assert_eq!(count(&s, "alert_jobs"), 0);
+        assert_eq!(count(&s, "pending_mutations"), 0);
+        s.process_rule_jobs(100, payload).unwrap();
+        assert_eq!(count(&s, "alert_jobs"), 1);
+        s.process_rule_jobs(100, payload).unwrap();
+        assert_eq!(count(&s, "alert_jobs"), 1);
+        let job = s.claim_alert(crate::now_epoch_ms()).unwrap().unwrap();
+        assert!(job.payload.contains("Bill"));
+        assert!(!job.payload.contains("body"));
+        assert!(s.simulate_rules(&["old".into()], None).unwrap()[0]
+            .1
+            .actions
+            .contains(&RuleAction::Alert("d".into())));
+        assert_eq!(count(&s, "alert_jobs"), 1);
+        s.replay_alerts(&["old".into()], "d", "explicit", crate::now_epoch_ms())
+            .unwrap();
+        assert_eq!(count(&s, "alert_jobs"), 2);
+        assert_eq!(count(&s, "pending_mutations"), 2);
+    }
+    #[test]
+    fn edited_destinations_invalidate_ingestion_snapshots_and_account_removal_cleans_jobs() {
+        let s = store();
+        let d = s
+            .save_alert_destination(alert_destination(), None, 0)
+            .unwrap();
+        let mut r = rule();
+        r.actions = vec![RuleAction::Alert("d".into())];
+        s.save_rule(r).unwrap();
+        s.establish_rule_baseline("a", "INBOX", 7, 1).unwrap();
+        s.commit_sync_batch(&[message("one", 1)], &[], &state(2), false)
+            .unwrap();
+        s.save_alert_destination(d, None, 0).unwrap();
+        s.process_rule_jobs(100, payload).unwrap();
+        assert_eq!(count(&s, "alert_jobs"), 0);
+        s.commit_sync_batch(&[message("two", 2)], &[], &state(3), false)
+            .unwrap();
+        s.process_rule_jobs(100, payload).unwrap();
+        assert_eq!(count(&s, "alert_jobs"), 1);
+        s.conn
+            .lock()
+            .unwrap()
+            .execute("DELETE FROM accounts WHERE id='a'", [])
+            .unwrap();
+        assert_eq!(count(&s, "alert_jobs"), 0);
+        assert_eq!(count(&s, "alert_dedup"), 0);
     }
 
     #[test]

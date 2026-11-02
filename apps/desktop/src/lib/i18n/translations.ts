@@ -299,6 +299,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 			navAria: 'Settings navigation',
 			tabs: {
 				rules: 'Rules',
+				alerts: 'Alerts',
 				general: 'General',
 				accounts: 'Accounts',
 				search: 'Search',
@@ -611,6 +612,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 			navAria: 'Navegação de configurações',
 			tabs: {
 				rules: 'Regras',
+				alerts: 'Alertas',
 				general: 'Geral',
 				accounts: 'Contas',
 				search: 'Busca',

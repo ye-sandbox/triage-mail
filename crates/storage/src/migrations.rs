@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use crate::{FtsTokenizerMode, StorageError};
 
 /// Current database schema version.
-pub const CURRENT_SCHEMA_VERSION: u32 = 3;
+pub const CURRENT_SCHEMA_VERSION: u32 = 4;
 
 /// Executes database schema migrations idempotently.
 pub struct SchemaMigrator {
@@ -57,6 +57,11 @@ impl SchemaMigrator {
 
         if current_version < 3 {
             self.apply_v3(&tx)?;
+            applied_count += 1;
+        }
+
+        if current_version < 4 {
+            self.apply_v4(&tx)?;
             applied_count += 1;
         }
 
@@ -246,6 +251,12 @@ impl SchemaMigrator {
         Ok(())
     }
 
+    fn apply_v4(&self, tx: &rusqlite::Transaction<'_>) -> Result<(), StorageError> {
+        tx.execute_batch(include_str!("alerts/schema.sql"))
+            .map_err(|_| StorageError::Migration("failed to execute v4".into()))?;
+        self.record_migration(tx, 4, "004_alert_deliveries")
+    }
+
     fn apply_v3(&self, tx: &rusqlite::Transaction<'_>) -> Result<(), StorageError> {
         // INVARIANT: Rules and queue state remain inside the same encrypted database.
         tx.execute_batch(
@@ -416,7 +427,7 @@ mod tests {
                 VALUES ('old','a','INBOX',1,'Old','sender@example.org','reader@example.com',0,'',0)").unwrap();
             tx.commit().unwrap();
         }
-        assert_eq!(migrator.migrate(&mut conn).unwrap(), 1);
+        assert_eq!(migrator.migrate(&mut conn).unwrap(), 2);
         assert_eq!(migrator.migrate(&mut conn).unwrap(), 0);
         assert_eq!(
             conn.query_row("SELECT subject FROM messages WHERE id='old'", [], |r| {
@@ -434,7 +445,7 @@ mod tests {
             conn.query_row("SELECT max(version) FROM schema_migrations", [], |r| r
                 .get::<_, u32>(0))
                 .unwrap(),
-            3
+            4
         );
     }
 
@@ -445,7 +456,7 @@ mod tests {
 
         let migrator = SchemaMigrator::new(FtsTokenizerMode::Unicode61RemoveDiacritics);
         let applied_first = migrator.migrate(&mut conn).expect("first migration");
-        assert_eq!(applied_first, 3);
+        assert_eq!(applied_first, 4);
 
         let applied_second = migrator.migrate(&mut conn).expect("second migration");
         assert_eq!(applied_second, 0, "subsequent migration must be a no-op");
