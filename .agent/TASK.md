@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[03.7] Telegram & Discord Alert Connectors — RUNNING
+[04.10] Saved Searches & Virtual Folders — READY FOR PLANNING
 
 ---
 
@@ -130,15 +130,15 @@ schemas, IPC and ranking remain unchanged; no ANN graphs, downloads or provider 
 ## Definition of Done (DoD) Checklist — [03.7]
 
 A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
-- [ ] Strict Typing: `cargo check --workspace` and `pnpm --filter desktop check` exit with code 0.
-- [ ] Automated Tests: `cargo test --workspace` and `pnpm --filter desktop test` exit with code 0.
-- [ ] Linters: `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` exit with code 0.
-- [ ] Svelte 5 Invariant: `! grep -rn "export let" apps/desktop/src/` exits with code 0.
-- [ ] Secret & PII Scrubbing: Zero real email addresses, tokens, or secrets in tracked files; `git diff --check` exits with code 0.
-- [ ] Documentation Perimeter: If CLI flags, `.env.example` variables, or validation commands changed, synchronize `README.md` and `README.pt-br.md` (following `readme-standard` skill).
-- [ ] Knowledge Preservation: Document obscure platform/runtime gotchas or workarounds as an atomic card in `.agent/knowledge/` (if applicable).
-- [ ] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
-- [ ] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
+- [x] Strict Typing: `cargo check --workspace` and `pnpm --filter desktop check` exit with code 0.
+- [x] Automated Tests: `cargo test --workspace` and `pnpm --filter desktop test` exit with code 0.
+- [x] Linters: `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` exit with code 0.
+- [x] Svelte 5 Invariant: `! grep -rn "export let" apps/desktop/src/` exits with code 0.
+- [x] Secret & PII Scrubbing: Zero real email addresses, tokens, or secrets in tracked files; `git diff --check` exits with code 0.
+- [x] Documentation Perimeter: If CLI flags, `.env.example` variables, or validation commands changed, synchronize `README.md` and `README.pt-br.md` (following `readme-standard` skill).
+- [x] Knowledge Preservation: Document obscure platform/runtime gotchas or workarounds as an atomic card in `.agent/knowledge/` (if applicable).
+- [x] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
+- [x] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
 
 ---
 
@@ -417,7 +417,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [03.7]: Telegram & Discord Alert Connectors
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Priority:** 3
 - **Depends On:** [03.6] and its approved network-policy exception.
 - **Systems Involved:** Delivery adapters, `crates/vault`, desktop IPC/UI.
@@ -491,9 +491,41 @@ All tasks inherit the repository DoD when implemented.
 - **Approval:** User approved this plan and narrow P0 extension via `proceed` on
   2026-11-02. Implementation and development validation remain offline.
 
+#### Completion (2026-11-02)
+
+- **Commit:** `ce25af0` (`feat(alerts): add Telegram and Discord connectors`).
+- **Delivered:** Additive provider kinds, typed Telegram input, vault-only token/chat ID
+  and webhook material, fixed provider routes, consent-filtered bounded text, provider
+  response classification and durable shared provider cooldowns. Existing rules,
+  destination revision consent, queue, test/replay and safe history are reused.
+  EN/PT-BR guided settings include manual recipient confirmation and credential
+  revocation instructions. No schema migration or existing trait/command change.
+- **Validation:** Offline workspace check/test/fmt/all-target Clippy pass (253 Rust tests).
+  Desktop check reports zero errors/warnings; all 143 frontend tests and SPA build pass.
+  Changed frontend files pass Prettier; all five policy regressions pass. Tracked/new-file
+  scan covers 288 text files with zero findings. Svelte invariant, paired README checks
+  and whitespace checks pass. Regressions include provider envelopes/Unicode limits,
+  endpoint/DNS rejection, secret redaction, consent/revision lifecycle, encrypted reopen,
+  provider cooldown persistence and stale-completion isolation.
+- **Environment:** Existing k-001/k-006 toolchains and GTK/WebKit sysroot; cached formatter.
+  Workspace loopback fixtures and policy child-process checks ran outside the restrictive
+  sandbox. No downloads, system changes, live provider requests or external deliveries.
+- **Contracts/documentation:** Approved P0 extension is recorded in AGENTS.md. ADR-014,
+  active notes, k-027 and paired README guides document provider routing, vault envelope
+  compatibility, field consent, response bounds and cooldowns. Same-kind-only preservation
+  prevents carrying secrets into another connector type; edited revisions cancel pending work.
+- **Limits:** Numeric Telegram chat IDs and canonical Discord webhook URLs only; no chat
+  discovery/migration, threads or attachments. One message per event can visibly truncate
+  JSON text. Provider retries conservatively pause all configured destinations of that
+  kind. Runtime must be active/unlocked; duplicates remain possible and acceptance does
+  not prove visibility. Revocation is manual in BotFather/Discord; accepted messages cannot
+  be recalled. Live provider interoperability remains unverified by offline tests.
+- **Next:** [04.10] promoted to READY FOR PLANNING. Saved searches/virtual folders require
+  a separately approved plan; no subsequent implementation has started. Nothing pushed.
+
 ### Task [04.10]: Saved Searches & Virtual Folders
 
-- **Status:** BACKLOG
+- **Status:** READY FOR PLANNING
 - **Priority:** 4
 - **Systems Involved:** `crates/storage`, desktop search IPC/sidebar.
 - **Scope:** Save named queries and scopes spanning selected accounts without moving
