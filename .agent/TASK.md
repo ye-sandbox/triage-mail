@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[01.1] Binary Quantization & Global Vector Pre-filtering Evaluation — PLANNING
+[03.5] Local Rule Engine & Automatic Filters — READY FOR PLANNING
 
 ---
 
@@ -90,24 +90,55 @@
 - **Description:** Evaluate 1-bit scalar/binary quantization (BQ) candidate generator + exact int8 reranking for sub-15ms global vector queries on 100k messages in SQLCipher, per ADR-008.
 - **Systems Involved:** `crates/storage` (vector indexing, Hamming distance pre-filter, SQLCipher).
 - **Action Type:** Investigation & Architecture.
-- **Status:** PLANNING
+- **Status:** DONE
 - **Constraints:** Preserve single-file SQLCipher encryption, exact tie handling, and oracle equivalence.
 - **Scheduling:** Promoted to planning after [04.1.7] closure; carries the unmet scoped-search budgets as motivation.
+
+#### Authorized Evaluation (2026-11-02)
+
+User explicitly requested proceeding with the ADR-008/mailbox evaluation. Build an
+offline example over the existing 100k-message fixture, with a disposable encrypted
+binary index, exact int8 cosine reranking, independent ordered-page oracle checks,
+candidate-budget sweeps, deep-page fallback and adversarial correctness probes.
+Record raw latency/recall/equivalence and an adoption recommendation. Production
+schemas, IPC and ranking remain unchanged; no ANN graphs, downloads or provider calls.
+
+#### Completion (2026-11-02)
+
+- **Commit:** `568bedb` (`perf(storage): evaluate binary candidates against exact search`).
+- **Evidence:** `docs/performance/binary-quantization.md`, raw CSV, complete summary,
+  process report and offline reducer. 64 groups, 64 reopened and 1,920 warm samples.
+- **Result:** Retain exact int8 cosine search (ADR-011). Global seed 4242 BQ-200
+  p95 21.226ms retains 56/200 oracle hits; BQ-4096 p95 156.361ms retains 166/200.
+  All 270 global warm BQ samples across three seeds fail ordered equality. All
+  production and deep exact-fallback samples pass the independent oracle.
+- **Validation:** Offline workspace check/test/fmt/all-target Clippy pass (222 Rust
+  workspace tests); all three adversarial example probes pass. Desktop check has
+  zero errors/warnings; all 133 frontend tests pass. Five policy regressions,
+  tracked/new-file policy scan, Svelte invariant, reducer completeness, Prettier for
+  the new JS tool and committed whitespace pass. No production code/schema/IPC changes.
+- **Knowledge:** k-023 preserves binary/cosine coverage limits; k-024 records the
+  vec0 int8 replacement-write fixture gotcha. EN/PT-BR reproduction docs synchronized.
+- **Deviations:** Existing scoped/native/frame-cadence misses remain. Investigation
+  completion does not declare the proposed sub-15ms exact optimization achieved.
+- **Next:** [03.5] promoted to READY FOR PLANNING per the user's prioritized backlog.
+  Plan the shared local rule evaluator, simulation, ordering and loop prevention;
+  implementation awaits an approved plan. No next-task implementation is started.
 
 ---
 
 ## Definition of Done (DoD) Checklist
 
 A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
-- [ ] Strict Typing: `cargo check --workspace` and `pnpm --filter desktop check` exit with code 0.
-- [ ] Automated Tests: `cargo test --workspace` and `pnpm --filter desktop test` exit with code 0.
-- [ ] Linters: `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` exit with code 0.
-- [ ] Svelte 5 Invariant: `! grep -rn "export let" apps/desktop/src/` exits with code 0.
-- [ ] Secret & PII Scrubbing: Zero real email addresses, tokens, or secrets in tracked files; `git diff --check` exits with code 0.
-- [ ] Documentation Perimeter: If CLI flags, `.env.example` variables, or validation commands changed, synchronize `README.md` and `README.pt-br.md` (following `readme-standard` skill).
-- [ ] Knowledge Preservation: Document obscure platform/runtime gotchas or workarounds as an atomic card in `.agent/knowledge/` (if applicable).
-- [ ] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
-- [ ] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
+- [x] Strict Typing: `cargo check --workspace` and `pnpm --filter desktop check` exit with code 0.
+- [x] Automated Tests: `cargo test --workspace` and `pnpm --filter desktop test` exit with code 0.
+- [x] Linters: `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` exit with code 0.
+- [x] Svelte 5 Invariant: `! grep -rn "export let" apps/desktop/src/` exits with code 0.
+- [x] Secret & PII Scrubbing: Zero real email addresses, tokens, or secrets in tracked files; `git diff --check` exits with code 0.
+- [x] Documentation Perimeter: If CLI flags, `.env.example` variables, or validation commands changed, synchronize `README.md` and `README.pt-br.md` (following `readme-standard` skill).
+- [x] Knowledge Preservation: Document obscure platform/runtime gotchas or workarounds as an atomic card in `.agent/knowledge/` (if applicable).
+- [x] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
+- [x] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
 
 ---
 
