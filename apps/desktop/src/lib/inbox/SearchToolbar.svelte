@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
+	import { i18n } from '../i18n/index.svelte';
 	import type { SearchMode } from './types';
 	let {
 		query = $bindable(''),
@@ -10,7 +11,8 @@
 		sidebarOpen = true,
 		busy = false,
 		disabled = false,
-		experimentalSemanticSearch = false
+		experimentalSemanticSearch = false,
+		context = ''
 	}: {
 		query?: string;
 		mode?: SearchMode;
@@ -21,6 +23,7 @@
 		busy?: boolean;
 		disabled?: boolean;
 		experimentalSemanticSearch?: boolean;
+		context?: string;
 	} = $props();
 	let searchInput: HTMLInputElement;
 	function shortcut(event: KeyboardEvent) {
@@ -42,14 +45,16 @@
 >
 	<button
 		type="button"
-		class="icon-button max-md:hidden"
+		class="icon-button"
 		aria-label="Toggle sidebar"
 		aria-expanded={sidebarOpen}
 		title="Toggle sidebar"
 		onclick={toggleSidebar}><Icon name="sidebar" /></button
 	>
-	<div class="mr-auto">
-		<h1 class="text-lg font-semibold tracking-tight">All Mail</h1>
+	<div class="mr-auto min-w-0 max-w-full">
+		<h1 class="truncate text-lg font-semibold tracking-tight" title={context}>
+			{context || i18n.t.mailboxes.allMail}
+		</h1>
 		<p class="text-xs text-[var(--secondary)]">Unified inbox</p>
 	</div>
 	<div
@@ -61,8 +66,10 @@
 			bind:this={searchInput}
 			bind:value={query}
 			type="search"
-			aria-label="Search all mail"
-			placeholder="Search all mail"
+			aria-label={context === i18n.t.mailboxes.allMail || !context
+				? 'Search all mail'
+				: i18n.t.mailboxes.searchScope}
+			placeholder={context || i18n.t.mailboxes.allMail}
 			class="min-w-0 flex-1 bg-transparent text-sm outline-none"
 		/>
 	</div>
@@ -98,8 +105,7 @@
 			aria-label="Settings"
 			aria-haspopup="dialog"
 			title="Settings"
-			onclick={openSettings}
-			><Icon name="settings" size={18} /></button
+			onclick={openSettings}><Icon name="settings" size={18} /></button
 		>
 	{/if}
 </header>

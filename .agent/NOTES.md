@@ -424,3 +424,31 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   addresses are copied into localStorage. Disposal clears previews and ignores late
   responses; busy operations prevent duplicate UI writes. Fallback initials and colors
   derive locally from display labels and opaque account IDs. Labels support EN/PT-BR.
+
+## Account Mailbox Navigation & View Controls ([04.1.6])
+
+- `InboxSession` passes its authoritative account-controller list into the mounted inbox.
+  `Sidebar` composes account disclosures, normalized local thumbnails, and account-scoped
+  Inbox/Starred/Snoozed views. Discovered selectable `junk`/`spam`, archive, and trash
+  folders use their exact server paths; remaining selectable folders live under Other
+  folders. Headers only toggle expansion; they never change mailbox selection.
+- Frontend search scope mirrors the existing externally tagged Rust enums. Global
+  requests omit scope. Search, load-more, and refresh send scope to native search rather
+  than filtering local pages. Scope changes invalidate generations, reset selection,
+  reader, scroll, pagination, and feedback. Late search/refresh/page/mutation results
+  cannot replace rows or feedback in another scope. Canonical IMAP identity is untouched.
+- `Mailboxes` keeps catalog metadata in memory with per-account request revisions,
+  retains the last successful catalog on failures, and invalidates removed accounts.
+  Sync refreshes reload catalogs. Only opaque expansion IDs are saved under
+  `triage-mail.mailbox-expansion`; photos, addresses, messages, and selected scope are
+  never persisted there. Closing settings reloads normalized sidebar thumbnails.
+- Explicit star/unstar and snooze/unsnooze actions are available in the message toolbar
+  and command palette. Local date/time input becomes UTC epoch milliseconds; native
+  deadline validation remains authoritative. Archive/trash clear optimistic snoozes;
+  rejected writes roll back only within their original generation. Local-only actions
+  have local-only feedback. The reader shows star and active snooze metadata.
+- A bounded timer refreshes at the next visible snooze deadline, while window focus and
+  native ResyncRequired events refresh expired eligibility after suspension. No frontend
+  timer moves mail or changes read flags. EN/PT-BR labels cover added views and controls.
+- [04.1.7] still owns full visual/browser verification and scoped performance measurement;
+  component regressions and the existing 100k-message DOM-window test are not timing evidence.

@@ -1,5 +1,14 @@
 export type TriageAction =
-	'MarkRead' | 'MarkUnread' | 'Archive' | 'Trash' | 'OneClickUnsubscribe' | { Tag: string };
+	| 'MarkRead'
+	| 'MarkUnread'
+	| 'Archive'
+	| 'Trash'
+	| 'OneClickUnsubscribe'
+	| 'Star'
+	| 'Unstar'
+	| 'Unsnooze'
+	| { Snooze: { until_epoch_ms: number } }
+	| { Tag: string };
 export type TriageMutation = { message_ids: string[]; action: TriageAction };
 export function validTag(tag: string) {
 	return (

@@ -1,18 +1,26 @@
+import { i18n } from '../i18n/index.svelte';
 import type { TriageAction } from './triage';
 export type PaletteCommand = {
 	label: string;
 	hint: string;
-	action: TriageAction | 'tag';
+	action: TriageAction | 'tag' | 'snooze';
 };
-export const commands: PaletteCommand[] = [
-	{ label: 'Mark read', hint: 'R', action: 'MarkRead' },
-	{ label: 'Mark unread', hint: 'Shift U', action: 'MarkUnread' },
-	{ label: 'Archive', hint: 'E', action: 'Archive' },
-	{ label: 'Move to Trash', hint: 'Delete', action: 'Trash' },
-	{ label: 'Add local tag', hint: 'T', action: 'tag' },
-	{
-		label: 'Send one-click unsubscribe request',
-		hint: '',
-		action: 'OneClickUnsubscribe'
-	}
-];
+export function mailboxCommands(): PaletteCommand[] {
+	const t = i18n.t.mailboxes;
+	return [
+		{ label: t.markRead, hint: 'R', action: 'MarkRead' },
+		{ label: t.markUnread, hint: 'Shift U', action: 'MarkUnread' },
+		{ label: t.archive, hint: 'E', action: 'Archive' },
+		{ label: t.moveTrash, hint: 'Delete', action: 'Trash' },
+		{ label: t.tag, hint: 'T', action: 'tag' },
+		{
+			label: t.unsubscribe,
+			hint: '',
+			action: 'OneClickUnsubscribe'
+		},
+		{ label: t.star, hint: '', action: 'Star' },
+		{ label: t.unstar, hint: '', action: 'Unstar' },
+		{ label: t.snooze, hint: '', action: 'snooze' },
+		{ label: t.unsnooze, hint: '', action: 'Unsnooze' }
+	];
+}

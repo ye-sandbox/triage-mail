@@ -1,10 +1,24 @@
 // INVARIANT: Wire fields and enum casing mirror the established Rust IPC DTOs.
 export type SearchMode = 'Lexical' | 'Semantic' | 'Hybrid';
+export type MailboxView = 'Inbox' | 'Starred' | 'Snoozed' | { Folder: string };
+export type MailboxScope =
+	'GlobalAllMail' | { AccountView: { account_id: string; view: MailboxView } };
+export type FolderDto = {
+	account_id: string;
+	folder_name: string;
+	display_name: string;
+	delimiter: string | null;
+	role: string;
+	is_selectable: boolean;
+	total_messages: number | null;
+	unread_messages: number | null;
+};
 export type SearchQueryDto = {
 	query: string;
 	mode: SearchMode;
 	limit: number;
 	offset: number;
+	scope?: MailboxScope;
 };
 export type MessageRowDto = {
 	id: string;
@@ -15,6 +29,8 @@ export type MessageRowDto = {
 	sender: string;
 	received_at_epoch_ms: number;
 	is_read: boolean;
+	is_starred?: boolean;
+	snooze_until_epoch_ms?: number | null;
 	has_attachments: boolean;
 	category_badge: string | null;
 	tags: string[];
@@ -31,6 +47,7 @@ export type SyncProgressEvent = {
 	embedding_errors_count?: number;
 };
 export interface InboxTransport {
+	listFolders?(accountId: string): Promise<FolderDto[]>;
 	triage(mutation: import('./triage').TriageMutation): Promise<void>;
 	search(query: SearchQueryDto): Promise<MessageRowDto[]>;
 	subscribe(handler: (event: SyncProgressEvent) => void): Promise<() => void>;

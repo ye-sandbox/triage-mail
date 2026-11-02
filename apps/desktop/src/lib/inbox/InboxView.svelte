@@ -1,7 +1,14 @@
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
 	import type { InboxController } from './controller.svelte';
-	import type { SearchMode } from './types';
+	import { i18n } from '../i18n/index.svelte';
+	import MailboxLifecycle from './MailboxLifecycle.svelte';
+	import { Mailboxes, scopeLabel } from './mailboxes.svelte';
+	import type { AccountConfig } from '../onboarding/types';
+	import type { AvatarTransport } from '../onboarding/avatar-types';
+	import MessageActions from './MessageActions.svelte';
+	import MessageState from './MessageState.svelte';
+	import type { SearchMode, MailboxScope } from './types';
 	import type { ReaderTransport } from '../reader/types';
 	import Sidebar from './Sidebar.svelte';
 	import SearchToolbar from './SearchToolbar.svelte';
@@ -18,7 +25,10 @@
 		readerTransport,
 		manageAccounts,
 		openSettings,
-		settingsOpen = false
+		settingsOpen = false,
+		accounts = [],
+		avatarTransport,
+		photoRevision = 0
 	}: {
 		inbox: InboxController;
 		connected: boolean;
@@ -26,7 +36,18 @@
 		manageAccounts?: () => void;
 		openSettings?: () => void;
 		settingsOpen?: boolean;
+		accounts?: AccountConfig[];
+		avatarTransport?: AvatarTransport;
+		photoRevision?: number;
 	} = $props();
+	const mailboxes = new Mailboxes(untrack(() => inbox.listFolders));
+	const context = $derived(scopeLabel(inbox.scope, accounts, i18n.t.mailboxes, mailboxes.catalogs));
+	let snoozing = $state(false);
+	function selectScope(scope?: MailboxScope) {
+		paletteOpen = false;
+		if (window.innerWidth < 768) sidebarOpen = false;
+		void inbox.selectScope(scope);
+	}
 	let query = $state('');
 	let mode = $state<SearchMode>('Lexical');
 	let sidebarOpen = $state(true);
@@ -66,11 +87,12 @@
 			if (id && loader) return loader.watch(id, (badges) => (selectedBadges = badges), revision);
 		});
 	});
-	function openPalette(tag = false) {
+	function openPalette(tag = false, snooze = false) {
 		if (settingsOpen || !connected || !selected || inbox.mutating || inbox.loading) return;
 		returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		actionTarget = { id: selected.id, subject: selected.subject };
 		tagging = tag;
+		snoozing = snooze;
 		paletteOpen = true;
 	}
 	function restoreFocus() {
@@ -116,26 +138,44 @@
 </script>
 
 <svelte:window onkeydown={keyboard} />
+<MailboxLifecycle {inbox} {mailboxes} {accounts} {connected} />
 <CommandPalette
 	bind:open={paletteOpen}
 	bind:tagging
+	bind:snoozing
 	subject={actionTarget?.subject ?? ''}
 	canUnsubscribe={canUnsubscribe && actionTarget?.id === selected?.id}
 	{execute}
 	{restoreFocus}
 />
-<main bind:this={shell} class="flex h-full min-h-0 flex-1 overflow-hidden text-[var(--text)]">
+<main
+	bind:this={shell}
+	class="relative flex h-full min-h-0 flex-1 overflow-hidden text-[var(--text)]"
+>
 	<div
-		class="inbox-sidebar hidden shrink-0 md:block"
+		class="inbox-sidebar absolute inset-y-0 left-0 z-20 shrink-0 md:static"
 		class:collapsed={!sidebarOpen}
 		inert={!sidebarOpen}
 		aria-hidden={!sidebarOpen}
 	>
-		<div class="h-full w-56"><Sidebar status={inbox.syncStatus} {openSettings} /></div>
+		<div class="h-full w-56">
+			<Sidebar
+				status={inbox.syncStatus}
+				{openSettings}
+				{accounts}
+				{mailboxes}
+				scope={inbox.scope}
+				select={selectScope}
+				{avatarTransport}
+				{photoRevision}
+				dismiss={() => (sidebarOpen = false)}
+			/>
+		</div>
 	</div>
 	<div class="flex min-w-0 flex-1 flex-col">
 		<SearchToolbar
 			bind:query
+			{context}
 			bind:mode
 			{sidebarOpen}
 			{busy}
@@ -145,32 +185,16 @@
 			disabled={!connected || inbox.loading}
 			experimentalSemanticSearch={inbox.experimentalSemanticSearch}
 		/>
-		<div
-			class="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--separator)] bg-[var(--toolbar)] px-6 py-2"
-		>
-			<button
-				type="button"
-				onclick={() => openPalette()}
-				disabled={!connected || !selected || inbox.mutating || inbox.loading}
-				aria-haspopup="dialog"
-				aria-keyshortcuts="Meta+K Control+K"
-				class="rounded px-2 py-1 text-sm text-[var(--accent)] disabled:opacity-40"
-				>Message actions <kbd class="ml-2 text-xs">⌘K / Ctrl+K</kbd></button
-			>
-			<span class="text-xs text-[var(--secondary)]"
-				>{inbox.mutating ? 'Saving…' : selected ? 'Selected message' : 'Select a message'}</span
-			>
-			{#if openSettings}<button
-					type="button"
-					class="rounded px-2 py-1 text-sm text-[var(--accent)]"
-					onclick={openSettings}>Settings</button
-				>{/if}
-			{#if manageAccounts}<button
-					type="button"
-					class="rounded px-2 py-1 text-sm text-[var(--accent)]"
-					onclick={manageAccounts}>Accounts</button
-				>{/if}
-		</div>
+		<MessageActions
+			{selected}
+			disabled={!connected || inbox.mutating || inbox.loading}
+			{openPalette}
+			mutate={(action) => {
+				if (selected) void inbox.mutate(selected.id, action);
+			}}
+			{openSettings}
+			{manageAccounts}
+		/>
 		{#if !connected}<div
 				class="border-b border-[var(--separator)] bg-[var(--surface)] px-6 py-3 text-sm text-[var(--secondary)]"
 				role="status"
@@ -193,20 +217,13 @@
 				{#if selected}<button
 						type="button"
 						class="self-start px-6 py-3 text-sm text-[var(--accent)] md:hidden"
-						onclick={backToList}>‹ All Mail</button
+						onclick={backToList}>‹ {context}</button
 					>{/if}
-				{#if selected}
-					<div
-						class="shrink-0 border-b border-[var(--separator)] px-8 py-2 text-xs text-[var(--secondary)]"
-						aria-label="Message state"
-					>
-						{selected.is_read ? 'Read' : 'Unread'} · {inbox.folderLabels[selected.id] ||
-							selected.folder}
-						{#each inbox.localTags[selected.id] ?? [] as tag}<span class="ml-2 break-all"
-								>#{tag}</span
-							>{/each}
-					</div>
-				{/if}
+				{#if selected}<MessageState
+						message={selected}
+						folder={inbox.folderLabels[selected.id] || selected.folder}
+						tags={inbox.localTags[selected.id] ?? []}
+					/>{/if}
 				<SelectionOverview message={selected} transport={readerTransport} />
 			</div>
 		</div>

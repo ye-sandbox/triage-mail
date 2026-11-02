@@ -21,6 +21,7 @@
 
 	const inbox = new InboxController(nativeTransport);
 	let settingsOpen = $state(false);
+	let photoRevision = $state(0);
 
 	$effect(() => {
 		if (!connected) {
@@ -39,6 +40,7 @@
 
 	function handleCloseSettings() {
 		settingsOpen = false;
+		photoRevision++;
 		void settingsTransport
 			.get()
 			.then((settings) => {
@@ -50,6 +52,8 @@
 
 <InboxView
 	{inbox}
+	accounts={accountController?.accounts ?? []}
+	{photoRevision}
 	{connected}
 	{manageAccounts}
 	openSettings={() => (settingsOpen = true)}

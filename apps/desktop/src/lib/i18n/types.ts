@@ -7,6 +7,52 @@ export interface GuidePlaybook {
 }
 
 export interface Translations {
+	mailboxes: {
+		mailboxes: string;
+		navigation: string;
+		allMail: string;
+		Inbox: string;
+		Starred: string;
+		Snoozed: string;
+		spam: string;
+		archive: string;
+		trash: string;
+		other: string;
+		loadingFolders: string;
+		catalogError: string;
+		notSynced: string;
+		retry: string;
+		unavailable: string;
+		noCached: string;
+		empty: string;
+		emptyHelp: string;
+		star: string;
+		unstar: string;
+		snooze: string;
+		unsnooze: string;
+		snoozedUntil: string;
+		snoozeHelp: string;
+		deadline: string;
+		saveSnooze: string;
+		invalidDeadline: string;
+		actions: string;
+		close: string;
+		markRead: string;
+		markUnread: string;
+		moveTrash: string;
+		tag: string;
+		unsubscribe: string;
+		searchScope: string;
+		settings: string;
+		noActions: string;
+		actionSearch: string;
+		saved: string;
+		localSaved: string;
+		saveError: string;
+		loadError: string;
+		vaultError: string;
+		loading: string;
+	};
 	app: {
 		title: string;
 		tagline: string;
