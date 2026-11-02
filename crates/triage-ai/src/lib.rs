@@ -16,6 +16,7 @@ pub mod llm;
 pub mod nfe;
 pub mod otp;
 pub mod pix;
+pub mod rules;
 pub mod tracking;
 
 use std::path::PathBuf;

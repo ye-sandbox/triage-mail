@@ -186,6 +186,7 @@ export interface Translations {
 		close: string;
 		navAria: string;
 		tabs: {
+			rules: string;
 			general: string;
 			accounts: string;
 			search: string;

@@ -298,13 +298,14 @@ export const translations: Record<SupportedLocale, Translations> = {
 			close: 'Close settings',
 			navAria: 'Settings navigation',
 			tabs: {
+				rules: 'Rules',
 				general: 'General',
 				accounts: 'Accounts',
 				search: 'Search',
 				ai: 'AI',
 				privacy: 'Privacy'
 			},
-			unsavedChanges: 'You have unsaved changes. Leaving will discard your draft credentials.',
+			unsavedChanges: 'You have unsaved changes. Leaving will discard your draft.',
 			stay: 'Stay on form',
 			discard: 'Discard changes'
 		}
@@ -609,13 +610,14 @@ export const translations: Record<SupportedLocale, Translations> = {
 			close: 'Fechar configurações',
 			navAria: 'Navegação de configurações',
 			tabs: {
+				rules: 'Regras',
 				general: 'Geral',
 				accounts: 'Contas',
 				search: 'Busca',
 				ai: 'IA',
 				privacy: 'Privacidade'
 			},
-			unsavedChanges: 'Você tem alterações não salvas. Sair descartará as credenciais digitadas.',
+			unsavedChanges: 'Você tem alterações não salvas. Sair descartará o rascunho.',
 			stay: 'Continuar no formulário',
 			discard: 'Descartar alterações'
 		}

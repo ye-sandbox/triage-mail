@@ -124,6 +124,63 @@ fn bootstrap(
     ))
 }
 
+#[tauri::command]
+pub async fn cmd_list_rules(
+    state: State<'_, RuntimeState>,
+) -> Result<Vec<triage_ai::rules::Rule>, IpcError> {
+    state.initialize(None).await?.list_rules().await
+}
+#[tauri::command]
+pub async fn cmd_save_rule(
+    state: State<'_, RuntimeState>,
+    rule: triage_ai::rules::Rule,
+) -> Result<triage_ai::rules::Rule, IpcError> {
+    state.initialize(None).await?.save_rule(rule).await
+}
+#[tauri::command]
+pub async fn cmd_delete_rule(
+    state: State<'_, RuntimeState>,
+    id: String,
+    revision: u32,
+) -> Result<(), IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .delete_rule(id, revision)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_reorder_rules(
+    state: State<'_, RuntimeState>,
+    revisions: Vec<(String, u32)>,
+) -> Result<(), IpcError> {
+    state.initialize(None).await?.reorder_rules(revisions).await
+}
+#[tauri::command]
+pub async fn cmd_simulate_rules(
+    state: State<'_, RuntimeState>,
+    ids: Vec<String>,
+    draft: Option<triage_ai::rules::Rule>,
+) -> Result<Vec<(String, triage_ai::rules::RulePlan)>, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .simulate_rules(ids, draft)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_rule_draft(
+    state: State<'_, RuntimeState>,
+    message_id: String,
+    rule_id: String,
+) -> Result<triage_ai::rules::Rule, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .rule_draft(message_id, rule_id)
+        .await
+}
+
 /// Optional explicit unlock for machines without an OS keyring. Passphrases never leave the vault cipher.
 #[tauri::command]
 pub async fn cmd_unlock_vault(
@@ -408,6 +465,12 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            cmd_list_rules,
+            cmd_save_rule,
+            cmd_delete_rule,
+            cmd_reorder_rules,
+            cmd_simulate_rules,
+            cmd_rule_draft,
             cmd_get_settings,
             cmd_save_settings,
             cmd_set_tokenizer,
@@ -511,6 +574,12 @@ mod tests {
         let app = mock_builder()
             .manage(state)
             .invoke_handler(tauri::generate_handler![
+                cmd_list_rules,
+                cmd_save_rule,
+                cmd_delete_rule,
+                cmd_reorder_rules,
+                cmd_simulate_rules,
+                cmd_rule_draft,
                 cmd_list_accounts,
                 cmd_discover_email_provider,
                 cmd_probe_email_provider,
@@ -534,6 +603,42 @@ mod tests {
         let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()
             .unwrap();
+        assert_eq!(
+            invoke(&window, "cmd_list_rules", json!({})).unwrap(),
+            json!([])
+        );
+        let rule = json!({"version":1,"id":"rule","revision":0,"name":"Synthetic","enabled":true,"position":0,"all":[{"Subject":"invoice"}],"any":[],"except":[],"actions":["Star"],"stop_processing":false});
+        let saved = invoke(&window, "cmd_save_rule", json!({"rule":rule})).unwrap();
+        assert_eq!(saved["revision"], 1);
+        assert_eq!(
+            invoke(&window, "cmd_save_rule", json!({"rule":rule})).unwrap_err(),
+            json!("InvalidRequest")
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_simulate_rules",
+                json!({"ids":[],"draft":null})
+            )
+            .unwrap_err(),
+            json!("InvalidRequest")
+        );
+        invoke(
+            &window,
+            "cmd_reorder_rules",
+            json!({"revisions":[["rule",1]]}),
+        )
+        .unwrap();
+        invoke(
+            &window,
+            "cmd_delete_rule",
+            json!({"id":"rule","revision":2}),
+        )
+        .unwrap();
+        assert_eq!(
+            invoke(&window, "cmd_list_rules", json!({})).unwrap(),
+            json!([])
+        );
         // INVARIANT: Omitting online must not perform even a DNS lookup for an unknown domain.
         let discovery = invoke(
             &window,

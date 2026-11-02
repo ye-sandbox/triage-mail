@@ -30,7 +30,11 @@ function createMockTransport(overrides?: Partial<Settings>) {
 		saveCalls: Array<{ settings: Settings['ai']; apiKey: string }>;
 		tokenizerCalls: Tokenizer[];
 		semanticCalls: boolean[];
-		downloadCalls: Array<{ model_url: string; tokenizer_url: string; consent: boolean }>;
+		downloadCalls: Array<{
+			model_url: string;
+			tokenizer_url: string;
+			consent: boolean;
+		}>;
 		setFailGet: (fail: boolean) => void;
 	} = {
 		getCalls: 0,
@@ -117,7 +121,8 @@ describe('SettingsDialog and typed modules', () => {
 			'accounts',
 			'search',
 			'ai',
-			'privacy'
+			'privacy',
+			'rules'
 		]);
 	});
 
@@ -186,7 +191,12 @@ describe('SettingsDialog and typed modules', () => {
 	it('respects custom initialTab prop', async () => {
 		const close = vi.fn();
 		const transport = createMockTransport();
-		const { target } = mountDialog({ open: true, close, initialTab: 'search', transport });
+		const { target } = mountDialog({
+			open: true,
+			close,
+			initialTab: 'search',
+			transport
+		});
 
 		await flushMicrotasks();
 
@@ -202,7 +212,9 @@ describe('SettingsDialog and typed modules', () => {
 
 		await flushMicrotasks();
 
-		const closeButton = target.querySelector<HTMLButtonElement>('button[aria-label="Close settings"]');
+		const closeButton = target.querySelector<HTMLButtonElement>(
+			'button[aria-label="Close settings"]'
+		);
 		expect(closeButton).not.toBeNull();
 		closeButton?.click();
 
@@ -248,7 +260,9 @@ describe('SettingsDialog and typed modules', () => {
 
 		// Now allow loading and click retry
 		transport.setFailGet(false);
-		const retryButton = target.querySelector<HTMLButtonElement>('button[aria-label="Retry loading settings"]');
+		const retryButton = target.querySelector<HTMLButtonElement>(
+			'button[aria-label="Retry loading settings"]'
+		);
 		expect(retryButton).not.toBeNull();
 		retryButton?.click();
 		await flushMicrotasks();

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { labels } from '../rules/labels';
 	import { i18n } from '../i18n/index.svelte';
 	import type { MessageRowDto } from './types';
 	import type { TriageAction } from './triage';
@@ -6,10 +7,12 @@
 		selected,
 		disabled,
 		openPalette,
+		createRule,
 		mutate
 	}: {
 		selected?: MessageRowDto;
 		disabled: boolean;
+		createRule?: (id: string) => void;
 		openPalette: (tag?: boolean, snooze?: boolean) => void;
 		mutate: (action: TriageAction) => void;
 	} = $props();
@@ -29,6 +32,13 @@
 		>{t.actions}<kbd class="ml-2 text-xs">⌘K / Ctrl+K</kbd></button
 	>
 	{#if selected}
+		{#if createRule}<button
+				type="button"
+				{disabled}
+				onclick={() => selected && createRule?.(selected.id)}
+				class="rounded px-2 py-2 text-sm text-[var(--accent)] disabled:opacity-40"
+				>{labels[i18n.locale].createFromMessage}</button
+			>{/if}
 		<button
 			type="button"
 			{disabled}

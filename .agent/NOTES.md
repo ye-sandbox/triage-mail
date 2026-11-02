@@ -516,3 +516,40 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   adversarial probes use `cargo test --offline -p storage --example binary_quantization`.
   Raw latency/equivalence data and measurement limits live in
   `docs/performance/binary-quantization.md`. Existing mailbox/native deviations remain.
+
+## Local Rule Engine ([03.5] / ADR-012)
+
+- `triage_ai::rules` owns version-1 Rule/Condition/RuleAction, MessageFacts and RulePlan.
+  Matching is all AND optional-any AND no-except, over one immutable snapshot. Missing
+  facts never satisfy positive predicates. Text is case-insensitive literal contains;
+  domains are exact unless DomainSuffix explicitly includes subdomains. One parsed
+  mailbox only; display names never match sender predicates. Sender identity is unauthenticated.
+  Amount/date predicates independently test any extracted boleto fact, using inclusive
+  integer BRL-cent/ISO-date comparisons; they do not assert a shared boleto across predicates.
+- Ordered by position then stable rule ID; distinct tags/star/archive accumulate, matching
+  stop rules skip later rules. Star precedes archive in the shared action plan. Existing
+  local mutation primitives preserve canonical folder/UID, clear snoozes on archive,
+  and queue existing RemoteMutation payloads; no unsubscribe/trash/inverse rule actions.
+- Migration v3 adds `local_rules`, `rule_deleted_ids`, `rule_baselines`, `rule_events`, `rule_jobs` and a pending
+  job index. First SELECT frontier per folder/UIDVALIDITY persists before ingestion;
+  `IncrementalSyncResult.server_uidnext` is additive core metadata, not an IPC change.
+  Unknown frontier fails closed. Imports/rebuilds never enqueue history, including resume.
+  New canonical inserts atomically snapshot rule revisions and enqueue eligibility with
+  checkpoint commit; new memberships, flags and body hydration never enqueue.
+- Job completion/local actions/outbox entries share one transaction. Scheduled rules
+  must still have identical enabled revisions; edits/reorders invalidate pending versions.
+  Account-bound hashed event identities survive cache deletion/MOVE without COPYUID;
+  processed jobs clear snapshot definitions, while tombstones remain until account deletion.
+  See k-025 for conservative identity and initialization limitations.
+- Additive IPC: `cmd_list_rules`, `cmd_save_rule(rule)` -> saved incremented revision,
+  `cmd_delete_rule(id,revision)`, `cmd_reorder_rules(revisions: [id,revision][])`,
+  `cmd_simulate_rules(ids,draft?)` -> `[message_id,RulePlan][]`, and
+  `cmd_rule_draft(messageId,ruleId)` -> unsaved disabled draft. Native validation and
+  compare-and-swap reject malformed/stale requests; deleted IDs cannot be reused. Simulations never write/deliver.
+- Settings Rules module supports CRUD, disable/reorder, condition explanations and
+  simulation of the selected inbox message. Message action creates an editable draft;
+  it does not save/enable it. EN/PT-BR labels, account selectors, dirty/busy modal guards
+  and unmount cleanup apply. No mail/rule facts enter browser persistence.
+- All core code stays headless; desktop composes RuleObserver through TriageEventHook
+  once per committed batch and retries bounded durable jobs in the existing outbox loop.
+  Errors emit fixed MutationFailed feedback. No network policy exception is introduced.

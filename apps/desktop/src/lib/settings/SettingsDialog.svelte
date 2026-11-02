@@ -10,6 +10,7 @@
 	import AccountsModule from './modules/AccountsModule.svelte';
 	import SearchModule from './modules/SearchModule.svelte';
 	import AiModule from './modules/AiModule.svelte';
+	import RulesModule from '../rules/RulesModule.svelte';
 	import PrivacyModule from './modules/PrivacyModule.svelte';
 
 	let {
@@ -18,7 +19,9 @@
 		initialTab = 'general',
 		transport = nativeSettingsTransport,
 		accountController,
-		guard = new SettingsFormGuard()
+		guard = new SettingsFormGuard(),
+		selectedMessageIds = [],
+		ruleSeedMessageId
 	}: {
 		open?: boolean;
 		close: () => void;
@@ -26,6 +29,8 @@
 		transport?: SettingsTransport;
 		accountController?: AccountController;
 		guard?: SettingsFormGuard;
+		selectedMessageIds?: string[];
+		ruleSeedMessageId?: string;
 	} = $props();
 
 	let activeTab = $state<SettingsTab>('general');
@@ -160,8 +165,12 @@
 					</div>
 				</div>
 			{/if}
-			<header class="flex items-center justify-between border-b border-[var(--separator)] px-6 py-4">
-				<h1 id="settings-dialog-title" class="text-xl font-semibold">{t.title}</h1>
+			<header
+				class="flex items-center justify-between border-b border-[var(--separator)] px-6 py-4"
+			>
+				<h1 id="settings-dialog-title" class="text-xl font-semibold">
+					{t.title}
+				</h1>
 				<button
 					type="button"
 					aria-label={t.close}
@@ -222,6 +231,13 @@
 						{:else}
 							<p class="text-sm text-[var(--secondary)]">Account manager unavailable.</p>
 						{/if}
+					{:else if activeTab === 'rules'}
+						<RulesModule
+							accounts={accountController?.accounts ?? []}
+							{guard}
+							selectedIds={selectedMessageIds}
+							seedMessageId={ruleSeedMessageId}
+						/>
 					{:else if error}
 						<div class="space-y-4">
 							<p role="alert" class="text-sm text-red-500">{error}</p>

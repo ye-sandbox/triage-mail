@@ -210,6 +210,23 @@ pnpm --filter desktop build
 cargo build --release --package triage-mail-desktop
 ```
 
+### Local rules and automatic filters
+
+Open **Settings → Rules** to create, edit, disable or reorder local filters. The message
+action **Create rule from message** prefills account and sender in an unsaved draft.
+Choose all/any/except conditions and tag, star or archive actions; enable the rule before
+saving. Text matching ignores case; sender domains match exactly unless subdomains are
+explicitly selected. Amounts use integer BRL cents and dates use `YYYY-MM-DD`.
+
+Rules run in displayed order on new arrivals after each folder's initial history baseline.
+A matching stop rule skips later rules; duplicate actions coalesce. Initial imports and
+UIDVALIDITY rebuilds do not trigger rules. Saving or enabling a rule never changes old
+mail. Select an inbox message and use **Simulate selected messages** to inspect matches
+and planned actions without changing mail. Missing cached facts never match positive
+conditions, attachment bytes are never fetched, and a sender match does not authenticate
+identity. Processing requires the app to be running. Notifications and webhooks remain
+separate future work.
+
 ## Development
 
 ### Repository Structure

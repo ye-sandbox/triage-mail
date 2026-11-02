@@ -17,7 +17,7 @@ pub enum LocalMutation<'a> {
 }
 
 impl SqliteMailStore {
-    fn transaction<T>(
+    pub(crate) fn transaction<T>(
         &self,
         operation: impl FnOnce(&Transaction<'_>) -> Result<T, StorageError>,
     ) -> Result<T, StorageError> {
@@ -110,26 +110,71 @@ impl SqliteMailStore {
     ) -> Result<(), StorageError> {
         self.transaction(|tx| {
             for (id, action, remote_payload) in changes {
-                let exists: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM messages WHERE id=?1)", [id], |r| r.get(0)).map_err(query_error)?;
-                if !exists { return Err(StorageError::Query("message not found".into())); }
-                match action {
-                    LocalMutation::Read(value) => { tx.execute("UPDATE messages SET is_read=?1 WHERE id=?2", params![value, id]).map_err(query_error)?; }
-                    // INVARIANT: Optimistic moves never replace the canonical server folder/UID.
-                    LocalMutation::Folder(folder) => {
-                        tx.execute("INSERT INTO message_folder_overrides VALUES (?1, ?2) ON CONFLICT(message_id) DO UPDATE SET folder=excluded.folder", params![id, folder]).map_err(query_error)?;
-                        // Moving to Archive or Trash immediately clears any active snooze deadline.
-                        tx.execute("UPDATE messages SET snooze_until_epoch_ms=NULL WHERE id=?1", params![id]).map_err(query_error)?;
-                    }
-                    LocalMutation::Tag(tag) => { tx.execute("INSERT INTO tags VALUES (?1, ?2, ?3, 0) ON CONFLICT(message_id, tag_name) DO NOTHING", params![format!("{id}:tag:{tag}"), id, tag]).map_err(query_error)?; }
-                    LocalMutation::Star(value) => { tx.execute("UPDATE messages SET is_starred=?1 WHERE id=?2", params![if *value { 1 } else { 0 }, id]).map_err(query_error)?; }
-                    LocalMutation::Snooze(deadline) => { tx.execute("UPDATE messages SET snooze_until_epoch_ms=?1 WHERE id=?2", params![deadline, id]).map_err(query_error)?; }
+                let exists: bool = tx
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM messages WHERE id=?1)",
+                        [id],
+                        |r| r.get(0),
+                    )
+                    .map_err(query_error)?;
+                if !exists {
+                    return Err(StorageError::Query("message not found".into()));
                 }
+                Self::apply_mutation_in_transaction(tx, id, action)?;
                 if let Some(payload) = remote_payload {
-                    tx.execute("INSERT INTO pending_mutations(message_id,payload_json) VALUES (?1,?2)", params![id,payload]).map_err(query_error)?;
+                    tx.execute(
+                        "INSERT INTO pending_mutations(message_id,payload_json) VALUES (?1,?2)",
+                        params![id, payload],
+                    )
+                    .map_err(query_error)?;
                 }
             }
             Ok(())
         })
+    }
+
+    pub(crate) fn apply_mutation_in_transaction(
+        tx: &Transaction<'_>,
+        id: &str,
+        action: &LocalMutation<'_>,
+    ) -> Result<(), StorageError> {
+        match action {
+            LocalMutation::Read(value) => {
+                tx.execute(
+                    "UPDATE messages SET is_read=?1 WHERE id=?2",
+                    params![value, id],
+                )
+                .map_err(query_error)?;
+            }
+            // INVARIANT: Optimistic moves never replace the canonical server folder/UID.
+            LocalMutation::Folder(folder) => {
+                tx.execute("INSERT INTO message_folder_overrides VALUES (?1, ?2) ON CONFLICT(message_id) DO UPDATE SET folder=excluded.folder", params![id, folder]).map_err(query_error)?;
+                // Moving to Archive or Trash immediately clears any active snooze deadline.
+                tx.execute(
+                    "UPDATE messages SET snooze_until_epoch_ms=NULL WHERE id=?1",
+                    params![id],
+                )
+                .map_err(query_error)?;
+            }
+            LocalMutation::Tag(tag) => {
+                tx.execute("INSERT INTO tags VALUES (?1, ?2, ?3, 0) ON CONFLICT(message_id, tag_name) DO NOTHING", params![format!("{id}:tag:{tag}"), id, tag]).map_err(query_error)?;
+            }
+            LocalMutation::Star(value) => {
+                tx.execute(
+                    "UPDATE messages SET is_starred=?1 WHERE id=?2",
+                    params![if *value { 1 } else { 0 }, id],
+                )
+                .map_err(query_error)?;
+            }
+            LocalMutation::Snooze(deadline) => {
+                tx.execute(
+                    "UPDATE messages SET snooze_until_epoch_ms=?1 WHERE id=?2",
+                    params![deadline, id],
+                )
+                .map_err(query_error)?;
+            }
+        }
+        Ok(())
     }
 
     pub fn folder_override(&self, id: &str) -> Result<Option<String>, StorageError> {
@@ -235,6 +280,14 @@ impl SqliteMailStore {
         state: &crate::FolderSyncState,
         reset: bool,
     ) -> Result<Vec<crate::MessageRecord>, StorageError> {
+        // INVARIANT: A batch cannot introduce another account's canonical identity.
+        if state.uidvalidity == 0
+            || messages.iter().any(|m| {
+                m.account_id != state.account_id || m.folder != state.folder_name || m.uid == 0
+            })
+        {
+            return Err(StorageError::Query("invalid sync batch identity".into()));
+        }
         self.transaction(|tx| {
             if reset {
                 // 1. Remove memberships for this folder
@@ -327,6 +380,7 @@ impl SqliteMailStore {
                         params![message.account_id, message.folder, message.uid, message.id, now_ms],
                     )
                     .map_err(query_error)?;
+                    crate::rules::enqueue(tx, &message, state)?;
                     persisted.push(message);
                 }
             }

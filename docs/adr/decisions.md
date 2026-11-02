@@ -223,3 +223,38 @@ type: architectural-decision-log
   NULL norms, lifecycle correctness, unlimited ties, encrypted storage and memory cost.
   Any persisted index requires a separately reviewed append-only migration. No ANN graph,
   dependency, unsafe code, user-data access or external network behavior is introduced.
+
+### [2026-11-02] ADR-012: Shared Local Rules and Durable Ingestion Eligibility
+
+- **Context:** [03.5] needs a shared evaluator for automatic filters and future alerts,
+  with identical mutation-free simulation and protection against initial-history floods,
+  duplicate folder memberships, interrupted imports and feedback from IMAP mutations.
+- **Decision:** Keep typed rules and an immutable-facts evaluator in `triage-ai`, encrypted
+  definitions/queue orchestration in `storage`, and existing observer/outbox adapters in
+  desktop. Preserve existing traits and IPC; add commands and append-only migration v3.
+  Rules use all/any/except literal predicates, integer BRL cents and calendar dates.
+  Order by position then stable ID; union tags/star/archive, stop after a matching stop
+  rule, and issue flags before archive moves. Never execute scripts or download attachments.
+- **Eligibility:** Persist each folder generation's first SELECT UIDNEXT frontier before
+  ingestion. Missing UIDNEXT fails closed with the maximum frontier. First imports and
+  UIDVALIDITY rebuilds suppress history across all batches/restarts. Existing installations
+  establish a baseline on their first post-upgrade sync. New canonical messages above
+  the frontier atomically acquire a job and a snapshot of rule revisions with ingestion.
+  Editing, disabling, deleting or reordering a scheduled revision invalidates it; unchanged
+  scheduled enabled rules remain eligible. Saving never creates jobs for stored mail.
+  Deleted rule ID tombstones prevent revision reuse and stale-write ABA races.
+- **Recovery:** Job completion, local mutations and existing IMAP outbox entries commit
+  together. Account-bound SHA-256 identity tombstones outlive message-cache deletion
+  (including MOVE without COPYUID) to suppress feedback loops. Provider ID is preferred,
+  then Message-ID plus received timestamp; absent those, hash original headers/subject/body.
+  This conservative fallback can suppress identical headerless copies. Tombstones remain
+  until account removal; no arbitrary time expiry silently permits replay. Simulation
+  shares facts/evaluation but never enqueues, marks, mutates or delivers anything.
+- **Alternatives:** A frontend-only evaluator cannot guarantee simulation equivalence;
+  in-memory duplicate markers fail on restart; post-commit-only eligibility can lose mail
+  between checkpoint commit and observer execution. Changing existing traits or introducing
+  network alert adapters is unnecessary for this task and remains separately scoped.
+- **Consequences:** Rule processing requires an active runner. Up to 200 rules, 64 flat
+  conditions/rule, 16 actions/rule and 100 selected simulation messages bound work/IPC;
+  these are definition/work limits, with no account cap. Existing schema v1/v2 and search
+  behavior remain unchanged. No notifications, external delivery or history replay is added.

@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use crate::{FtsTokenizerMode, StorageError};
 
 /// Current database schema version.
-pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+pub const CURRENT_SCHEMA_VERSION: u32 = 3;
 
 /// Executes database schema migrations idempotently.
 pub struct SchemaMigrator {
@@ -52,6 +52,11 @@ impl SchemaMigrator {
 
         if current_version < 2 {
             self.apply_v2(&tx)?;
+            applied_count += 1;
+        }
+
+        if current_version < 3 {
+            self.apply_v3(&tx)?;
             applied_count += 1;
         }
 
@@ -241,6 +246,35 @@ impl SchemaMigrator {
         Ok(())
     }
 
+    fn apply_v3(&self, tx: &rusqlite::Transaction<'_>) -> Result<(), StorageError> {
+        // INVARIANT: Rules and queue state remain inside the same encrypted database.
+        tx.execute_batch(
+            "
+            CREATE TABLE local_rules (
+                id TEXT PRIMARY KEY NOT NULL, revision INTEGER NOT NULL,
+                position INTEGER NOT NULL, definition_json TEXT NOT NULL
+            );
+            CREATE TABLE rule_deleted_ids (id TEXT PRIMARY KEY NOT NULL);
+            CREATE TABLE rule_baselines (
+                account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                folder TEXT NOT NULL, uidvalidity INTEGER NOT NULL, frontier INTEGER NOT NULL,
+                PRIMARY KEY(account_id, folder)
+            );
+            CREATE TABLE rule_events (
+                account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                event_key TEXT NOT NULL, PRIMARY KEY(account_id,event_key)
+            );
+            CREATE TABLE rule_jobs (
+                message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+                rules_json TEXT NOT NULL, processed INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX idx_rule_jobs_pending ON rule_jobs(processed, message_id);
+        ",
+        )
+        .map_err(|e| StorageError::Migration(format!("failed to execute v3: {e}")))?;
+        self.record_migration(tx, 3, "003_local_rules")
+    }
+
     fn apply_v2(&self, tx: &rusqlite::Transaction<'_>) -> Result<(), StorageError> {
         // INVARIANT: Append-only Migration v2 (ADR-010). Adds folder catalog, message folder memberships,
         // message flag and snooze columns, and encrypted account avatars.
@@ -368,13 +402,50 @@ mod tests {
     use crate::connection::{open_in_memory_connection, DatabaseKey};
 
     #[test]
+    fn v2_upgrade_preserves_mail_and_adds_rules_without_rewriting_history() {
+        let key = DatabaseKey::from_bytes([75; 32]);
+        let mut conn = open_in_memory_connection(&key).unwrap();
+        let migrator = SchemaMigrator::new(FtsTokenizerMode::Unicode61RemoveDiacritics);
+        {
+            let tx = conn.transaction().unwrap();
+            tx.execute_batch("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at_epoch_ms INTEGER NOT NULL)").unwrap();
+            migrator.apply_v1(&tx).unwrap();
+            migrator.apply_v2(&tx).unwrap();
+            tx.execute_batch("INSERT INTO accounts VALUES ('a','reader@example.com','synthetic',0,0);
+                INSERT INTO messages(id,account_id,folder,uid,subject,sender,recipients,received_at_epoch_ms,raw_headers,created_at_epoch_ms)
+                VALUES ('old','a','INBOX',1,'Old','sender@example.org','reader@example.com',0,'',0)").unwrap();
+            tx.commit().unwrap();
+        }
+        assert_eq!(migrator.migrate(&mut conn).unwrap(), 1);
+        assert_eq!(migrator.migrate(&mut conn).unwrap(), 0);
+        assert_eq!(
+            conn.query_row("SELECT subject FROM messages WHERE id='old'", [], |r| {
+                r.get::<_, String>(0)
+            })
+            .unwrap(),
+            "Old"
+        );
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM rule_jobs", [], |r| r.get::<_, u32>(0))
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            conn.query_row("SELECT max(version) FROM schema_migrations", [], |r| r
+                .get::<_, u32>(0))
+                .unwrap(),
+            3
+        );
+    }
+
+    #[test]
     fn executes_migrations_idempotently() {
         let key = DatabaseKey::from_bytes([77u8; 32]);
         let mut conn = open_in_memory_connection(&key).expect("open conn");
 
         let migrator = SchemaMigrator::new(FtsTokenizerMode::Unicode61RemoveDiacritics);
         let applied_first = migrator.migrate(&mut conn).expect("first migration");
-        assert_eq!(applied_first, 2);
+        assert_eq!(applied_first, 3);
 
         let applied_second = migrator.migrate(&mut conn).expect("second migration");
         assert_eq!(applied_second, 0, "subsequent migration must be a no-op");
