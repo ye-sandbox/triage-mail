@@ -16,6 +16,17 @@ export interface Translations {
 		ptBR: string;
 		selectLabel: string;
 	};
+	accountPhoto: {
+		label: string;
+		choose: string;
+		replace: string;
+		remove: string;
+		help: string;
+		pending: string;
+		loadError: string;
+		saveError: string;
+		invalidFile: string;
+	};
 	onboarding: {
 		unlockTitle: string;
 		accountsTitle: string;

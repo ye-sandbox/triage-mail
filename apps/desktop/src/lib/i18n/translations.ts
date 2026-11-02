@@ -11,6 +11,17 @@ export const translations: Record<SupportedLocale, Translations> = {
 			ptBR: 'PT',
 			selectLabel: 'Select language'
 		},
+		accountPhoto: {
+			label: 'Account photo',
+			choose: 'Choose a photo',
+			replace: 'Replace photo',
+			remove: 'Remove photo',
+			help: 'Local JPEG, PNG or WebP · up to 2 MiB and 1024 × 1024 pixels.',
+			pending: 'Updating photo…',
+			loadError: 'Photo could not be loaded. Reopen account settings to retry.',
+			saveError: 'Photo could not be saved. Choose a valid image or try again.',
+			invalidFile: 'Choose a nonempty image up to 2 MiB.'
+		},
 		onboarding: {
 			unlockTitle: 'Unlock your mail',
 			accountsTitle: 'Your accounts',
@@ -133,8 +144,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 					'Browser login via official provider page with local loopback callback (RFC 7636). Does not need a client secret.',
 				requirements:
 					'Provider must support public desktop PKCE clients and http://127.0.0.1/callback redirects.',
-				services:
-					'Microsoft 365, Outlook.com, Hotmail, and RFC 7636 compliant identity providers.',
+				services: 'Microsoft 365, Outlook.com, Hotmail, and RFC 7636 compliant identity providers.',
 				redirectTip:
 					'Google blocks pure public PKCE for desktop IMAP without CASA certification; for Gmail use App Password or BYO Credentials.',
 				fields: [
@@ -238,6 +248,18 @@ export const translations: Record<SupportedLocale, Translations> = {
 			en: 'EN',
 			ptBR: 'PT',
 			selectLabel: 'Selecionar idioma'
+		},
+		accountPhoto: {
+			label: 'Foto da conta',
+			choose: 'Escolher uma foto',
+			replace: 'Substituir foto',
+			remove: 'Remover foto',
+			help: 'JPEG, PNG ou WebP local · até 2 MiB e 1024 × 1024 pixels.',
+			pending: 'Atualizando foto…',
+			loadError:
+				'Não foi possível carregar a foto. Reabra as configurações de contas para tentar novamente.',
+			saveError: 'Não foi possível salvar a foto. Escolha uma imagem válida ou tente novamente.',
+			invalidFile: 'Escolha uma imagem não vazia de até 2 MiB.'
 		},
 		onboarding: {
 			unlockTitle: 'Desbloqueie seu correio',
@@ -361,8 +383,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 					'Login via navegador na página oficial do provedor com retorno local seguro (RFC 7636). Não precisa de chave secreta.',
 				requirements:
 					'Provedor deve aceitar clientes desktop com fluxo PKCE e redirecionamento para http://127.0.0.1/callback.',
-				services:
-					'Microsoft 365, Outlook.com, Hotmail e provedores corporativos OIDC compatíveis.',
+				services: 'Microsoft 365, Outlook.com, Hotmail e provedores corporativos OIDC compatíveis.',
 				redirectTip:
 					'O Google bloqueia PKCE público puro sem certificação CASA; para Gmail utilize Senha de Aplicativo ou BYO Credentials.',
 				fields: [

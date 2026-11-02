@@ -38,10 +38,16 @@
   - `Compatibility correction:` Native IPC tests exposed an extra null scope field in legacy serialized search requests; omit absent scopes and assert the original wire shape in the DTO regression.
   - `Closure:` Committed as `9b9f094` after user authorization on 2026-11-02. Next task promoted to planning. Temporary sysroot downloads were authorized; no system installation is authorized.
 
-- [ ] **[04.1.5]** `[PLANNING]` `[SEQ: W5]` Add private local account photos
+- [ ] **[04.1.5]** `[RUNNING]` `[SEQ: W5]` Add private local account photos
   - `Paths:` `crates/storage/src/**, apps/desktop/src-tauri/src/**, apps/desktop/src-tauri/Cargo.toml, Cargo.lock, apps/desktop/src/lib/onboarding/**, apps/desktop/src/lib/i18n/**`
   - `Verify:` `cargo test --workspace && pnpm --filter desktop check && pnpm --filter desktop test`
-  - `Plan:` `.agent/plans/04.1-account-mailboxes.md`, section `[04.1.5]`; awaiting implementation approval, including the image decoder dependency and localization paths. No implementation started.
+  - `Plan:` `.agent/plans/04.1-account-mailboxes.md`, section `[04.1.5]`; implementation, image decoder dependency, and localization paths approved on 2026-11-02.
+  - `Initial dependency preflight:` Offline Cargo metadata failed with `no matching package named image found`; both inspected local Cargo caches lacked the decoder. Implementation paused before application edits until the download exception was approved.
+  - `Dependency authorization:` User approved downloading `image` and its required dependencies into a temporary Cargo cache on 2026-11-02. Fetch completed; implementation and validation remained offline afterward. No system installation is authorized.
+  - `Implementation:` Separate account-photo get/set/remove IPC, bounded native JPEG/PNG/WebP normalization, metadata-free 128x128 PNG thumbnails in existing encrypted storage, and injectable Svelte 5 photo controls with local initials/color fallback, pending/error handling, and EN/PT-BR labels. Existing account DTOs, schemas, and core traits remain unchanged.
+  - `Validation (2026-11-02):` Offline native workspace check, all 209 Rust tests, all-target Clippy with warnings denied, and fmt pass with the existing temporary sysroot. Desktop check reports zero errors/warnings; all 109 frontend tests and the SPA build pass. Prettier checks all changed frontend files using a locally available formatter. Tracked/new-file policy scans report zero findings; Svelte invariant and diff checks pass.
+  - `Regression coverage:` Raster format/byte/dimension rejection, JPEG comment/EXIF removal, account identity/isolation, replacement failure preserving the previous photo, encrypted reopen/wrong-key rejection, idempotent removal, native wire shapes, local file selection, late-result disposal, UI remount, and bilingual errors. One frontend test fixture failure was corrected by making its mocked File method configurable.
+  - `Closure:` Implementation and validation are complete; user authorized the atomic commit on 2026-11-02. Record the resulting hash and promote [04.1.6] to planning after committing. No push is authorized.
 
 - [ ] **[04.1.6]** `[PLANNED]` `[SEQ: W6]` Build expandable account navigation and view controls
   - `Paths:` `apps/desktop/src/lib/inbox/**, apps/desktop/src/lib/onboarding/{DesktopApp,InboxSession}.svelte, apps/desktop/src/lib/i18n/**`

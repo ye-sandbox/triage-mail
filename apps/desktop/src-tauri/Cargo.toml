@@ -24,6 +24,7 @@ required-features = ["performance-validation"]
 tauri-build = { version = "2", optional = true }
 
 [dependencies]
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
 async-trait = "0.1.92"
 getrandom = "0.2"
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["aws_lc_rs", "logging", "tls12"] }

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use vault::VaultError;
 
+pub mod avatars;
 pub mod connection;
 pub mod desktop;
 pub mod migrations;
@@ -21,6 +22,7 @@ pub mod search;
 pub mod settings;
 pub mod vec_ext;
 
+pub use avatars::AccountAvatar;
 pub use connection::DatabaseKey;
 pub use models::{
     now_epoch_ms, AccountRecord, AttachmentRecord, FolderRecord, MessageFlagsDelta,
