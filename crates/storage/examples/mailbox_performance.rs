@@ -165,11 +165,11 @@ fn main() -> Result<()> {
         conn.query_row("SELECT vec_version()", [], |r| r.get::<_, String>(0))?
     );
     if std::env::args().nth(1).as_deref() == Some("Plan") {
-        // INVARIANT: Diagnostic SQL mirrors the production blank Inbox branch; no optimizer
-        // hints, ANALYZE, extra index or altered statistics may make the fixture artificially fast.
+        // INVARIANT: Diagnostic SQL mirrors the production blank Inbox branch, including
+        // its message-ID index requirement. Never tune statistics or indices only in fixtures.
         let mut stmt = conn.prepare("EXPLAIN QUERY PLAN SELECT m.id FROM messages m
             WHERE m.account_id=?1 AND (m.snooze_until_epoch_ms IS NULL OR m.snooze_until_epoch_ms<=?3)
-            AND EXISTS (SELECT 1 FROM message_folder_memberships membership
+            AND EXISTS (SELECT 1 FROM message_folder_memberships membership INDEXED BY idx_memberships_message_id
             LEFT JOIN message_folder_overrides o ON o.message_id=m.id
             WHERE membership.message_id=m.id AND membership.account_id=m.account_id
             AND COALESCE(o.folder,membership.folder)=?2)

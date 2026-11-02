@@ -27,7 +27,7 @@ All core domain crates MUST remain pure Rust (zero dependency on `tauri`) so the
 | IPC Command / Channel | Direction | Payload Schema | Performance / Security Invariant |
 |---|---|---|---|
 | `cmd_list_accounts` / `cmd_add_account` | UI $\rightarrow$ Rust | `AccountConfigDto` (supports App Password, OAuth2 Public PKCE, BYO-OAuth credentials, Proton Bridge; never returns raw secrets to UI) | Secrets stored immediately in `vault` (`keyring` or Argon2 fallback); UI only sees opaque `account_id` |
-| `cmd_search_messages` | UI $\rightarrow$ Rust | `SearchQueryDto { query, mode: Lexical \| Semantic \| Hybrid, limit, offset, scope? }` $\rightarrow$ `Vec<MessageRowDto>` | Filtered semantic $\le 15$ms, lexical $\le 40$ms, global semantic $\le 50$ms, hybrid $\le 60$ms (ADR-008); mailbox predicate latency awaits measurement |
+| `cmd_search_messages` | UI $\rightarrow$ Rust | `SearchQueryDto { query, mode: Lexical \| Semantic \| Hybrid, limit, offset, scope? }` $\rightarrow$ `Vec<MessageRowDto>` | Filtered semantic $\le 15$ms, lexical $\le 40$ms, global semantic $\le 50$ms, hybrid $\le 60$ms (ADR-008); mailbox budgets remain unmet in [04.1.7] |
 | `cmd_triage_action` | UI $\rightarrow$ Rust | `TriageMutationDto { message_ids, action: MarkRead \| Archive \| Trash \| Tag(String) \| OneClickUnsubscribe }` | Optimistic local SQLite update + queued async IMAP `STORE FLAGS` sync (or RFC 8058 HTTP POST on explicit unsubscribe) |
 | `cmd_get_message_body` | UI $\rightarrow$ Rust | `MessageId` $\rightarrow$ `MessageDetailDto { headers, text_plain, html_raw, triage_badges, attachments_meta }` | HTML sanitized in UI with `DOMPurify` + `<iframe sandbox="">` + normalized base dark-mode CSS |
 | `cmd_fetch_attachment` | UI $\rightarrow$ Rust | `AttachmentRequestDto { account_id, folder, uid, part_id }` $\rightarrow$ `AttachmentBytesDto` | **Lazy Attachment Invariant:** Fetched on-demand via `IMAP BODY.PEEK[section]` |
@@ -399,8 +399,8 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   eligible existing vectors by exact cosine distance, then message ID; orphan/missing
   embeddings cannot consume page slots. Both hybrid branches apply scope before their
   existing candidate window and RRF fusion. Unscoped optimized paths are unchanged.
-- Existing semantic consent gates remain in force. Scoped predicate latency is not yet
-  benchmarked; feature closure [04.1.7] must measure it against ADR-008.
+- Existing semantic consent gates remain in force. Scoped latency is measured in the
+  mailbox validation report; unresolved ADR-008 budgets keep feature closure [04.1.7] open.
 
 ## Private Local Account Photos ([04.1.5])
 
@@ -455,14 +455,19 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 
 ## Mailbox Validation Gate ([04.1.7])
 
-- The 2026-11-02 disposable 100k-message/200k-membership fixture exposes an account-only
-  correlated membership scan in blank Inbox. Its 180-second process budget expired
-  before the first sample returned; native validation reached ready state but did not
-  complete its first scoped batch. See `docs/performance/mailbox-validation.md` and k-020.
-- Completed Global/Starred/Snoozed samples pass independent eligible-order/count/identity
-  oracles. Snoozed semantic first-page p95 is 23.540ms (2,500 eligible), above the 15ms
-  filtered budget; global deep exact fallbacks also exceed first-page reference bounds.
-  These results do not establish dense mailbox or native first-page/60fps acceptance.
-- Feature closure remains open. A separately approved scoped storage fix and completed
-  native/visual matrix are required. No production schema, trait, IPC or timing target
-  changed during validation. Historical frame cadence is not first-page timing evidence.
+- Correlated Inbox/folder predicates now require `idx_memberships_message_id`; Snoozed
+  branches choose the account/deadline index using bounded index-only counts in the same
+  snapshot, avoiding other accounts' dense snoozes for tiny accounts. Migration v2 supplies the indices.
+  Private SQL construction is shared with plan regressions. No schema, IPC or trait changed.
+- Final 100k-message/200k-membership run passes 56 complete-order/count/identity workloads
+  (1,680 warm samples). Blank Inbox p95 is 35.373ms. Snoozed semantic improves from
+  23.540ms to 16.702ms but misses 15ms; Inbox semantic is 106.144ms. Full distributions
+  and lexical/hybrid misses are in `docs/performance/mailbox-validation.md`.
+- Native fixture now exits 0 after all 12 first-page and both 180-frame scroll reports.
+  Inbox semantic/hybrid and Archive semantic/hybrid miss the 100ms submission-to-frame
+  budget. Both scroll phases mount <=18 rows; preloaded/paged frame p95 is 23/22ms, which
+  does not establish 60fps. The feature remains open; no timing target was weakened.
+- Scoped scalar cosine preserves SQL NULL-first distance order for zero-norm stored/query
+  vectors. A finite account-KNN frontier can omit a zero-norm vector and is insufficient
+  as an exactness certificate. The attempted shortcut was removed and a regression retained;
+  see k-021 before revising semantic ranking or the accepted embedding domain.

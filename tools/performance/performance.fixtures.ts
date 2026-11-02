@@ -38,6 +38,7 @@ export function createRows(): MessageRowDto[] {
 }
 export const metrics = { pageCalls: 0, ipc: [] as number[] };
 const native = () => '__TAURI_INTERNALS__' in window;
+const scenario = () => new URLSearchParams(location.search).get('state');
 let cached: MessageRowDto[] | undefined;
 export const transport: InboxTransport = {
 	search: async (query) => {
@@ -48,7 +49,13 @@ export const transport: InboxTransport = {
 		else {
 			cached ??= createRows();
 			const scope = query.scope;
-			let rows = cached;
+			const count = new URLSearchParams(location.search).get('accounts');
+			let rows =
+				count === '0'
+					? []
+					: count === '1'
+						? cached.filter((r) => r.account_id === 'account-0')
+						: cached;
 			if (scope && scope !== 'GlobalAllMail') {
 				const { account_id, view } = scope.AccountView;
 				rows = rows.filter(
@@ -68,31 +75,60 @@ export const transport: InboxTransport = {
 		metrics.ipc.push(performance.now() - start);
 		return result;
 	},
-	listFolders: async (accountId) =>
-		native()
-			? invoke<FolderDto[]>('fixture_folders', { accountId })
-			: ['INBOX', 'Archive', 'Empty', 'All Mail'].map((name) => ({
-					account_id: accountId,
-					folder_name: name,
-					display_name: name,
-					role:
-						name === 'INBOX'
-							? 'inbox'
-							: name === 'Archive'
-								? 'archive'
-								: 'other',
-					delimiter: '/',
-					is_selectable: true,
-					total_messages: null,
-					unread_messages: null
-				})),
+	listFolders: async (accountId) => {
+		if (native()) return invoke<FolderDto[]>('fixture_folders', { accountId });
+		if (scenario() === 'not-synced') return [];
+		if (scenario() === 'offline') throw new Error('Synthetic offline catalog');
+		if (scenario() === 'loading') return new Promise<FolderDto[]>(() => {});
+		return ['INBOX', 'Archive', 'Empty', 'All Mail'].map((name) => ({
+			account_id: accountId,
+			folder_name: name,
+			display_name: name,
+			role:
+				name === 'INBOX' ? 'inbox' : name === 'Archive' ? 'archive' : 'other',
+			delimiter: '/',
+			is_selectable: true,
+			total_messages: null,
+			unread_messages: null
+		}));
+	},
+
 	subscribe: async () => () => {},
 	triage: async () => {
 		throw new Error('Read-only validation transport');
 	}
 };
 export const avatars: AvatarTransport = {
-	get: async () => null,
+	get: async (id) => {
+		if (
+			id !== 'account-0' ||
+			new URLSearchParams(location.search).get('photo') !== '1'
+		)
+			return null;
+		const canvas = document.createElement('canvas');
+		canvas.width = 128;
+		canvas.height = 128;
+		const context = canvas.getContext('2d');
+		if (!context) throw new Error('Missing fixture raster context');
+		context.fillStyle = getComputedStyle(document.documentElement)
+			.getPropertyValue('--accent')
+			.trim();
+		context.fillRect(0, 0, 128, 128);
+		context.fillStyle = getComputedStyle(document.documentElement)
+			.getPropertyValue('--surface')
+			.trim();
+		context.beginPath();
+		context.arc(64, 48, 24, 0, 2 * Math.PI);
+		context.fill();
+		context.fillRect(24, 84, 80, 44);
+		const encoded = canvas.toDataURL('image/png').split(',')[1];
+		return {
+			bytes: Array.from(atob(encoded), (c) => c.charCodeAt(0)),
+			mime_type: 'image/png',
+			width: 128,
+			height: 128
+		};
+	},
 	set: async () => {
 		throw new Error('Read-only fixture');
 	},

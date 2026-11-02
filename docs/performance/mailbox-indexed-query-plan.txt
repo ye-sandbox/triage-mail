@@ -1,0 +1,6 @@
+# rows=100000, dimensions=384, bytes=120233984, sqlite=3.45.3, cipher=4.5.7 community, vec=v0.1.9
+# plan,SEARCH m USING INDEX idx_messages_account_provider_msgid (account_id=?)
+# plan,CORRELATED SCALAR SUBQUERY 1
+# plan,SEARCH membership USING INDEX idx_memberships_message_id (message_id=?)
+# plan,SEARCH o USING INDEX sqlite_autoindex_message_folder_overrides_1 (message_id=?) LEFT-JOIN
+# plan,USE TEMP B-TREE FOR ORDER BY
