@@ -274,3 +274,34 @@ fn scoped_semantic_ranking_handles_ties_orphans_and_missing_embeddings() {
         .unwrap()
         .is_empty());
 }
+
+#[test]
+fn scoped_semantic_preserves_sqlite_null_distance_order_for_zero_vectors() {
+    let store = fixture();
+    store
+        .insert_message_embedding("a-098", &vec![0; 384])
+        .unwrap();
+    let query = query(SearchMode::Semantic, "", 0);
+    let rows = store
+        .search_scoped(&query, &scope(MailboxView::Inbox))
+        .unwrap();
+    // INVARIANT: Existing scalar cosine returns SQL NULL for zero-norm stored vectors,
+    // which SQLite sorts before finite distances. Candidate frontiers must not hide them.
+    assert_eq!(rows[0].id, "a-098");
+    let zero_query = HybridQuery {
+        query_embedding_int8: Some(vec![0; 384]),
+        ..query
+    };
+    let rows = store
+        .search_scoped(&zero_query, &scope(MailboxView::Inbox))
+        .unwrap();
+    let expected: Vec<_> = (1..=100)
+        .filter(|uid| eligible(*uid, &MailboxView::Inbox))
+        .take(7)
+        .map(|uid| format!("a-{uid:03}"))
+        .collect();
+    assert_eq!(
+        rows.iter().map(|r| r.id.clone()).collect::<Vec<_>>(),
+        expected
+    );
+}
