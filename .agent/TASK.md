@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[03.5] Local Rule Engine & Automatic Filters — READY FOR PLANNING
+[03.6] Local Notifications & Generic Webhook Alerts — READY FOR PLANNING
 
 ---
 
@@ -127,7 +127,7 @@ schemas, IPC and ranking remain unchanged; no ANN graphs, downloads or provider 
 
 ---
 
-## Definition of Done (DoD) Checklist
+## Definition of Done (DoD) Checklist — [03.5]
 
 A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
 - [x] Strict Typing: `cargo check --workspace` and `pnpm --filter desktop check` exit with code 0.
@@ -156,10 +156,250 @@ A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
 
 ---
 
-## Future Backlog / Ideas (Unprioritized)
+## Prioritized Feature Backlog (2026-11-02)
+
+User-requested feature order below; [02.1] and [01.1] are complete. Each entry
+requires its own approved plan before implementation and does not establish a release
+commitment. [03.5] completed under its separately approved plan. Dependencies are implementation prerequisites, not parallel work assignments.
+All tasks inherit the repository DoD when implemented.
+
+### Task [03.5]: Local Rule Engine & Automatic Filters
+
+- **Status:** DONE
+- **Priority:** 1
+- **Systems Involved:** `crates/triage-ai`, `crates/storage`, desktop IPC/UI.
+- **Scope:** Share one local rule evaluator across filters and alerts. Match account,
+  sender/domain, subject, body keywords, attachment metadata and extracted amounts/dates
+  with all/any/except conditions. Support tags, stars and archive through existing
+  mutation boundaries; define rule ordering, stop-processing behavior and loop prevention.
+  Expose post-ingestion/triage integration through the existing observer boundaries.
+- **Acceptance:** Create/edit/disable rules, create a rule from a message, and simulate
+  against selected existing messages without mutations or deliveries. Explain matches.
+  Regression fixtures cover compound conditions, exceptions and conflicting actions.
+  Initial sync/history imports never trigger rules unless explicitly requested.
+
+#### Approved Implementation Plan (2026-11-02)
+
+1. `[03.5.1]` **Pure evaluator (`crates/triage-ai`):** Add versioned typed rule,
+   condition, message-facts and explanation models in a `rules` module. Preserve
+   existing traits. Account IDs match exactly; parsed sender addresses/domains match
+   normalized exact values (domain suffix matching is an explicit operator). Subject,
+   body and attachment filename/MIME keywords use documented case-insensitive literal
+   matching, without scripts or user regex. Attachment predicates use metadata only.
+   Compare extracted BRL amounts as integer cents and validated ISO calendar dates;
+   missing facts never satisfy positive predicates. Define matching as all required
+   conditions AND (any optional condition, when present) AND no exception. Reject
+   empty match-all definitions and bound definition size/nesting and simulation batches.
+2. `[03.5.2]` **Deterministic action planning:** Evaluate enabled rules in ascending
+   explicit position, then stable rule ID, against one immutable message snapshot.
+   Accumulate distinct local tags, star and archive actions; repeated actions coalesce.
+   A matching stop-processing rule prevents later evaluation. V1 supports additive
+   tags, star and archive only; no inverse actions, trash or automatic unsubscribe.
+   Simulation uses this exact evaluator/planner and explains matched, excluded,
+   missing-fact and stopped rules without writing state or invoking mutation adapters.
+3. `[03.5.3]` **Encrypted persistence (`crates/storage`):** Add append-only migration
+   v3 for rule definitions/revisions/order, per-folder initial-history baselines,
+   durable eligible evaluation jobs and processed-event identities. Keep schema v1/v2
+   and existing IPC/traits compatible. Persist eligibility in the ingestion transaction
+   with the checkpoint so crashes cannot lose newly eligible work. Persist application
+   markers, local changes and existing remote outbox entries atomically. Use canonical
+   account-bound identity; a new folder membership is not a new message event. Reject
+   invalid/stale revisions; validate account references and definitions natively.
+4. `[03.5.4]` **Post-ingestion execution:** Compose a headless-compatible rule consumer
+   through the existing post-triage observer boundary without changing its signature.
+   Only newly inserted canonical messages after an established folder baseline are
+   eligible. First sync, history catch-up/import, newly discovered folders and
+   UIDVALIDITY rebuilds establish/refresh baselines without automatic rule actions;
+   capture the initial UID frontier so interrupted multi-batch imports stay excluded.
+   Messages received while an established account is offline remain eligible on return.
+   Resume durable jobs after restart; rule edits/enablement never replay old mail.
+   Rule-generated flags/moves, body hydration and duplicate sync events cannot trigger
+   evaluation recursively. Reuse existing account-bound mutation/outbox primitives;
+   preserve canonical folder/UID targeting and archive snooze clearing. Fixed safe
+   errors and bounded job processing must not block sync or silently drop failures.
+5. `[03.5.5]` **Additive IPC and desktop UI:** Add rule list/save/delete/reorder and
+   simulation commands with typed DTOs, optimistic revision checks and bounded selected
+   message IDs. Add an EN/PT-BR Rules settings module to create/edit/disable/order rules,
+   choose stop-processing and inspect simulation explanations. Add create-from-message
+   as an editable draft requiring save; prefill account and parsed sender without
+   persisting message bodies. Simulation and saving never apply rules retroactively.
+   Historical application/replay is deferred; existing mail can be simulated only.
+   Load `svelte-dev` before UI implementation; retain modal guards and mounted inbox.
+6. `[03.5.6]` **Evidence and closure:** Test compound/except/missing predicates,
+   amount/date boundaries, deterministic order, coalescing, stop behavior, account
+   isolation, migration upgrades, rollback/restart recovery, concurrent edits,
+   deduplication, initial multi-batch history and reset suppression, observer loop
+   prevention, simulation purity and UI lifecycle guards. Use synthetic reserved-domain
+   fixtures and offline adapters. Run every repository DoD command plus frontend build,
+   relevant formatting and policy scans. Update active contracts, document architectural
+   decisions and applicable knowledge cards; load `readme-standard` if README changes
+   are needed. Make an atomic Conventional Commit, record its hash and promote [03.6]
+   to planning. Do not push or implement notifications/webhooks in this task.
+
+- **Approval:** User approved the complete plan and proposed defaults via `proceed` on 2026-11-02.
+
+#### Completion (2026-11-02)
+
+- **Commit:** `4b2e15d` (`feat(rules): add durable local filters and simulation`).
+- **Delivered:** Shared pure evaluator/planner, ordered all/any/except conditions,
+  tag/star/archive actions and stop behavior; encrypted append-only migration v3,
+  revision-safe CRUD/reordering, durable ingestion eligibility, restart recovery,
+  move-loop suppression and atomic mutation/outbox completion. Additive typed IPC,
+  EN/PT-BR Rules settings, account selectors, create-from-message drafts and side-effect-free
+  selected-message simulation preserve the mounted inbox and existing trait/IPC contracts.
+- **Validation:** Offline workspace check/test/fmt/all-target Clippy pass: 234 Rust tests.
+  Desktop check reports zero errors/warnings; all 137 frontend tests and SPA build pass.
+  Changed frontend files pass Prettier. Five policy scanner regression tests pass;
+  tracked/new-file scan covers 272 text files with zero findings. Svelte legacy syntax,
+  README perimeter and diff whitespace checks pass. No live-provider calls, credentials,
+  model downloads or external deliveries were used.
+- **Environment:** Existing k-001/k-006 toolchain/native sysroot. Workspace socket fixtures
+  and policy child-process regressions require execution outside the restrictive sandbox;
+  all remain local/offline. No system packages or shared toolchain files were modified.
+- **Contracts:** ADR-012, active notes, k-025 and paired README usage guides record
+  matching semantics, history frontiers and recovery. Rule IDs cannot be reused after
+  deletion. Rule changes invalidate pending revisions without retroactive replay.
+- **Limits:** Rules require an active runner. Each folder establishes a first post-upgrade
+  UID frontier; initial history/rebuilds remain excluded. Missing UIDNEXT suppresses
+  automation safely. Account-bound identity tombstones persist until account removal;
+  indistinguishable headerless copies can be conservatively suppressed. Amount/date
+  predicates test facts independently. Existing search/native performance deviations
+  remain outside this feature. Historical application and alert deliveries are deferred.
+- **Next:** [03.6] promoted to READY FOR PLANNING. Its external-delivery P0 exception
+  still needs an explicit approved plan; no notifications/webhooks implementation began.
+
+### Task [03.6]: Local Notifications & Generic Webhook Alerts
+
+- **Status:** READY FOR PLANNING
+- **Priority:** 2
+- **Depends On:** [03.5]
+- **Systems Involved:** `crates/storage`, `crates/vault`, desktop runtime/IPC/UI;
+  headless-compatible delivery adapter through existing observer boundaries.
+- **Scope:** Notify on matching new mail locally or through explicitly configured
+  webhooks, including user-owned n8n workflows. Select exported fields per destination;
+  full bodies are off by default. Store secret URLs/authentication only in vault.
+  Persist delivery jobs and bounded execution history in SQLCipher, with retry/backoff,
+  destination rate limits, stable event IDs and local duplicate suppression.
+- **Acceptance:** Offline adapter tests cover restart/reconnect, retries, disablement,
+  payload field selection and secret-free errors/history. Ambiguous remote delivery
+  outcomes are documented; do not promise exactly-once delivery to arbitrary receivers.
+  No initial-history alert flood; manual replay requires explicit selection. Explain
+  that processing requires the app or a separately deployed headless runner to be active.
+- **Planning Gate:** Propose and obtain approval for a narrow P0 network-policy exception
+  before enabling external deliveries. Specify destination consent, TLS, DNS/redirect
+  protections and any explicitly configured private-network webhook behavior. This
+  backlog entry does not amend `AGENTS.md` or authorize outbound requests.
+
+### Task [03.7]: Telegram & Discord Alert Connectors
+
+- **Status:** BACKLOG
+- **Priority:** 3
+- **Depends On:** [03.6] and its approved network-policy exception.
+- **Systems Involved:** Delivery adapters, `crates/vault`, desktop IPC/UI.
+- **Scope:** Add guided Telegram bot/chat and Discord webhook setup using the shared
+  rule engine, payload controls, queue and execution history. Include explicit test
+  delivery, destination selection and revocation/disable controls.
+- **Acceptance:** Synthetic offline connector tests cover formatting, escaping,
+  provider size/rate limits, retryable failures and secret redaction. Tokens and
+  secret webhook URLs never appear in logs, exports or returned configuration DTOs.
+
+### Task [04.10]: Saved Searches & Virtual Folders
+
+- **Status:** BACKLOG
+- **Priority:** 4
+- **Systems Involved:** `crates/storage`, desktop search IPC/sidebar.
+- **Scope:** Save named queries and scopes spanning selected accounts without moving
+  messages. Provide views such as unread clients, invoices and upcoming bills using
+  supported structured predicates. Keep saved definitions in encrypted storage.
+- **Acceptance:** Create/rename/delete views; refresh membership after sync or triage;
+  preserve pagination, account isolation and canonical message identity. Validate
+  full-result membership rather than filtering only the loaded frontend page.
+
+### Task [04.11]: Due-Date Dashboard & Scheduled Reminders
+
+- **Status:** BACKLOG
+- **Priority:** 5
+- **Depends On:** [03.5], [03.6]; [03.7] for Telegram/Discord destinations.
+- **Systems Involved:** Existing deterministic extractors, `crates/storage`, runtime
+  scheduling, desktop dashboard and rule UI.
+- **Scope:** Display extracted boleto/billing amounts and due dates. Trigger configurable
+  reminders before deadlines and when matching messages remain unread for a chosen
+  interval. Support local and enabled external destinations with amount thresholds.
+- **Acceptance:** Deterministic clock tests cover time zones, date-only deadlines,
+  suspend/resume, restarts, duplicate suppression, read-before-deadline cancellation
+  and explicit dismissal. Extraction never implies a bill was paid. Missed-reminder
+  behavior is visible; no always-on delivery claim when all runners are stopped.
+
+### Task [03.8]: Local Automatic Categories
+
+- **Status:** BACKLOG
+- **Priority:** 6
+- **Depends On:** [03.5]
+- **Systems Involved:** `crates/triage-ai`, `crates/storage`, desktop inbox.
+- **Scope:** Classify people, finance, purchases, newsletters and notifications locally,
+  starting with deterministic rules. Allow corrections and sender-specific overrides.
+  Expose category views without changing canonical IMAP folders.
+- **Acceptance:** Synthetic fixtures cover classification and override precedence;
+  re-sync preserves corrections. No cloud endpoint or model download is required.
+  Learned classification remains separately scoped behind explicit model consent.
+
+### Task [04.12]: New-Sender Review
+
+- **Status:** BACKLOG
+- **Priority:** 7
+- **Systems Involved:** `crates/storage`, desktop inbox/settings.
+- **Scope:** Offer an optional local review view for previously unseen senders, with
+  accept/decline controls and per-account preferences; reuse rule actions where useful.
+- **Acceptance:** Define normalized sender identity and initial-history seeding during
+  planning. Persist review choices across re-sync; never auto-delete messages. Clearly
+  distinguish local inbox filtering from blocking delivery at the provider, and never
+  present a familiar sender address as proof of authenticated identity.
+
+### Task [04.13]: Conversation Grouping & Thread Triage
+
+- **Status:** BACKLOG
+- **Priority:** 8
+- **Systems Involved:** MIME/header ingestion, `crates/storage`, desktop inbox/reader.
+- **Scope:** Group related messages using Message-ID, In-Reply-To and References;
+  define safe fallback behavior for missing/malformed headers and account boundaries.
+  Offer conversation-level read/archive/tag actions with explicit affected-message scope.
+- **Acceptance:** Fixtures cover duplicate IDs, malformed references, subject collisions
+  and cross-folder messages. Preserve per-message IMAP identity, lazy attachments,
+  pagination and secure rendering; handle partial mutation failures visibly.
+
+### Task [03.9]: Alert Digests & Quiet Hours
+
+- **Status:** BACKLOG
+- **Priority:** 9
+- **Depends On:** [03.6], [04.11]; [03.7] for Telegram/Discord destinations.
+- **Systems Involved:** Rule scheduler/delivery queue, `crates/storage`, desktop settings.
+- **Scope:** Batch routine alerts into scheduled summaries, configure quiet hours per
+  destination and allow explicit urgent-rule exceptions. Bound summary payloads and
+  apply the same user-selected export fields as individual alerts.
+- **Acceptance:** Clock tests cover time zones, overnight windows, suspend/resume,
+  restart and digest duplication. Avoid a burst of deferred notifications on resume;
+  define missed-window and urgency precedence behavior during planning.
+
+### Task [01.4]: Encrypted Backup & Portable Rule Export
+
+- **Status:** BACKLOG
+- **Priority:** 10
+- **Depends On:** [03.5], [04.10] for rule and saved-view formats.
+- **Systems Involved:** `crates/storage`, `crates/vault`, desktop import/export UI.
+- **Scope:** Export/import portable rules and saved views without credentials. Provide
+  encrypted local backup/restore for supported settings and locally cached mail data;
+  version the format and define a consistent SQLite/WAL snapshot and recovery process.
+- **Acceptance:** Round-trip, wrong-passphrase, corruption and version-compatibility
+  checks use synthetic fixtures. Credentials, database keys and secret destination URLs
+  are excluded from portable exports; restored integrations require reconnection and
+  remain disabled until confirmed. Restore never silently overwrites an existing vault
+  or database. Clearly state that unfetched attachment binaries are absent from backup.
+
+---
+
+## Other Future Backlog / Ideas (Unprioritized)
 
 - Headless CLI / Docker daemon runner consuming `crates/*` without GUI
-- Post-triage webhook & automation consumers implementing `TriageEventHook`
 - Outbound SMTP & lightweight Markdown/Plain-text reply composer (`v0.2+`)
 - Multi-folder sync (Archive/All Mail with Gmail dedup, Sent read-only): scoped into the proposed [04.1] mailbox queue; implementation pending approval
 - Real Tier 2 ONNX inference via `fastembed`/`ort` (`v0.2`)
