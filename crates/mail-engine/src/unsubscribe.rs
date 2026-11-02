@@ -8,7 +8,7 @@ use url::{Host, Url};
 
 use crate::{EngineError, UnsubscribeDescriptor};
 
-mod dns;
+pub(crate) mod dns;
 
 /// Exact form body mandated by RFC 8058 Section 3.1.
 pub const RFC8058_POST_BODY: &str = "List-Unsubscribe=One-Click";

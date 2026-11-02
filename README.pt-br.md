@@ -105,6 +105,28 @@ As credenciais de contas e chaves de criptografia do banco são armazenadas excl
 
 O `triage-mail` oferece suporte a quatro métodos de autenticação sob um transporte agnóstico de IMAP. Os principais provedores de e-mail bloqueiam o uso da senha normal da conta em conexões IMAP; utilize o método recomendado abaixo para cada serviço.
 
+### Descoberta de provedores
+
+Informe um endereço de e-mail e saia do campo para buscar configurações locais dos
+provedores. As predefinições cobrem Gmail, domínios pessoais Microsoft, Yahoo,
+iCloud, Fastmail, Zoho, UOL, BOL e Terra. Domínios próprios e organizacionais podem
+exigir configuração manual; uma predefinição não verifica a conta nem garante
+acesso IMAP no plano contratado.
+
+**Buscar configurações online** envia explicitamente apenas o domínio ao ISPDB do
+Mozilla Thunderbird por HTTPS, com timeout de três segundos e limite de resposta
+de 64 KiB. Nunca envia o endereço completo, senha ou credenciais OAuth. Somente
+configurações IMAP com TLS implícito são aceitas. Não há teste automático de hosts.
+**Confirmar e testar** conecta apenas ao host público exibido na porta 993, verifica
+o TLS e a saudação IMAP e não envia credenciais. O sucesso do teste não verifica o login.
+
+Use **Configurações avançadas de conexão** para host/porta manuais, BYO OAuth ou
+Proton Bridge. Edições manuais e seleção de predefinições impedem que a busca automática
+sobrescreva o formulário. O Gmail tem um link direto para Senhas de aplicativo.
+**Configurar login Microsoft** preenche as configurações PKCE da Microsoft; informe
+o ID de cliente do seu próprio aplicativo desktop registrado e selecione **Autorizar
+e conectar**. Nenhum ID de aplicativo ou segredo é distribuído com o programa.
+
 ### Visão Geral dos Métodos de Autenticação
 
 | Método | Indicado Para | Pré-requisitos | Serviços Compatíveis |

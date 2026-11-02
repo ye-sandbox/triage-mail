@@ -85,6 +85,30 @@ export const translations: Record<SupportedLocale, Translations> = {
 			accountSaveError: 'Account could not be saved'
 		},
 		accountForm: {
+			discoveryIntro:
+				'Enter your email address to find offline provider settings. You can also choose a preset or enter settings manually.',
+			advancedSettings: 'Advanced connection settings',
+			microsoftSetup: 'Set up Microsoft sign-in',
+			microsoftSetupHelp:
+				'Use your own desktop application client ID, then authorize in your browser.',
+			onlineLookup: 'Look up settings online',
+			onlineLookupHelp:
+				'This sends only your email domain to Mozilla Thunderbird ISPDB and replaces the connection settings. It does not sign in or test a server.',
+			confirmProbe: 'Confirm and test',
+			probeHelp:
+				'Confirm the host below to test its IMAP TLS connection on port 993. No credentials are sent.',
+			discovering: 'Checking provider settings…',
+			providerFound: 'Suggested settings:',
+			discoveryUnresolved:
+				'No matching settings found. Enter your provider’s IMAP host in advanced settings.',
+			discoveryInvalid: 'Enter a single valid email address.',
+			discoveryUnavailable:
+				'Settings lookup is unavailable. Choose a preset or enter settings manually.',
+			probeSuccess: 'IMAP TLS connection confirmed. Sign-in has not been tested.',
+			probeFailed:
+				'IMAP TLS could not be confirmed. Check the host and try again or configure it manually.',
+			gmailAppPasswordHelp: 'Create a Google app password (requires 2-Step Verification)',
+
 			title: 'Connect an account',
 			subtitle: 'Use the connection settings supplied by your mail provider.',
 			methodLabel: 'Sign-in method',
@@ -371,6 +395,31 @@ export const translations: Record<SupportedLocale, Translations> = {
 			accountSaveError: 'Não foi possível salvar a conta'
 		},
 		accountForm: {
+			discoveryIntro:
+				'Informe seu e-mail para encontrar configurações locais do provedor. Você também pode escolher um provedor ou configurar manualmente.',
+			advancedSettings: 'Configurações avançadas de conexão',
+			microsoftSetup: 'Configurar login Microsoft',
+			microsoftSetupHelp:
+				'Use o ID de cliente do seu próprio aplicativo desktop e autorize no navegador.',
+			onlineLookup: 'Buscar configurações online',
+			onlineLookupHelp:
+				'Esta ação envia apenas o domínio do e-mail ao ISPDB do Mozilla Thunderbird e substitui as configurações de conexão. Não faz login nem testa servidores.',
+			confirmProbe: 'Confirmar e testar',
+			probeHelp:
+				'Confirme o host abaixo para testar a conexão IMAP com TLS na porta 993. Nenhuma credencial é enviada.',
+			discovering: 'Verificando configurações do provedor…',
+			providerFound: 'Configurações sugeridas:',
+			discoveryUnresolved:
+				'Nenhuma configuração correspondente encontrada. Informe o host IMAP do seu provedor nas configurações avançadas.',
+			discoveryInvalid: 'Informe um único endereço de e-mail válido.',
+			discoveryUnavailable:
+				'A busca de configurações está indisponível. Escolha um provedor ou configure manualmente.',
+			probeSuccess: 'Conexão IMAP com TLS confirmada. O login ainda não foi testado.',
+			probeFailed:
+				'Não foi possível confirmar o IMAP com TLS. Confira o host e tente novamente ou configure manualmente.',
+			gmailAppPasswordHelp:
+				'Criar uma senha de aplicativo Google (requer verificação em duas etapas)',
+
 			title: 'Conectar uma conta',
 			subtitle: 'Use as configurações de conexão fornecidas pelo seu provedor de e-mail.',
 			methodLabel: 'Método de autenticação',

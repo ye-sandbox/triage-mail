@@ -301,3 +301,54 @@ async fn invalid_configuration_and_browser_failure_cannot_register_an_account() 
     assert!(vault.0.lock().unwrap().is_empty());
     assert!(service.list_accounts().await.unwrap().is_empty());
 }
+
+struct DiscoveryFixture(AtomicUsize);
+#[async_trait]
+impl mail_engine::discovery::DiscoveryTransport for DiscoveryFixture {
+    async fn ispdb(&self, domain: &str) -> Result<Vec<u8>, mail_engine::discovery::DiscoveryError> {
+        assert_eq!(domain, "example.com");
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Ok(br#"<clientConfig><emailProvider><incomingServer type="imap"><hostname>imap.example.com</hostname><port>993</port><socketType>SSL</socketType></incomingServer></emailProvider></clientConfig>"#.to_vec())
+    }
+    async fn probe(&self, host: &str) -> Result<bool, mail_engine::discovery::DiscoveryError> {
+        assert_eq!(host, "imap.example.com");
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Err(mail_engine::discovery::DiscoveryError::Unavailable)
+    }
+}
+
+#[tokio::test]
+async fn discovery_ipc_service_is_offline_by_default_and_returns_secret_free_metadata() {
+    let transport = DiscoveryFixture(AtomicUsize::new(0));
+    let offline = discover_provider("reader@example.com", false, &transport)
+        .await
+        .unwrap();
+    assert_eq!(
+        offline.source,
+        mail_engine::discovery::DiscoverySource::Unresolved
+    );
+    assert_eq!(transport.0.load(Ordering::SeqCst), 0);
+    let online = discover_provider("reader@example.com", true, &transport)
+        .await
+        .unwrap();
+    let json = serde_json::to_value(online).unwrap();
+    assert_eq!(json["imap_host"], "imap.example.com");
+    assert_eq!(json["imap_port"], 993);
+    assert_eq!(json["use_ssl"], true);
+    assert_eq!(json["recommended_auth"], "AppPassword");
+    assert!(json["oauth_endpoints"].is_null());
+    assert!(!json.to_string().contains("reader@"));
+    assert_eq!(transport.0.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        discover_provider("bad\r\naddress", false, &transport).await,
+        Err(IpcError::InvalidRequest)
+    );
+    assert_eq!(
+        probe_provider("imap.example.com", &transport).await,
+        Err(IpcError::RemoteUnavailable)
+    );
+    assert_eq!(
+        probe_provider("127.0.0.1", &transport).await,
+        Err(IpcError::InvalidRequest)
+    );
+}

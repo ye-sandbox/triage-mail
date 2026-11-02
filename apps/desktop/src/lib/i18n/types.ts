@@ -89,6 +89,23 @@ export interface Translations {
 		accountSaveError: string;
 	};
 	accountForm: {
+		discoveryIntro: string;
+		advancedSettings: string;
+		microsoftSetup: string;
+		microsoftSetupHelp: string;
+		onlineLookup: string;
+		onlineLookupHelp: string;
+		confirmProbe: string;
+		probeHelp: string;
+		discovering: string;
+		providerFound: string;
+		discoveryUnresolved: string;
+		discoveryInvalid: string;
+		discoveryUnavailable: string;
+		probeSuccess: string;
+		probeFailed: string;
+		gmailAppPasswordHelp: string;
+
 		title: string;
 		subtitle: string;
 		methodLabel: string;

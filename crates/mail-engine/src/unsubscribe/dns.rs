@@ -14,7 +14,7 @@ impl Resolve for SystemResolver {
     }
 }
 
-pub(super) fn resolver(allow_loopback_for_tests: bool) -> impl Resolve {
+pub(crate) fn resolver(allow_loopback_for_tests: bool) -> impl Resolve {
     PublicResolver {
         inner: SystemResolver,
         allow_loopback_for_tests,
@@ -50,7 +50,7 @@ impl<R: Resolve> Resolve for PublicResolver<R> {
     }
 }
 
-fn public_address(address: IpAddr) -> bool {
+pub(crate) fn public_address(address: IpAddr) -> bool {
     match address {
         IpAddr::V4(ip) => {
             let [a, b, c, _] = ip.octets();

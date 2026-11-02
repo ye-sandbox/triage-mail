@@ -10,6 +10,16 @@ export interface ProviderPreset {
 	scopes?: string;
 }
 
+export const microsoftPreset: ProviderPreset = {
+	name: 'Outlook',
+	host: 'outlook.office365.com',
+	port: 993,
+	method: 'OAuth2PublicPkce',
+	authEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+	tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+	scopes: 'offline_access https://outlook.office.com/IMAP.AccessAsUser.All'
+};
+
 export const providerPresets: ProviderPreset[] = [
 	{ name: 'Gmail', host: 'imap.gmail.com', port: 993, method: 'AppPassword' },
 	{
@@ -21,15 +31,7 @@ export const providerPresets: ProviderPreset[] = [
 		tokenEndpoint: 'https://oauth2.googleapis.com/token',
 		scopes: 'https://mail.google.com/'
 	},
-	{
-		name: 'Outlook',
-		host: 'outlook.office365.com',
-		port: 993,
-		method: 'OAuth2PublicPkce',
-		authEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
-		tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
-		scopes: 'offline_access https://outlook.office.com/IMAP.AccessAsUser.All'
-	},
+	microsoftPreset,
 	{ name: 'iCloud', host: 'imap.mail.me.com', port: 993, method: 'AppPassword' },
 	{ name: 'Yahoo', host: 'imap.mail.yahoo.com', port: 993, method: 'AppPassword' },
 	{ name: 'Fastmail', host: 'imap.fastmail.com', port: 993, method: 'AppPassword' },

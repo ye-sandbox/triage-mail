@@ -105,6 +105,26 @@ Runtime credentials and database encryption keys are stored strictly in the oper
 
 `triage-mail` supports four authentication methods behind an agnostic IMAP transport. Major providers block standard account passwords over IMAP; select the appropriate method below based on your provider.
 
+### Provider discovery
+
+Enter an email address and leave the field to look up built-in provider settings locally.
+Presets cover Gmail, Microsoft consumer domains, Yahoo, iCloud, Fastmail, Zoho,
+UOL, BOL, and Terra. Custom and organization domains may need manual settings;
+a matching preset does not verify an account or guarantee IMAP access on its plan.
+
+**Look up settings online** explicitly sends only the domain to Mozilla Thunderbird
+ISPDB over HTTPS, with a three-second timeout and a 64 KiB response limit. It never
+sends the full address, password, or OAuth credentials. Only implicit-TLS IMAP
+settings are accepted. No automatic host probing occurs. **Confirm and test**
+connects only to the displayed public host on port 993, verifies TLS and the IMAP
+greeting, and sends no credentials. A successful probe does not verify sign-in.
+
+Use **Advanced connection settings** for manual host/port, BYO OAuth, or Proton
+Bridge configuration. Manual edits and preset selections prevent automatic lookup
+from overwriting the form. Gmail has a direct App Passwords link. **Set up Microsoft
+sign-in** fills Microsoft PKCE settings; supply your own registered desktop client ID,
+then select **Authorize and connect**. No application ID or secret is bundled.
+
 ### Authentication Methods Overview
 
 | Method | Best For | Prerequisites | Compatible Services |
