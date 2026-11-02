@@ -251,6 +251,10 @@ frames e memória da árvore de processos. Consulte
 [metodologia, comandos e limites medidos](docs/performance/native-validation.md).
 Essas ferramentas não acessam provedores nem baixam modelos; recompile a SPA normal após a
 compilação da interface de teste antes de gerar o binário do aplicativo.
+A validação de correção e latência específica das caixas de correio usa
+`cargo run --offline --release -p storage --example mailbox_performance`.
+Consulte o [relatório de validação das caixas de correio](docs/performance/mailbox-validation.md)
+para os cenários por escopo, tempos de IPC nativo, capturas e critérios ainda pendentes.
 
 ## License
 

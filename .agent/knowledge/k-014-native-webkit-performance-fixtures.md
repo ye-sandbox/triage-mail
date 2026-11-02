@@ -52,3 +52,13 @@ before building production binaries. Do not ship the generated fixture route.
 - Do not install temporary helper symlinks into system directories or commit machine paths.
 - Do not treat linking success, a window, startup RSS, or a timeout as native frame evidence.
 - Do not claim requestAnimationFrame intervals prove GPU presentation or all-hardware 60fps.
+
+## Wrapper timeout cleanup (2026-11-02)
+
+When the sampler launches a bubblewrap wrapper, terminating only that PID can orphan the
+native process and WebKit children. Inherited stdout pipes then prevent the sampler's
+`close` event and final JSON output. The sampler now creates a dedicated Unix process group
+and terminates that group on timeout. A disposable wrapper with a sleeping child verifies
+that timed sampling returns normally. On Windows it retains direct child termination;
+Windows descendant cleanup is not established by the Linux regression. Do not accept an
+orphaned process or missing `complete` phase as a successful native measurement.
