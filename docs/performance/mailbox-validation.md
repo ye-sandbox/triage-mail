@@ -372,3 +372,12 @@ in this closure. Deviations carried forward:
 Revisit with [01.1] (binary quantization + exact int8 rerank, ADR-008) and a native UI
 performance pass; any semantic redesign must honor k-021 (zero norms, orphan embeddings,
 oversized ties).
+
+## Binary candidate follow-up ([01.1], 2026-11-02)
+
+The [binary quantization evaluation](binary-quantization.md) reuses this 100k-message
+fixture with Hamming candidate budgets and exact int8 cosine reranking, plus fresh
+production controls and independent ordered-page oracles. ADR-011 retains exact
+production ranking: finite sign-code candidates cannot certify cosine coverage.
+No schema, target or UI path changes; this follow-up does not close the known scoped,
+native first-page or frame-cadence deviations above.
