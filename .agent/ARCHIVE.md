@@ -5,6 +5,51 @@
 
 ---
 
+## [v0.1.3] - 2026-11-02
+
+### 📌 Task [04.1]: Account Mailboxes Navigation
+
+- **Description:** Implement an expandable account list below global All Mail, with local account photos, functional per-account mailbox views (Inbox, Starred, Snoozed, Spam, Archive, Trash, Other folders), same-account deduplication, and append-only Migration v2.
+- **Systems Involved:** `crates/storage`, `crates/mail-engine`, `apps/desktop`.
+- **Action Type:** Feature & Performance Optimization.
+- **Status:** DONE (with known performance deviations)
+- **Commits:** `c4676d1`, `8779527`, `9b9f094`, `a1c25ad`, `01f8eb0`, `dcc320a`, `8794854`, `a5ddad2`, `a80ce39`
+- **Acceptance:**
+  - [x] Folders discovery and catalog synchronization with append-only Migration v2 (`folders`, `message_folder_memberships`, `account_avatars`).
+  - [x] Two-way Starred flag synchronization and local Snoozed mailbox triage with UTC deadline handling.
+  - [x] Account-scoped lexical (FTS5) and semantic vector search with bounded query execution over SQLCipher.
+  - [x] Private local account avatars with client-side thumbnail normalization (128x128), EXIF metadata scrubbing, and encrypted storage.
+  - [x] Expandable account mailbox navigation in sidebar with view controls, folder catalog counts, stale-response guards.
+  - [x] Bounded mailbox query optimization for large SQLCipher databases.
+
+### 📌 Task [04.1]: Unified Settings Modal
+
+- **Description:** Implement a unified, accessible, and responsive Settings dialog with typed modules, persistent mounted inbox shell, gear entry point, and embedded account management.
+- **Systems Involved:** `apps/desktop` (`src/lib/settings/`, `src/lib/inbox/`, `src/lib/i18n/`).
+- **Action Type:** Feature & UI Architecture.
+- **Status:** DONE
+- **Commits:** `e3b2ff4`, `6c21bbf`, `e9464eb`, `e59d45a`
+- **Acceptance:**
+  - [x] Persistent mounted inbox beneath modal backdrop.
+  - [x] Sidebar gear footer entry point and toolbar fallback trigger.
+  - [x] Modular panes: General, Accounts, Search, AI, Privacy with unsaved-form guards and pending operation isolation.
+  - [x] Embedded account management with reusable `AccountList` and bilingual translations (`en` / `pt-BR`).
+
+### 📌 Task [04.9]: Application Title Bar
+
+- **Description:** Implement an application-styled title bar replacing OS decorations, with themed window controls and a persistent desktop shell.
+- **Systems Involved:** `apps/desktop` (`src/lib/window/`, `src-tauri/`).
+- **Action Type:** Feature & UI Architecture.
+- **Status:** DONE
+- **Commits:** `626aaba`, `4cb5658`, `76973ef`, `ec087bc`
+- **Acceptance:**
+  - [x] Themed custom window chrome replacing OS decorations.
+  - [x] Native drag, minimize, maximize, restore, and close controls via typed window adapter and Tauri IPC transport.
+  - [x] Persistent remaining-height layout and shell integration.
+  - [x] Full accessibility support and bilingual labels (`en` / `pt-BR`).
+
+---
+
 ## [v0.1.2] - 2026-11-01
 
 ### 📌 Task [04.8.1]: Step-by-Step Credential Setup Playbooks & Gmail OAuth Preset

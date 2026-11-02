@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-02
+
+### Added
+- Application Title Bar with themed desktop chrome, native window management (drag, minimize, maximize, restore, close), and persistent remaining-height layout.
+- Unified Settings Modal with persistent mounted inbox shell, unsaved form guards, and modular panes (General, Accounts, Search, AI, Privacy) in English and Brazilian Portuguese.
+- Account Mailboxes Navigation with expandable account folders, folder catalog discovery, same-account deduplication, and append-only Migration v2.
+- Two-way Starred flag synchronization and local Snoozed mailbox triage with deadline filtering.
+- Account-scoped lexical (FTS5) and semantic vector search with bounded query execution over SQLCipher.
+- Private local account avatars with client-side thumbnail normalization (128x128), EXIF metadata scrubbing, and encrypted storage.
+
 ## [0.1.2] - 2026-11-01
 
 ### Added
