@@ -10,7 +10,7 @@
 ### Task [04.1]: Account Mailboxes Navigation
 
 - **Description:** Implement an expandable account list below global All Mail, with local account photos, functional per-account mailbox views (Inbox, Starred, Snoozed, Spam, Archive, Trash, Other folders), same-account deduplication, and append-only Migration v2.
-- **Status:** PLANNING
+- **Status:** DONE (with known performance deviations)
 - **Action Type:** Sequential / Wave implementation across tasks `[04.1.1]`–`[04.1.7]`.
 - **Plan and implementation tasks:** [Account Mailboxes Plan](plans/04.1-account-mailboxes.md).
 - **Scope:** Append-only Migration v2 (`folders`, `message_folder_memberships`, `account_avatars`, `messages` column additions), folder catalog synchronization, two-way Starred and local Snoozed behavior, account-scoped search, local private avatars, and Svelte 5 expandable account navigation.
@@ -59,7 +59,7 @@
   - `Closure:` Local atomic commit `01f8eb0`; next task [04.1.7] promoted to planning. No push performed.
   - `Environment:` Existing loopback tests and the Node policy scanner needed sandbox exceptions for local sockets/subprocesses. No dependency downloads, provider requests, system installation, or push occurred.
 
-- [ ] **[04.1.7]** `[PLANNING]` `[SEQ: W7]` Validate and close the mailbox feature
+- [x] **[04.1.7]** `[DONE: CLOSURE_HASH]` `[SEQ: W7]` Validate and close the mailbox feature
   - `Paths:` `crates/storage/src/scoped_search.rs, crates/storage/src/scoped_search_tests.rs, feature tests, crates/storage/examples/**, tools/performance/**, apps/desktop/src-tauri/examples/**, docs/performance/**, .agent/TASK.md, .agent/NOTES.md, applicable knowledge cards`
   - `Verify:` `cargo test --workspace && pnpm --filter desktop check && pnpm --filter desktop test && node scripts/ci-guard.mjs`
   - `Plan:` `.agent/plans/04.1-account-mailboxes.md`, section `[04.1.7]`; detailed validation proposal approved by user `proceed` on 2026-11-02. Validation found a production query-plan blocker; returned to planning for scoped follow-up approval. No production fix or dependency change was performed in that initial validation.
@@ -70,7 +70,7 @@
   - `Approved production follow-up (2026-11-02):` User `proceed` authorized scoped storage changes and regression tests. Fixed message-correlated membership planning using the existing message-ID index and bounded adaptive account/deadline enumeration using existing indices; schemas, IPC and traits preserved. Five new regressions cover query plans, bounded VM work, cross-account snooze skew and zero-norm NULL ordering. A candidate-frontier shortcut failed that ordering regression and was removed.
   - `Final evidence:` All 56 storage workloads / 1,680 warm samples pass independent rank/count/identity oracles. Blank Inbox p95 35.373ms replaces the original timeout; Snoozed semantic p95 16.702ms improves on 23.540ms but still misses 15ms. Native exits 0 with every first-page/scroll report; <=18 mounted rows at 100k. Remaining lexical/semantic/hybrid, first-page and frame-cadence budget misses are listed in the report. Browser visual follow-up covers zero/one accounts, light/dark, thumbnail, static reduced-motion layout, loading/not-synced/offline states.
   - `Final checks:` Offline workspace check, all 214 Rust tests, all-target Clippy plus all-features Clippy with warnings denied, fmt, zero-error/warning desktop check, all 126 frontend tests, fixture and restored ordinary SPA builds pass. Policy scan: 241 tracked text files, zero findings; diff, fixture formatting and Svelte invariant pass. No downloads, live accounts, system installation, tag or push.
-  - `Current gate:` NOT DONE; returned to PLANNING because the approved index fix does not satisfy all timing targets. Further exact semantic/index and native UI performance design remains pending. Production fixes: `dcc320a`, `8794854`; final evidence: `a5ddad2`; next milestone remains unpromoted.
+  - `Closure (2026-11-02):` Closed by user decision with the unmet timing budgets recorded as known deviations in `docs/performance/mailbox-validation.md` and NOTES; no target weakened. Production fixes: `dcc320a`, `8794854`; evidence: `a5ddad2`. Next milestone [01.1] promoted to PLANNING.
 
 
 ## Completed Tasks
@@ -109,9 +109,9 @@
 - **Description:** Evaluate 1-bit scalar/binary quantization (BQ) candidate generator + exact int8 reranking for sub-15ms global vector queries on 100k messages in SQLCipher, per ADR-008.
 - **Systems Involved:** `crates/storage` (vector indexing, Hamming distance pre-filter, SQLCipher).
 - **Action Type:** Investigation & Architecture.
-- **Status:** READY FOR PLANNING
+- **Status:** PLANNING
 - **Constraints:** Preserve single-file SQLCipher encryption, exact tie handling, and oracle equivalence.
-- **Scheduling:** Retained unchanged; title-bar planning takes priority for the current user request. Not active.
+- **Scheduling:** Promoted to planning after [04.1.7] closure; carries the unmet scoped-search budgets as motivation.
 
 ---
 

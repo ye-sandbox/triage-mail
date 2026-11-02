@@ -357,3 +357,18 @@ norms, missing/orphan embeddings and oversized ties; a finite candidate shortcut
 replace the existing contract. Further design must preserve append-only schema governance,
 full SQLCipher encryption and headless boundaries. No broader schema/dependency/UI production
 change is authorized or silently included by this follow-up.
+
+## Closure with known deviations (2026-11-02)
+
+By user decision, [04.1.7] is closed with the measured misses above accepted as **known
+deviations**, not as met targets. No timing target was weakened and no production code changed
+in this closure. Deviations carried forward:
+
+- Scoped lexical/semantic/hybrid p95 misses (e.g. Snoozed semantic 16.702ms vs 15ms; Inbox
+  semantic 106.144ms).
+- Native first-page misses for Inbox and Archive semantic/hybrid against the 100ms budget.
+- 60fps cadence not established (preloaded/paged frame p95 23/22ms).
+
+Revisit with [01.1] (binary quantization + exact int8 rerank, ADR-008) and a native UI
+performance pass; any semantic redesign must honor k-021 (zero norms, orphan embeddings,
+oversized ties).
