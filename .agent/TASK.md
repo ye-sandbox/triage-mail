@@ -59,7 +59,7 @@
   - `Closure:` Local atomic commit `01f8eb0`; next task [04.1.7] promoted to planning. No push performed.
   - `Environment:` Existing loopback tests and the Node policy scanner needed sandbox exceptions for local sockets/subprocesses. No dependency downloads, provider requests, system installation, or push occurred.
 
-- [x] **[04.1.7]** `[DONE: CLOSURE_HASH]` `[SEQ: W7]` Validate and close the mailbox feature
+- [x] **[04.1.7]** `[DONE: a80ce39]` `[SEQ: W7]` Validate and close the mailbox feature
   - `Paths:` `crates/storage/src/scoped_search.rs, crates/storage/src/scoped_search_tests.rs, feature tests, crates/storage/examples/**, tools/performance/**, apps/desktop/src-tauri/examples/**, docs/performance/**, .agent/TASK.md, .agent/NOTES.md, applicable knowledge cards`
   - `Verify:` `cargo test --workspace && pnpm --filter desktop check && pnpm --filter desktop test && node scripts/ci-guard.mjs`
   - `Plan:` `.agent/plans/04.1-account-mailboxes.md`, section `[04.1.7]`; detailed validation proposal approved by user `proceed` on 2026-11-02. Validation found a production query-plan blocker; returned to planning for scoped follow-up approval. No production fix or dependency change was performed in that initial validation.
