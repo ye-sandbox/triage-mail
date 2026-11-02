@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { i18n } from '../i18n/index.svelte';
 	import { labels } from './labels';
-	import { EXPORT_FIELDS, type Destination, type WebhookSecret } from './types';
+	import { EXPORT_FIELDS, type Destination, type AlertSecret } from './types';
 	let {
 		draft,
 		busy,
@@ -13,16 +13,19 @@
 		draft: Destination;
 		busy: boolean;
 		change: (d: Destination) => void;
-		save: (secret: WebhookSecret | null, consent: boolean) => Promise<void>;
+		save: (secret: AlertSecret | null, consent: boolean) => Promise<void>;
 		cancel: () => void;
 	} = $props();
 	const t = $derived(labels[i18n.locale]);
+	const initialKind = untrack(() => draft.kind);
 	let urlInput = $state<HTMLInputElement>();
 	let bearerInput = $state<HTMLInputElement>();
 	let consent = $state(false);
 	function clear() {
 		if (urlInput) urlInput.value = '';
 		if (bearerInput) bearerInput.value = '';
+		urlInput?.setCustomValidity('');
+		bearerInput?.setCustomValidity('');
 	}
 	onDestroy(clear);
 	function update(d: Destination) {
@@ -36,15 +39,29 @@
 		} catch {
 			/* Native validation remains authoritative. */
 		}
-		update({ ...draft, public_origin: input.value ? origin : draft.public_origin });
+		update({
+			...draft,
+			public_origin: input.value ? origin : draft.public_origin
+		});
 	}
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
-		const secret =
-			draft.kind === 'Webhook' && urlInput?.value
-				? { url: urlInput.value, bearer: bearerInput?.value || null }
-				: null;
+		let secret: AlertSecret | null = null;
+		if (draft.kind === 'Telegram' && (urlInput?.value || bearerInput?.value)) {
+			if (!urlInput?.value || !bearerInput?.value) {
+				const missing = !urlInput?.value ? urlInput : bearerInput;
+				missing?.setCustomValidity(t.complete);
+				missing?.reportValidity();
+				return;
+			}
+			secret = { token: urlInput.value, chat_id: bearerInput.value };
+		} else if (draft.kind !== 'Local' && urlInput?.value) {
+			secret = {
+				url: urlInput.value,
+				bearer: draft.kind === 'Webhook' ? bearerInput?.value || null : null
+			};
+		}
 		clear();
 		await save(secret, consent);
 	}
@@ -69,36 +86,57 @@
 					update({
 						...draft,
 						kind: e.currentTarget.value as Destination['kind'],
+						public_origin:
+							e.currentTarget.value === 'Telegram'
+								? 'https://api.telegram.org'
+								: e.currentTarget.value === 'Discord'
+									? 'https://discord.com'
+									: null,
+						has_credentials: false,
 						fields: []
 					});
 				}}
 				class="block w-full bg-[var(--surface)] border rounded p-2"
-				><option value="Local">{t.local}</option><option value="Webhook">{t.webhook}</option
-				></select
+				><option value="Local">{t.local}</option><option value="Webhook">{t.webhook}</option><option
+					value="Telegram">Telegram</option
+				><option value="Discord">Discord</option></select
 			></label
 		>
-		{#if draft.kind === 'Webhook'}
+		{#if draft.kind !== 'Local'}
+			{#if draft.kind === 'Telegram'}<p>
+					{t.telegramHelp}
+				</p>{:else if draft.kind === 'Discord'}<p>{t.discordHelp}</p>{/if}
+			<p>{t.revoke}</p>
 			<p>{t.preserve}</p>
 			<p>{draft.public_origin ?? '—'}</p>
 			<label class="block"
-				>{t.url}<input
+				>{draft.kind === 'Telegram' ? t.token : t.url}<input
 					bind:this={urlInput}
 					type="password"
 					autocomplete="off"
-					required={draft.revision === 0}
-					oninput={(e) => updateUrl(e.currentTarget)}
+					required={draft.revision === 0 || draft.kind !== initialKind}
+					oninput={(e) => {
+						e.currentTarget.setCustomValidity('');
+						if (draft.kind === 'Webhook') updateUrl(e.currentTarget);
+						else consent = false;
+					}}
 					class="block w-full bg-[var(--surface)] border rounded p-2"
 				/></label
 			>
-			<label class="block"
-				>{t.bearer}<input
-					bind:this={bearerInput}
-					type="password"
-					autocomplete="off"
-					oninput={() => (consent = false)}
-					class="block w-full bg-[var(--surface)] border rounded p-2"
-				/></label
-			>
+			{#if draft.kind !== 'Discord'}<label class="block"
+					>{draft.kind === 'Telegram' ? t.chat : t.bearer}<input
+						bind:this={bearerInput}
+						type="password"
+						autocomplete="off"
+						required={draft.kind === 'Telegram' &&
+							(draft.revision === 0 || draft.kind !== initialKind)}
+						oninput={(e) => {
+							e.currentTarget.setCustomValidity('');
+							consent = false;
+						}}
+						class="block w-full bg-[var(--surface)] border rounded p-2"
+					/></label
+				>{/if}
 			<fieldset class="space-y-2">
 				<legend>{t.fields}</legend>
 				{#each EXPORT_FIELDS as field}<label class="flex gap-2"

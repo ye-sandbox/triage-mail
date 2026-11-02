@@ -42,6 +42,9 @@ impl AlertTransport for NativeAlerts {
         let Some(secret) = secret else {
             return (DeliveryOutcome::Unavailable, 0);
         };
+        if matches!(d.kind, DestinationKind::Telegram | DestinationKind::Discord) {
+            return send_connector(d.kind, secret, payload, event, &SystemResolver).await;
+        }
         let adapter = WebhookAdapter { secret };
         // DeliveryAdapter is usable by headless compositions without a desktop service.
         adapter.deliver(payload, event).await
@@ -116,6 +119,50 @@ fn webhook_url(secret: &WebhookSecret) -> Result<url::Url, IpcError> {
     }
     Ok(url)
 }
+/// INVARIANT: Provider hosts and paths are fixed; no setup request or URL-derived discovery.
+fn connector_url(kind: DestinationKind, secret: &WebhookSecret) -> Result<url::Url, IpcError> {
+    let url = webhook_url(secret)?;
+    let valid = match kind {
+        DestinationKind::Webhook => true,
+        DestinationKind::Telegram => {
+            url.host_str() == Some("api.telegram.org")
+                && url.query().is_none()
+                && url
+                    .path()
+                    .strip_prefix("/bot")
+                    .and_then(|p| p.strip_suffix("/sendMessage"))
+                    .is_some_and(vault::alerts::valid_bot_token)
+                && secret
+                    .bearer
+                    .as_deref()
+                    .is_some_and(vault::alerts::valid_chat_id)
+        }
+        DestinationKind::Discord => {
+            let parts: Vec<_> = url.path().split('/').collect();
+            url.host_str() == Some("discord.com")
+                && url.query().is_none()
+                && secret.bearer.is_none()
+                && parts.len() == 5
+                && parts[1] == "api"
+                && parts[2] == "webhooks"
+                && !parts[3].is_empty()
+                && parts[3].len() <= 20
+                && parts[3].bytes().all(|c| c.is_ascii_digit())
+                && !parts[4].is_empty()
+                && parts[4].len() <= 256
+                && parts[4]
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
+        }
+        DestinationKind::Local => false,
+    };
+    if valid {
+        Ok(url)
+    } else {
+        Err(IpcError::InvalidRequest)
+    }
+}
+
 impl DesktopService {
     pub async fn list_alerts(self: &Arc<Self>) -> Result<Vec<Destination>, IpcError> {
         self.blocking(|s| s.store.list_alert_destinations().map_err(storage_error))
@@ -156,22 +203,29 @@ impl DesktopService {
                 None
             };
             let mut staged = None;
-            if d.kind == DestinationKind::Webhook {
+            if d.kind != DestinationKind::Local {
                 let material = match secret {
                     Some(value) => value.0,
-                    None => read_secret(
-                        s.vault.as_ref(),
-                        old_key.as_deref().ok_or(IpcError::InvalidRequest)?,
-                    )?,
+                    None => {
+                        if current.as_ref().is_none_or(|v| v.kind != d.kind) {
+                            return Err(IpcError::InvalidRequest);
+                        }
+                        read_secret(
+                            s.vault.as_ref(),
+                            old_key.as_deref().ok_or(IpcError::InvalidRequest)?,
+                        )?
+                    }
                 };
-                let url = webhook_url(&material)?;
+                let url = connector_url(d.kind, &material)?;
                 let origin = Some(url.origin().ascii_serialization());
                 // INVARIANT: Consent binds to the public origin actually displayed by the UI.
                 if d.enabled && d.public_origin != origin {
                     return Err(IpcError::InvalidRequest);
                 }
                 d.public_origin = origin;
-                d.has_credentials = material.bearer.as_ref().is_some_and(|v| !v.is_empty());
+                d.has_credentials =
+                    matches!(d.kind, DestinationKind::Telegram | DestinationKind::Discord)
+                        || material.bearer.as_ref().is_some_and(|v| !v.is_empty());
                 let id = crate::service::opaque_id()?;
                 s.store.register_alert_secret(&id).map_err(storage_error)?;
                 let raw = Zeroizing::new(
@@ -352,22 +406,9 @@ async fn send_with_resolver(
     let Some(host) = url.host_str() else {
         return (DeliveryOutcome::Rejected, 0);
     };
-    let Ok(addresses) = resolver.resolve(host).await else {
-        return (DeliveryOutcome::Retry, 0);
-    };
-    // INVARIANT: Pin the same validated snapshot; no DNS rebinding or private fallback.
-    if addresses.is_empty() || addresses.iter().any(|a| !network::public_address(a.ip())) {
-        return (DeliveryOutcome::Rejected, 0);
-    }
-    let Ok(client) = reqwest::Client::builder()
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none())
-        .min_tls_version(reqwest::tls::Version::TLS_1_2)
-        .resolve_to_addrs(host, &addresses)
-        .timeout(Duration::from_secs(10))
-        .build()
-    else {
-        return (DeliveryOutcome::Unavailable, 0);
+    let client = match public_client(host, resolver).await {
+        Ok(client) => client,
+        Err(outcome) => return (outcome, 0),
     };
     let mut request = client
         .post(url)
@@ -389,6 +430,107 @@ async fn send_with_resolver(
         .map(retry_after)
         .unwrap_or(0);
     (classify_status(status), retry)
+}
+async fn public_client(
+    host: &str,
+    resolver: &dyn WebhookResolver,
+) -> Result<reqwest::Client, DeliveryOutcome> {
+    let addresses = tokio::time::timeout(Duration::from_secs(3), resolver.resolve(host))
+        .await
+        .map_err(|_| DeliveryOutcome::Retry)?
+        .map_err(|_| DeliveryOutcome::Retry)?;
+    // INVARIANT: Pin the validated public snapshot; never resolve again inside the connector.
+    if addresses.is_empty()
+        || addresses.len() > 32
+        || addresses
+            .iter()
+            .any(|a| a.port() != 443 || !network::public_address(a.ip()))
+    {
+        return Err(DeliveryOutcome::Rejected);
+    }
+    reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .min_tls_version(reqwest::tls::Version::TLS_1_2)
+        .resolve_to_addrs(host, &addresses)
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|_| DeliveryOutcome::Unavailable)
+}
+async fn send_connector(
+    kind: DestinationKind,
+    secret: &WebhookSecret,
+    payload: &str,
+    event: &str,
+    resolver: &dyn WebhookResolver,
+) -> (DeliveryOutcome, i64) {
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        connector_request(kind, secret, payload, event, resolver),
+    )
+    .await
+    .unwrap_or((DeliveryOutcome::Retry, 0))
+}
+async fn connector_request(
+    kind: DestinationKind,
+    secret: &WebhookSecret,
+    payload: &str,
+    event: &str,
+    resolver: &dyn WebhookResolver,
+) -> (DeliveryOutcome, i64) {
+    use triage_ai::alerts::connectors;
+    let Ok(url) = connector_url(kind, secret) else {
+        return (DeliveryOutcome::Rejected, 0);
+    };
+    let Some(body) = connectors::message(kind, payload, secret.bearer.as_deref()) else {
+        return (DeliveryOutcome::Rejected, 0);
+    };
+    let Some(host) = url.host_str() else {
+        return (DeliveryOutcome::Rejected, 0);
+    };
+    let client = match public_client(host, resolver).await {
+        Ok(client) => client,
+        Err(outcome) => return (outcome, 0),
+    };
+    // INVARIANT: Telegram's vault bearer slot holds the chat ID, never HTTP authorization.
+    // Providers do not promise Idempotency-Key support; event identity remains in the text.
+    let Ok(mut response) = client
+        .post(url)
+        .header("Content-Type", "application/json")
+        .header("Idempotency-Key", event)
+        .body(body)
+        .send()
+        .await
+    else {
+        return (DeliveryOutcome::Retry, 0);
+    };
+    let status = response.status().as_u16();
+    let retry = response
+        .headers()
+        .get("retry-after")
+        .and_then(|h| h.to_str().ok())
+        .map(retry_after)
+        .unwrap_or(0);
+    let mut bytes = Zeroizing::new(Vec::new());
+    loop {
+        match response.chunk().await {
+            Ok(Some(chunk)) if bytes.len() + chunk.len() <= connectors::MAX_RESPONSE_BYTES => {
+                bytes.extend_from_slice(&chunk)
+            }
+            Ok(Some(_)) => return (DeliveryOutcome::Rejected, 0),
+            Ok(None) => break,
+            Err(_) => return (DeliveryOutcome::Retry, retry),
+        }
+    }
+    let (outcome, provider_retry) = connectors::response(kind, status, &bytes);
+    (
+        outcome,
+        if outcome == DeliveryOutcome::Retry {
+            retry.max(provider_retry)
+        } else {
+            0
+        },
+    )
 }
 fn classify_status(status: u16) -> DeliveryOutcome {
     match status {
@@ -481,6 +623,100 @@ mod tests {
                 DeliveryOutcome::Rejected
             );
         }
+    }
+    #[test]
+    fn provider_paths_and_recipient_material_fail_closed() {
+        for (kind, url, bearer) in [
+            (
+                DestinationKind::Telegram,
+                "https://api.telegram.org/bot123:synthetic/getUpdates",
+                Some("-123"),
+            ),
+            (
+                DestinationKind::Telegram,
+                "https://api.telegram.org/bot123:synthetic/sendMessage?redirect=1",
+                Some("-123"),
+            ),
+            (
+                DestinationKind::Telegram,
+                "https://api.telegram.org.attacker.example/bot123:synthetic/sendMessage",
+                Some("-123"),
+            ),
+            (
+                DestinationKind::Telegram,
+                "https://api.telegram.org/bot123:synthetic/sendMessage",
+                Some("@recipient"),
+            ),
+            (
+                DestinationKind::Discord,
+                "https://discord.com/api/webhooks/123/synthetic?thread_id=1",
+                None,
+            ),
+            (
+                DestinationKind::Discord,
+                "https://discord.com/api/webhooks/123/synthetic/extra",
+                None,
+            ),
+            (
+                DestinationKind::Discord,
+                "https://discord.com/api/webhooks/123/synthetic",
+                Some("unexpected"),
+            ),
+            (
+                DestinationKind::Discord,
+                "https://discord.com/api/webhooks/123/synthetic%2Fescape",
+                None,
+            ),
+            (
+                DestinationKind::Discord,
+                "https://hooks.example.com/api/webhooks/123/synthetic",
+                None,
+            ),
+        ] {
+            let secret = WebhookSecret {
+                url: url.into(),
+                bearer: bearer.map(str::to_string),
+            };
+            assert!(connector_url(kind, &secret).is_err());
+        }
+        for (kind, url, bearer) in [
+            (
+                DestinationKind::Telegram,
+                "https://api.telegram.org/bot123:synthetic/sendMessage",
+                Some("-123"),
+            ),
+            (
+                DestinationKind::Discord,
+                "https://discord.com/api/webhooks/123/synthetic",
+                None,
+            ),
+        ] {
+            let secret = WebhookSecret {
+                url: url.into(),
+                bearer: bearer.map(str::to_string),
+            };
+            assert!(connector_url(kind, &secret).is_ok());
+        }
+    }
+    #[tokio::test]
+    async fn provider_dispatch_rejects_dns_without_a_connection() {
+        struct Private;
+        #[async_trait]
+        impl WebhookResolver for Private {
+            async fn resolve(&self, _: &str) -> Result<Vec<std::net::SocketAddr>, ()> {
+                Ok(vec!["127.0.0.1:443".parse().unwrap()])
+            }
+        }
+        let secret = WebhookSecret {
+            url: "https://discord.com/api/webhooks/123/synthetic".into(),
+            bearer: None,
+        };
+        assert_eq!(
+            send_connector(DestinationKind::Discord, &secret, "{}", "e", &Private)
+                .await
+                .0,
+            DeliveryOutcome::Rejected
+        );
     }
     #[test]
     fn classification_and_retry_after_are_bounded() {
@@ -605,6 +841,63 @@ mod service_tests {
             s.vault.get_secret(&key(&current).unwrap()),
             Err(vault::VaultError::NotFound(_))
         ));
+    }
+    #[tokio::test]
+    async fn connectors_preserve_vault_consent_revision_and_queue_lifecycle() {
+        for kind in [DestinationKind::Telegram, DestinationKind::Discord] {
+            let (s, fake) = fixture();
+            let mut d = destination();
+            d.kind = kind;
+            d.public_origin = Some(
+                match kind {
+                    DestinationKind::Telegram => "https://api.telegram.org",
+                    _ => "https://discord.com",
+                }
+                .into(),
+            );
+            let secret = if kind == DestinationKind::Telegram {
+                serde_json::from_str::<IncomingWebhook>(
+                    r#"{"token":"123:synthetic","chat_id":"-123"}"#,
+                )
+                .unwrap()
+            } else {
+                IncomingWebhook(WebhookSecret {
+                    url: "https://discord.com/api/webhooks/123/synthetic".into(),
+                    bearer: None,
+                })
+            };
+            let d = s.save_alert(d, Some(secret), true).await.unwrap();
+            assert_eq!(fake.calls.load(Ordering::SeqCst), 0);
+            let safe = serde_json::to_string(&s.list_alerts().await.unwrap()).unwrap();
+            assert!(!safe.contains("synthetic"));
+            assert!(!safe.contains("-123"));
+            assert!(d.has_credentials);
+            s.test_alert(d.id.clone(), d.revision, true).await.unwrap();
+            let mut changed = d.clone();
+            changed.kind = DestinationKind::Webhook;
+            assert!(s.save_alert(changed, None, true).await.is_err());
+            let updated = s.save_alert(d, None, true).await.unwrap();
+            assert_eq!(s.alert_history().await.unwrap()[0].status, "Canceled");
+            assert!(s
+                .test_alert(updated.id.clone(), updated.revision - 1, true)
+                .await
+                .is_err());
+            s.test_alert(updated.id.clone(), updated.revision, true)
+                .await
+                .unwrap();
+            s.process_alerts().await.unwrap();
+            assert_eq!(fake.calls.load(Ordering::SeqCst), 1);
+            let mut disabled = updated;
+            disabled.enabled = false;
+            let disabled = s.save_alert(disabled, None, false).await.unwrap();
+            assert!(s
+                .test_alert(disabled.id.clone(), disabled.revision, true)
+                .await
+                .is_err());
+            s.delete_alert(disabled.id, disabled.revision)
+                .await
+                .unwrap();
+        }
     }
     #[tokio::test]
     async fn orphan_secret_intent_recovers_and_failed_save_keeps_previous_revision() {

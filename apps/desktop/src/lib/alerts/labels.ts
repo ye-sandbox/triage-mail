@@ -1,5 +1,11 @@
 import type { ExportField, History } from './types';
 interface Labels {
+	token: string;
+	chat: string;
+	telegramHelp: string;
+	discordHelp: string;
+	revoke: string;
+	complete: string;
 	title: string;
 	notice: string;
 	add: string;
@@ -33,6 +39,15 @@ interface Labels {
 }
 export const labels: Record<'en' | 'pt-BR', Labels> = {
 	en: {
+		token: 'Bot token',
+		chat: 'Numeric chat ID (confirm the intended recipient)',
+		telegramHelp:
+			'Create a bot with Telegram BotFather. Start the bot in the intended chat, or add it to your group/channel with permission to post. Enter its token and the exact numeric chat ID from your own Telegram administration tools. This app does not discover chats. Messages use plain text, disable link previews and may be truncated.',
+		discordHelp:
+			'In Discord channel settings → Integrations → Webhooks, create a webhook and copy its canonical https://discord.com/api/webhooks/ URL. Confirm the intended channel there. Mentions and embeds are suppressed; long messages are truncated.',
+		revoke:
+			'Disable or delete here to stop local dispatch. To revoke the credential, use BotFather or delete the webhook in Discord. Previously accepted messages cannot be recalled.',
+		complete: 'Enter both bot token and numeric chat ID to replace the saved recipient.',
 		title: 'Alerts',
 		notice:
 			'Alerts require an active, unlocked app. New-mail rules exclude initial history. Retries may deliver duplicates; acceptance does not prove the recipient saw an alert. Local notices are generic and may appear on the lock screen.',
@@ -44,7 +59,7 @@ export const labels: Record<'en' | 'pt-BR', Labels> = {
 		bearer: 'Bearer credential (optional)',
 		enabled: 'Enabled',
 		consent:
-			'I confirm this destination and the selected fields. Webhooks export those fields outside this device. Body/excerpt and extracted facts may contain sensitive payment or verification data.',
+			'I confirm this destination and the selected fields. External destinations export those fields outside this device. Body/excerpt and extracted facts may contain sensitive payment or verification data.',
 		fields: 'Exported fields',
 		fieldNames: {
 			Account: 'Opaque account ID',
@@ -66,7 +81,7 @@ export const labels: Record<'en' | 'pt-BR', Labels> = {
 			'Alert operation failed. Check destination configuration or local notification availability.',
 		queued: 'Delivery queued. Keep the app open; refresh history to see the outcome.',
 		confirmTest:
-			'Send a synthetic test to this enabled destination? A webhook test sends externally.',
+			'Send a synthetic test to this enabled destination? An external destination test sends outside this device.',
 		confirmReplay:
 			'Send the selected messages to this destination using its selected export fields? This exports data and does not apply mail actions.',
 		send: 'Confirm delivery',
@@ -76,7 +91,7 @@ export const labels: Record<'en' | 'pt-BR', Labels> = {
 		metadata:
 			'Always includes schema version, opaque event ID, timestamp and truncation status. Full bodies are off by default. Nothing is fetched to enrich alerts.',
 		preserve:
-			'Leave URL empty to preserve the saved URL and credential. Entering a new URL replaces both.',
+			'Leave secret inputs empty to preserve saved material for the same destination type. Enter replacement material in full.',
 		status: {
 			Pending: 'Pending',
 			Accepted: 'Accepted',
@@ -88,6 +103,15 @@ export const labels: Record<'en' | 'pt-BR', Labels> = {
 		preview: 'Payload field preview (no delivery)'
 	},
 	'pt-BR': {
+		token: 'Token do bot',
+		chat: 'ID numérico do chat (confirme o destinatário)',
+		telegramHelp:
+			'Crie um bot com o BotFather do Telegram. Inicie o bot no chat desejado ou adicione-o ao grupo/canal com permissão para publicar. Informe o token e o ID numérico exato do chat obtido nas suas ferramentas de administração do Telegram. Este aplicativo não descobre chats. Mensagens usam texto simples, desativam prévias de links e podem ser truncadas.',
+		discordHelp:
+			'Nas configurações do canal Discord → Integrações → Webhooks, crie um webhook e copie a URL canônica https://discord.com/api/webhooks/. Confirme o canal desejado lá. Menções e incorporações são suprimidas; mensagens longas são truncadas.',
+		revoke:
+			'Desative ou exclua aqui para parar os envios locais. Para revogar a credencial, use o BotFather ou exclua o webhook no Discord. Mensagens já aceitas não podem ser recolhidas.',
+		complete: 'Informe token do bot e ID numérico do chat para substituir o destinatário salvo.',
 		title: 'Alertas',
 		notice:
 			'Alertas exigem o aplicativo ativo e desbloqueado. Regras de novas mensagens excluem o histórico inicial. Tentativas podem gerar duplicatas; aceitação não comprova visualização. Notificações locais são genéricas e podem aparecer na tela bloqueada.',
@@ -99,7 +123,7 @@ export const labels: Record<'en' | 'pt-BR', Labels> = {
 		bearer: 'Credencial bearer (opcional)',
 		enabled: 'Ativo',
 		consent:
-			'Confirmo este destino e os campos selecionados. Webhooks exportam esses campos para fora deste dispositivo. Corpo/trecho e dados extraídos podem conter informações sensíveis de pagamento ou verificação.',
+			'Confirmo este destino e os campos selecionados. Destinos externos exportam esses campos para fora deste dispositivo. Corpo/trecho e dados extraídos podem conter informações sensíveis de pagamento ou verificação.',
 		fields: 'Campos exportados',
 		fieldNames: {
 			Account: 'ID opaco da conta',
@@ -122,7 +146,7 @@ export const labels: Record<'en' | 'pt-BR', Labels> = {
 		queued:
 			'Entrega na fila. Mantenha o aplicativo aberto; atualize o histórico para ver o resultado.',
 		confirmTest:
-			'Enviar um teste sintético para este destino ativo? O teste de webhook envia dados externamente.',
+			'Enviar um teste sintético para este destino ativo? O teste de destino externo envia dados para fora deste dispositivo.',
 		confirmReplay:
 			'Enviar as mensagens selecionadas para este destino com os campos de exportação selecionados? Isso exporta dados sem aplicar ações nas mensagens.',
 		send: 'Confirmar entrega',
@@ -132,7 +156,7 @@ export const labels: Record<'en' | 'pt-BR', Labels> = {
 		metadata:
 			'Sempre inclui versão do esquema, ID opaco do evento, data/hora e indicação de truncamento. Corpos completos ficam desativados por padrão. Nenhum dado é buscado para enriquecer alertas.',
 		preserve:
-			'Deixe a URL vazia para manter a URL e credencial salvas. Uma nova URL substitui ambas.',
+			'Deixe os campos secretos vazios para manter os dados salvos do mesmo tipo de destino. Informe todos os dados para substituí-los.',
 		status: {
 			Pending: 'Pendente',
 			Accepted: 'Aceito',

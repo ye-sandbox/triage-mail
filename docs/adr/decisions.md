@@ -301,3 +301,39 @@ type: architectural-decision-log
   Message/account removal cancels related pending work; cache removal after MOVE without
   COPYUID can therefore suppress an undelivered alert. Settings explain export and lifecycle
   limits. Existing IPC, trait signatures, migrations v1-v3 and search contracts are preserved.
+
+### [2026-11-02] ADR-014: Telegram and Discord on the Shared Alert Queue
+
+- **Context:** [03.7] adds guided provider destinations without a second rule evaluator,
+  delivery queue, credential store or automatic setup network traffic.
+- **Decision:** Add Telegram/Discord destination enum variants to existing JSON metadata.
+  No migration or trait/command signature changes are needed. Existing webhook input
+  remains compatible; its input-only deserializer also accepts typed `{ token, chat_id }`.
+  Telegram normalizes into the existing vault-only URL/bearer envelope: fixed Bot API
+  sendMessage URL containing the token, and numeric chat ID in the bearer slot. That
+  slot never becomes HTTP authorization for Telegram. Discord uses the existing URL
+  envelope with no bearer. Kind changes cannot preserve another kind's saved material.
+- **Consent/network:** Existing destination/field/revision consent and secret-intent recovery
+  apply. Telegram has a fixed api.telegram.org sendMessage route; Discord accepts canonical
+  discord.com/api/webhooks paths only, with no query/thread overrides. Numeric chat IDs
+  are required. No discovery/getUpdates, automatic chat migration, remote revocation or
+  live development request is introduced. The user approved the narrow P0 extension.
+  Public-only pinned DNS, verified TLS 1.2+, port 443, no redirects/proxies and ten-second
+  total dispatch deadlines remain mandatory. DNS is bounded to three seconds/32 addresses.
+- **Formatting:** Headless pure helpers serialize the already consent-filtered JSON into
+  one provider text message. Conservative UTF-16 ceilings are 3,500/1,800 respectively;
+  truncation is visible, with no splitting or attachments. Telegram has no parse_mode
+  and disables link previews; Discord sets empty allowed_mentions.parse and SUPPRESS_EMBEDS.
+- **Outcomes:** Provider response buffers are transient, capped at 64 KiB and zeroized.
+  Parse only acceptance/error codes and retry delays; descriptions, chat/message objects
+  and response text never reach logs, IPC or history. Telegram requires ok:true for 2xx
+  acceptance. Discord's default webhook 2xx/204 is receiver acceptance only. Existing
+  HTTP retry classes, attempt/age caps and bounded delays apply. A retry persists a
+  conservative shared cooldown for all destinations of that provider using existing
+  next_start metadata, without storing secret fingerprints. Other provider kinds remain
+  independent. Global serialization remains in the existing worker.
+- **Consequences:** No provider idempotency or human-visibility guarantee; retry ambiguity
+  can duplicate messages. Disable/delete cannot recall accepted messages. Credential
+  revocation remains manual in BotFather/Discord. Payloads are readable JSON text and
+  provider truncation may cut JSON mid-field. Offline tests establish local behavior,
+  not live receiver interoperability. Digests, quiet hours, reminders and CLI remain deferred.

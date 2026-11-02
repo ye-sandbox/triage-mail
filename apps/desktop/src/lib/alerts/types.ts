@@ -12,7 +12,7 @@ export interface Destination {
 	id: string;
 	revision: number;
 	name: string;
-	kind: 'Local' | 'Webhook';
+	kind: 'Local' | 'Webhook' | 'Telegram' | 'Discord';
 	enabled: boolean;
 	fields: ExportField[];
 	public_origin: string | null;
@@ -30,11 +30,12 @@ export interface WebhookSecret {
 	url: string;
 	bearer: string | null;
 }
+export type AlertSecret = WebhookSecret | { token: string; chat_id: string };
 export interface AlertsTransport {
 	list(): Promise<Destination[]>;
 	save(
 		destination: Destination,
-		secret: WebhookSecret | null,
+		secret: AlertSecret | null,
 		consent: boolean
 	): Promise<Destination>;
 	remove(id: string, revision: number): Promise<void>;

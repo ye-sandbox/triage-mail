@@ -3,6 +3,8 @@ use crate::rules::MessageFacts;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+pub mod connectors;
+
 pub const MAX_PAYLOAD_BYTES: usize = 65_536;
 pub const MAX_AGE_MS: i64 = 86_400_000;
 pub fn valid_id(id: &str) -> bool {
@@ -16,6 +18,8 @@ pub fn valid_id(id: &str) -> bool {
 pub enum DestinationKind {
     Local,
     Webhook,
+    Telegram,
+    Discord,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExportField {

@@ -230,7 +230,7 @@ condições positivas, anexos binários nunca são baixados e uma correspondênc
 não autentica identidade. O processamento exige o aplicativo em execução. Após configurar
 os destinos de alerta, eles também podem ser selecionados como ações das regras.
 
-### Notificações locais e alertas por webhook
+### Notificações locais, Telegram, Discord e alertas por webhook
 
 Abra **Configurações → Alertas** para adicionar um destino. Destinos começam desativados.
 Notificações locais são genéricas e podem aparecer na tela bloqueada; esta versão usa o serviço
@@ -239,6 +239,26 @@ sistemas operacionais atualmente retornam indisponível. Webhooks aceitam hosts 
 HTTPS na porta 443, incluindo fluxos n8n públicos próprios; rede privada, loopback, IP literal
 e HTTP não são suportados. URLs completas e credenciais bearer opcionais ficam apenas no vault;
 as listas exibem origens públicas.
+
+Para **Telegram**, crie um bot com o BotFather, inicie-o no chat desejado (ou adicione-o a um
+grupo/canal com permissão para publicar) e informe o token e o ID numérico exato do chat obtido
+nas suas ferramentas de administração do Telegram. Não há descoberta de chats; nomes de usuário
+e migração automática de chat não são suportados. Confirme o destinatário antes de ativar. Token
+e ID do chat ficam no vault; as listas mostram somente `https://api.telegram.org`.
+
+Para **Discord**, crie um webhook nas configurações **Integrações → Webhooks** do canal desejado
+e cole sua URL canônica `https://discord.com/api/webhooks/…`. Confirme o canal no Discord;
+queries, hosts alternativos, seleção de threads e anexos não são suportados. A URL secreta completa
+fica no vault; as listas mostram somente `https://discord.com`.
+
+Ambos enviam uma mensagem de texto contendo os campos JSON selecionados, com truncamento visível
+nos limites conservadores de 3.500 unidades UTF-16 para Telegram e 1.800 para Discord. Telegram usa
+texto simples sem prévias de links; Discord suprime menções e incorporações. Não há promessa de
+idempotência. Respostas limitadas fornecem apenas aceitação/códigos de erro e espera para nova
+tentativa; seus corpos nunca são registrados, armazenados ou retornados. Resultados de nova
+tentativa persistem uma pausa conservadora em todos os destinos daquele provedor, inclusive os
+que compartilham credenciais. Configurar/salvar não contata provedores. Testes offline cobrem o
+protocolo; interoperabilidade com destinatários reais não foi verificada.
 
 Selecione os campos exportados e confirme o destino exibido antes de ativá-lo; depois, selecione-o
 em uma regra. Por padrão, o payload contém somente versão do esquema, ID opaco do evento, data/hora
@@ -263,6 +283,9 @@ serviço/destinatário, não visualização humana. Desativar aguarda uma requis
 segundos), que não pode ser recolhida. O histórico contém estados/contagens/horários seguros por
 até 30 dias e 1.000 registros por destino. Payloads concluídos são apagados. Nenhum teste real é
 enviado automaticamente.
+Desative ou exclua um destino para parar os envios locais. Revogue o token no BotFather ou exclua
+o webhook no Discord para revogar o acesso no provedor; este aplicativo não revoga credenciais
+compartilhadas remotamente. Nenhuma dessas operações recolhe mensagens já aceitas.
 
 ## Development
 

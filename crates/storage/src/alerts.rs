@@ -197,7 +197,14 @@ impl SqliteMailStore {
             let due=now.saturating_add((backoff+jitter_ms.clamp(0,5000)).max(retry_after_ms.clamp(0,3_600_000)));
             let status=if retry {"Pending"} else {match outcome {DeliveryOutcome::Accepted=>"Accepted",DeliveryOutcome::Unavailable=>"Unavailable",_=>"Failed"}};
             // INVARIANT: A stale lease completion cannot revive canceled or superseded work.
-            tx.execute("UPDATE alert_jobs SET status=?2,due=?3,lease_until=0,payload=CASE WHEN ?2='Pending' THEN payload ELSE '' END,finished=CASE WHEN ?2='Pending' THEN NULL ELSE ?4 END WHERE id=?1 AND attempts=?5 AND revision=?6 AND status='Pending'",params![job.id,status,due,now,job.attempts,job.destination.revision]).map_err(error)?;
+            let changed = tx.execute("UPDATE alert_jobs SET status=?2,due=?3,lease_until=0,payload=CASE WHEN ?2='Pending' THEN payload ELSE '' END,finished=CASE WHEN ?2='Pending' THEN NULL ELSE ?4 END WHERE id=?1 AND attempts=?5 AND revision=?6 AND status='Pending'",params![job.id,status,due,now,job.attempts,job.destination.revision]).map_err(error)?;
+            // INVARIANT: Provider rate limits can cover shared bots/webhooks across destinations.
+            // Conservatively pause the entire provider kind, without storing a secret fingerprint.
+            if changed == 1 && outcome == DeliveryOutcome::Retry && matches!(job.destination.kind,
+                triage_ai::alerts::DestinationKind::Telegram | triage_ai::alerts::DestinationKind::Discord) {
+                tx.execute("UPDATE alert_destinations SET next_start=max(next_start,?2) WHERE json_extract(definition_json,'$.kind')=?1",
+                    params![match job.destination.kind {triage_ai::alerts::DestinationKind::Telegram=>"Telegram",_=>"Discord"},due]).map_err(error)?;
+            }
             Ok(())
         })
     }
@@ -396,5 +403,47 @@ mod tests {
         s.forget_alert_secret("new").unwrap();
         assert!(s.orphan_alert_secrets().unwrap().is_empty());
         assert!(s.save_alert_destination(destination(), None, 0).is_err());
+    }
+    #[test]
+    fn connector_kinds_reopen_and_provider_cooldown_blocks_other_destinations() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("connector.db");
+        let key = DatabaseKey::from_bytes([39; 32]);
+        {
+            let s = SqliteMailStore::open(&path, &key, Default::default()).unwrap();
+            for (id, kind) in [
+                ("a", DestinationKind::Telegram),
+                ("b", DestinationKind::Telegram),
+                ("c", DestinationKind::Discord),
+            ] {
+                let mut d = destination();
+                d.id = id.into();
+                d.kind = kind;
+                s.save_alert_destination(d, Some("opaque-secret"), 0)
+                    .unwrap();
+                s.enqueue_alert_test(id, id, 0).unwrap();
+            }
+            let job = s.claim_alert(0).unwrap().unwrap();
+            assert_eq!(job.id, "a");
+            s.finish_alert(&job, DeliveryOutcome::Retry, 120_000, 0, 0)
+                .unwrap();
+        }
+        let s = SqliteMailStore::open(&path, &key, Default::default()).unwrap();
+        assert_eq!(s.list_alert_destinations().unwrap().len(), 3);
+        let discord = s.claim_alert(10_000).unwrap().unwrap();
+        assert_eq!(discord.id, "c");
+        s.finish_alert(&discord, DeliveryOutcome::Accepted, 0, 0, 10_000)
+            .unwrap();
+        assert!(s.claim_alert(119_999).unwrap().is_none());
+        let retry = s.claim_alert(120_000).unwrap().unwrap();
+        assert_eq!(retry.id, "b");
+        assert_eq!(retry.destination.kind, DestinationKind::Telegram);
+        let mut d = retry.destination.clone();
+        d.enabled = false;
+        s.save_alert_destination(d, Some("opaque-secret"), 120_001)
+            .unwrap();
+        s.finish_alert(&retry, DeliveryOutcome::Retry, 999_999, 0, 120_002)
+            .unwrap();
+        assert_eq!(s.claim_alert(130_000).unwrap().unwrap().id, "a");
     }
 }
