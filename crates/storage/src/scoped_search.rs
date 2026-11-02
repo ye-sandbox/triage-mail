@@ -63,7 +63,7 @@ impl SqliteMailStore {
             account_id,
             folder: &folder,
             eligibility: eligibility(view),
-            messages: messages_source(view),
+            messages: messages_source(&tx, account_id, view, now)?,
             now,
         };
         let ids = search.execute(query)?;
@@ -73,12 +73,38 @@ impl SqliteMailStore {
     }
 }
 
-fn messages_source(view: &MailboxView) -> &'static str {
-    if matches!(view, MailboxView::Snoozed) {
-        "messages m INDEXED BY idx_messages_snooze_until"
-    } else {
-        "messages m"
+fn messages_source(
+    conn: &Connection,
+    account: &str,
+    view: &MailboxView,
+    now: i64,
+) -> Result<&'static str, StorageError> {
+    if !matches!(view, MailboxView::Snoozed) {
+        return Ok("messages m");
     }
+    // INVARIANT: Deadline range probes span all accounts. Bound index-only estimates
+    // so a tiny account never scans another account's entire active-snooze population.
+    let account_rows: usize = conn
+        .query_row(
+            "SELECT count(*) FROM (SELECT 1 FROM messages WHERE account_id=?1 LIMIT 16384)",
+            [account],
+            |r| r.get(0),
+        )
+        .map_err(query_error)?;
+    if account_rows > 0 {
+        let active_rows: usize = conn
+            .query_row(
+                "SELECT count(*) FROM (SELECT 1 FROM messages INDEXED BY idx_messages_snooze_until
+             WHERE snooze_until_epoch_ms>?1 LIMIT ?2)",
+                params![now, account_rows],
+                |r| r.get(0),
+            )
+            .map_err(query_error)?;
+        if active_rows < account_rows {
+            return Ok("messages m INDEXED BY idx_messages_snooze_until");
+        }
+    }
+    Ok("messages m INDEXED BY idx_messages_account_provider_msgid")
 }
 
 fn eligibility(view: &MailboxView) -> &'static str {
@@ -201,8 +227,8 @@ impl ScopedSearch<'_> {
              SELECT m.id FROM ranked r JOIN messages m ON m.rowid=r.rid ORDER BY r.score, r.rid"
         };
         // INVARIANT: Correlated membership probes must use message identity, not scan an
-        // entire account per candidate. Snoozed enumerates the deadline range before
-        // account filtering, avoiding payload reads for every unsnoozed account row.
+        // entire account per candidate. Snoozed uses bounded metadata estimates to
+        // choose an account scan or active-deadline range without changing eligibility.
         selection
             .replace("{eligibility}", self.eligibility)
             .replace("{messages}", self.messages)
@@ -272,7 +298,7 @@ mod plan_tests {
             account_id: "a",
             folder: "INBOX",
             eligibility: eligibility(view),
-            messages: messages_source(view),
+            messages: messages_source(conn, "a", view, 1000).unwrap(),
             now: 1000,
         }
     }
@@ -312,8 +338,17 @@ mod plan_tests {
     }
 
     #[test]
-    fn snoozed_branches_enumerate_deadlines_instead_of_whole_accounts() {
+    fn snoozed_branches_enumerate_deadlines_when_the_active_range_is_smaller() {
         let conn = connection();
+        conn.execute_batch(
+            "INSERT INTO accounts VALUES ('a','a@example.com','synthetic',0,0);
+            WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<1000)
+            INSERT INTO messages(id,account_id,folder,uid,subject,sender,recipients,
+                received_at_epoch_ms,raw_headers,created_at_epoch_ms,snooze_until_epoch_ms)
+            SELECT printf('message-%05d',i),'a','INBOX',i,'synthetic','sender@example.org',
+                'reader@example.com',i,'',0,CASE WHEN i=1 THEN 2000 ELSE NULL END FROM n;",
+        )
+        .unwrap();
         for (text, semantic) in [("", false), ("synthetic", false), ("", true)] {
             let sql = format!(
                 "EXPLAIN QUERY PLAN {}",
@@ -335,6 +370,41 @@ mod plan_tests {
                 "{details:?}"
             );
         }
+    }
+
+    #[test]
+    fn dense_other_account_snoozes_do_not_force_a_tiny_account_range_scan() {
+        let conn = connection();
+        conn.execute_batch(
+            "INSERT INTO accounts VALUES ('a','a@example.com','synthetic',0,0),
+            ('b','b@example.org','synthetic',0,0);
+            WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<5031)
+            INSERT INTO messages(id,account_id,folder,uid,subject,sender,recipients,
+                received_at_epoch_ms,raw_headers,created_at_epoch_ms,snooze_until_epoch_ms)
+            SELECT printf('message-%05d',i),CASE WHEN i<=31 THEN 'a' ELSE 'b' END,'INBOX',i,
+                'synthetic','sender@example.org','reader@example.com',i,'',0,
+                CASE WHEN i>31 THEN 2000 ELSE NULL END FROM n;",
+        )
+        .unwrap();
+        let scoped = search(&conn, &MailboxView::Snoozed);
+        assert_eq!(
+            scoped.messages,
+            "messages m INDEXED BY idx_messages_account_provider_msgid"
+        );
+        let mut stmt = conn.prepare(&scoped.sql(&query(""), false)).unwrap();
+        let rows = stmt
+            .query_map(params!["a", "", 1000, "", vec![1_u8; 384], 200, 0], |r| {
+                r.get::<_, String>(0)
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert!(rows.is_empty());
+        assert!(stmt.get_status(rusqlite::StatementStatus::VmStep) < 31 * 50);
+        assert_eq!(
+            messages_source(&conn, "missing", &MailboxView::Snoozed, 1000).unwrap(),
+            "messages m INDEXED BY idx_messages_account_provider_msgid"
+        );
     }
 
     #[test]
