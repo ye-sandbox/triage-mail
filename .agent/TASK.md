@@ -7,11 +7,83 @@
 
 ## Active Task
 
-None — Milestone v0.1.3 Released (`v0.1.3` tag)
+[01.1] Binary Quantization & Global Vector Pre-filtering Evaluation — PLANNING
 
 ---
 
 ## Next Milestone (v0.2.0)
+
+### 📌 Task [02.1]: Intelligent Account Autodiscovery & Streamlined Onboarding
+
+- **Description:** Add offline provider presets, explicit domain-only ISPDB lookup and confirmed-host TLS probing in `crates/mail-engine`, exposed through additive Tauri IPC. Streamline email-first onboarding, Microsoft PKCE with a user-provided client ID, Gmail App Password assistance and advanced manual settings.
+- **Systems Involved:** `crates/mail-engine` (`discovery/`), `apps/desktop/src-tauri` (`onboarding.rs`, `runtime.rs`), `apps/desktop` (`src/lib/onboarding/`).
+- **Action Type:** Feature & UX Architecture.
+- **Status:** DONE
+- **Subtasks:**
+  - `[02.1.1]` **Discovery Engine Core (`crates/mail-engine`):** Parse domain from RFC 5322 email addresses, match against instant offline presets table (Gmail, Outlook/Hotmail, Yahoo, iCloud, Fastmail, Zoho, popular BR domains), query Mozilla ISPDB (`autoconfig.thunderbird.net/v1.1/{domain}`) with 3s timeout, and offer a separately confirmed TLS port 993 probe.
+  - `[02.1.2]` **IPC Bridge & DTOs (`apps/desktop/src-tauri`):** Implement `cmd_discover_email_provider` returning `DiscoveredProviderDto` with recommended auth method, OAuth endpoint metadata, and contextual help URLs without leaking credentials.
+  - `[02.1.3]` **Streamlined Onboarding UI (`apps/desktop`):** Refactor `AccountForm.svelte` to feature a Microsoft PKCE setup button requiring the user’s own client ID, debounce autodiscovery on email input blur, provide direct link assistance for Gmail App Passwords (`myaccount.google.com/apppasswords`), and place host/port/BYO-OAuth/Proton controls in a collapsible advanced details panel.
+- **Constraints:**
+  - Zero credential leakage in logs or debug strings.
+  - Strict timeout ($\le 3$s) on external ISPDB requests; never freeze UI.
+  - Svelte 5 Runes strictly enforced (`$state`, `$derived`, `$effect`, zero `export let`).
+  - Unit tests MUST use RFC 2606 reserved domains (`@example.com`, `@example.org`).
+
+#### Completion (2026-11-02)
+
+- **Commit:** `3c25660` (`feat(onboarding): add consent-based provider discovery`).
+- **Validation:** Workspace check/test/fmt/Clippy passed (222 Rust tests). Desktop check
+  passed with zero errors/warnings; all 133 frontend tests and SPA build passed.
+  Changed frontend files pass Prettier; policy guard regression tests pass (5 tests)
+  and the tracked-file secret/PII/Svelte policy scan reports zero findings. Diff check
+  and the legacy Svelte syntax invariant pass.
+- **Environment:** Used the existing native sysroot and toolchains described in k-001
+  and k-006. Full Rust tests require loopback access; policy guard tests require child
+  processes, so those validations ran outside the restrictive sandbox. No provider
+  credentials, model downloads or live-provider authentication were used.
+- **Contracts:** Existing IPC/account authorization and storage schemas are unchanged.
+  New discovery defaults offline; probing is a separate explicit action. Microsoft
+  setup uses user-provided credentials rather than a bundled application registration.
+- **Documentation:** EN/PT-BR setup guides, active contracts and the approved narrow P0
+  exception are synchronized. k-022 preserves discovery trust and parser/UI gotchas.
+- **Next:** [01.1] remains PLANNING; implementation requires its own approved scope.
+
+#### Approved Implementation Plan (2026-11-02)
+
+1. `[02.1.1]` Add headless discovery types and an injectable discovery transport in
+   `crates/mail-engine`. Validate and normalize the address domain, resolve offline
+   presets first, and return an explicit unresolved result instead of guessing success.
+   Confirm the supported Brazilian provider list during implementation review.
+2. Under the approved network-policy exception below, add bounded ISPDB lookup (domain only,
+   never the full address), defensive XML parsing, and bounded IMAP TLS probing.
+   Disable redirects and inherited proxies; do not use provider XML for automatic OAuth
+   endpoint trust or permit discovery to contact private/loopback destinations.
+   Preserve explicitly configured local Proton Bridge behavior.
+3. `[02.1.2]` Add the documented `cmd_discover_email_provider` DTO/command without changing
+   existing account or authorization contracts. Keep errors fixed and credential-free;
+   expose injectable offline services for tests. Discovery never authenticates or saves
+   an account automatically.
+4. `[02.1.3]` Refactor onboarding around email-first setup, offline discovery on blur,
+   contextual Gmail assistance, and advanced manual settings. Ignore stale discovery
+   responses and preserve manual edits. Retain transient credential inputs, existing
+   OAuth cancellation, Proton Bridge, and EN/PT-BR parity. Load `svelte-dev` before UI edits.
+5. Add offline discovery/parser/timeout and IPC tests plus UI regressions for stale
+   results, manual overrides, and authorization. Run the full repository DoD commands,
+   frontend build and formatting checks; review the diff for secrets and PII. Update
+   contracts and applicable documentation, then make an atomic Conventional Commit
+   and record its hash before promoting the next task. Do not push.
+
+#### Approved Decisions (2026-11-02)
+
+- **P0 network policy:** AGENTS.md permits only the approved, explicit discovery actions. Approved exception: retain automatic
+  offline presets, require an explicit user action for domain-only ISPDB lookup, and
+  require user confirmation of a discovered IMAP endpoint before any probe.
+  User approved the proposed exception via `proceed`; online lookup and probing remain explicit runtime actions.
+- **Microsoft OAuth:** No application client ID is configured in the current onboarding
+  flow. Approved scope: streamline Microsoft PKCE using a user-provided client ID held
+  transiently and stored only in vault, with a clear setup step before authorization.
+  A first-use one-click flow without that setup requires a separate approved application
+  registration and credential-provisioning design; do not embed borrowed client IDs.
 
 ### 📌 Task [01.1]: Binary Quantization & Global Vector Pre-filtering Evaluation
 
