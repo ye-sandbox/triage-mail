@@ -471,3 +471,7 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   vectors. A finite account-KNN frontier can omit a zero-norm vector and is insufficient
   as an exactness certificate. The attempted shortcut was removed and a regression retained;
   see k-021 before revising semantic ranking or the accepted embedding domain.
+- **Closure ([04.1.7]):** closed with known deviations by user decision on 2026-11-02. Scoped
+  lexical/semantic/hybrid and native first-page budgets remain unmet and 60fps is unestablished;
+  see "Closure with known deviations" in `docs/performance/mailbox-validation.md`. Targets are
+  unchanged; revisit under [01.1] and a future native UI performance task.
