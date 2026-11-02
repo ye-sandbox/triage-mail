@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import Icon from './Icon.svelte';
 	import AccountMailbox from './AccountMailbox.svelte';
 	import { i18n } from '../i18n/index.svelte';
@@ -7,6 +8,8 @@
 	import type { MailboxScope } from './types';
 	import type { Mailboxes } from './mailboxes.svelte';
 	let {
+		children,
+		savedActive = false,
 		status,
 		openSettings,
 		accounts = [],
@@ -17,6 +20,8 @@
 		photoRevision = 0,
 		dismiss
 	}: {
+		children?: Snippet;
+		savedActive?: boolean;
 		status: string;
 		openSettings?: () => void;
 		accounts?: AccountConfig[];
@@ -47,7 +52,7 @@
 		<button
 			type="button"
 			onclick={() => select()}
-			aria-current={!scope || scope === 'GlobalAllMail' ? 'page' : undefined}
+			aria-current={!savedActive && (!scope || scope === 'GlobalAllMail') ? 'page' : undefined}
 			class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium aria-[current=page]:bg-[var(--selection-soft)]"
 			><Icon name="inbox" size={18} />{t.allMail}</button
 		>
@@ -64,6 +69,7 @@
 				{photoRevision}
 			/>
 		{/each}
+		{@render children?.()}
 	</nav>
 	<div class="mt-4 shrink-0 space-y-4 px-2">
 		<div class="flex items-center gap-2 text-xs text-[var(--secondary)]" role="status">

@@ -37,6 +37,14 @@
 			});
 	});
 	$effect(() => {
+		if (!connected || !inbox.savedView) return;
+		const revision = inbox.badgeRevision;
+		void revision;
+		const now = Date.now();
+		const timer = setTimeout(() => void inbox.refresh(), 86400000 - (now % 86400000) + 1);
+		return () => clearTimeout(timer);
+	});
+	$effect(() => {
 		const deadlines = inbox.rows
 			.map((r) => r.snooze_until_epoch_ms ?? 0)
 			.filter((n) => n > Date.now());

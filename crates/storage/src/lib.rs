@@ -19,6 +19,7 @@ pub mod migrations;
 pub mod models;
 pub mod repository;
 pub mod rules;
+pub mod saved_views;
 mod scoped_search;
 pub mod search;
 pub mod settings;

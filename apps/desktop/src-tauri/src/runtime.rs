@@ -194,6 +194,46 @@ pub async fn cmd_local_alert_available(state: State<'_, RuntimeState>) -> Result
 }
 
 #[tauri::command]
+pub async fn cmd_list_saved_views(
+    state: State<'_, RuntimeState>,
+) -> Result<Vec<storage::saved_views::SavedView>, IpcError> {
+    state.initialize(None).await?.list_saved_views().await
+}
+#[tauri::command]
+pub async fn cmd_save_saved_view(
+    state: State<'_, RuntimeState>,
+    view: storage::saved_views::SavedView,
+) -> Result<storage::saved_views::SavedView, IpcError> {
+    state.initialize(None).await?.save_saved_view(view).await
+}
+#[tauri::command]
+pub async fn cmd_delete_saved_view(
+    state: State<'_, RuntimeState>,
+    id: String,
+    revision: u32,
+) -> Result<(), IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .delete_saved_view(id, revision)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_search_saved_view(
+    state: State<'_, RuntimeState>,
+    id: String,
+    revision: u32,
+    limit: usize,
+    offset: usize,
+) -> Result<Vec<MessageRowDto>, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .search_saved_view(id, revision, limit, offset)
+        .await
+}
+
+#[tauri::command]
 pub async fn cmd_list_rules(
     state: State<'_, RuntimeState>,
 ) -> Result<Vec<triage_ai::rules::Rule>, IpcError> {
@@ -541,6 +581,10 @@ pub fn run() {
             cmd_test_alert,
             cmd_replay_alert,
             cmd_local_alert_available,
+            cmd_list_saved_views,
+            cmd_save_saved_view,
+            cmd_delete_saved_view,
+            cmd_search_saved_view,
             cmd_list_rules,
             cmd_save_rule,
             cmd_delete_rule,
@@ -657,6 +701,10 @@ mod tests {
                 cmd_test_alert,
                 cmd_replay_alert,
                 cmd_local_alert_available,
+                cmd_list_saved_views,
+                cmd_save_saved_view,
+                cmd_delete_saved_view,
+                cmd_search_saved_view,
                 cmd_list_rules,
                 cmd_save_rule,
                 cmd_delete_rule,
@@ -686,6 +734,64 @@ mod tests {
         let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()
             .unwrap();
+        let view = storage::saved_views::SavedView {
+            version: 1,
+            id: "saved".into(),
+            revision: 0,
+            name: "Synthetic".into(),
+            query: String::new(),
+            mode: storage::SearchMode::Lexical,
+            accounts: vec![],
+            scope: None,
+            filters: Default::default(),
+        };
+        assert_eq!(
+            invoke(&window, "cmd_list_saved_views", json!({})).unwrap(),
+            json!([])
+        );
+        let saved = invoke(&window, "cmd_save_saved_view", json!({"view":view})).unwrap();
+        assert_eq!(saved["revision"], 1);
+        assert_eq!(
+            invoke(&window, "cmd_save_saved_view", json!({"view":view})).unwrap_err(),
+            json!("InvalidRequest")
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_search_saved_view",
+                json!({"id":"saved","revision":1,"limit":200,"offset":0})
+            )
+            .unwrap(),
+            json!([])
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_search_saved_view",
+                json!({"id":"saved","revision":1,"limit":0,"offset":0})
+            )
+            .unwrap_err(),
+            json!("InvalidRequest")
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_delete_saved_view",
+                json!({"id":"saved","revision":2})
+            )
+            .unwrap_err(),
+            json!("InvalidRequest")
+        );
+        invoke(
+            &window,
+            "cmd_delete_saved_view",
+            json!({"id":"saved","revision":1}),
+        )
+        .unwrap();
+        assert_eq!(
+            invoke(&window, "cmd_save_saved_view", json!({"view":view})).unwrap_err(),
+            json!("InvalidRequest")
+        );
         assert_eq!(
             invoke(&window, "cmd_list_rules", json!({})).unwrap(),
             json!([])

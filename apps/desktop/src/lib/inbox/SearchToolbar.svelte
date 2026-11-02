@@ -3,6 +3,7 @@
 	import { i18n } from '../i18n/index.svelte';
 	import type { SearchMode } from './types';
 	let {
+		savedActive = false,
 		query = $bindable(''),
 		mode = $bindable<SearchMode>('Lexical'),
 		toggleSidebar,
@@ -14,6 +15,7 @@
 		experimentalSemanticSearch = false,
 		context = ''
 	}: {
+		savedActive?: boolean;
 		query?: string;
 		mode?: SearchMode;
 		toggleSidebar: () => void;
@@ -33,7 +35,7 @@
 		}
 	}
 	$effect(() => {
-		if (!experimentalSemanticSearch && mode !== 'Lexical') {
+		if (!savedActive && !experimentalSemanticSearch && mode !== 'Lexical') {
 			mode = 'Lexical';
 		}
 	});
@@ -65,6 +67,7 @@
 		<input
 			bind:this={searchInput}
 			bind:value={query}
+			disabled={savedActive}
 			type="search"
 			aria-label={context === i18n.t.mailboxes.allMail || !context
 				? 'Search all mail'
@@ -78,6 +81,7 @@
 			>Match
 			<select
 				bind:value={mode}
+				disabled={savedActive}
 				aria-label="Search matching"
 				class="rounded-md border border-[var(--separator)] bg-[var(--field)] px-2 py-2 text-sm text-[var(--text)]"
 			>

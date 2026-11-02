@@ -337,3 +337,29 @@ type: architectural-decision-log
   revocation remains manual in BotFather/Discord. Payloads are readable JSON text and
   provider truncation may cut JSON mid-field. Offline tests establish local behavior,
   not live receiver interoperability. Digests, quiet hours, reminders and CLI remain deferred.
+
+### [2026-11-02] ADR-015: Encrypted Definitions and Native Saved-View Eligibility
+
+- **Context:** [04.10] requires named cross-account virtual folders with full-result
+  membership and existing lexical/semantic/hybrid ranking, without moving mail.
+- **Decision:** Append migration v5 for versioned JSON definitions, revision compare-and-swap
+  and deleted-ID tombstones. Keep all earlier migrations, public search traits and mailbox
+  DTO shapes intact. Add separate saved-view CRUD/search IPC; resolve definitions natively
+  and check the same revision again after optional embedding generation. Empty account
+  selection means all; explicit missing references fail closed without blocking management.
+- **Execution:** Share the private scoped ranker with a parameterized eligibility expression.
+  SQL checks accounts, flags and exact tags; a short-lived deterministic function parses
+  sender/extraction facts using existing Rust types. This avoids duplicating sender parsing
+  in SQLite or adding denormalized mail facts/schema coupling. Filter before each branch's
+  candidate limit, then retain exact cosine and existing RRF tie/order semantics. One read
+  transaction and UTC timestamp covers validation, ranking and hydration. Remove the SQL
+  closure even when execution fails so filter snapshots do not remain on the connection.
+- **Dates:** Absolute bounds and relative windows apply to one valid extracted boleto date.
+  Upcoming bills defaults to today through 30 days inclusive using UTC calendar dates;
+  native clock is authoritative. Dates do not assert payment. Desktop refreshes at UTC
+  midnight and on focus/resume; no scheduler, reminders, rules or external delivery added.
+- **Consequences:** Definitions exist only in encrypted storage; frontend state is transient.
+  Broad parsed-fact filters can scan messages; narrow synthetic timings are not universal
+  performance guarantees. Preserve prior performance deviations/targets. The editor keeps
+  a stable draft object through deferred input callbacks while parent teardown clears its
+  reference; late read/save responses cannot restore disposed UI or another inbox scope.

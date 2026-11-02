@@ -1,3 +1,4 @@
+import type { SavedView } from '../saved-views/types';
 import type {
 	InboxTransport,
 	MailboxScope,
@@ -18,6 +19,18 @@ export class InboxController {
 	syncStatus = $state('Connecting…');
 	query = $state('');
 	mode = $state<SearchMode>('Lexical');
+	savedView = $state.raw<SavedView | null>(null);
+	get savedTransport() {
+		return this.transport.savedViews;
+	}
+	async selectSavedView(view: SavedView) {
+		this.savedView = view;
+		this.scope = undefined;
+		this.mutationError = '';
+		this.mutationNotice = '';
+		clearTimeout(this.refreshTimer);
+		await this.search(view.query, view.mode);
+	}
 	scope = $state.raw<MailboxScope | undefined>(undefined);
 	experimentalSemanticSearch = $state(false);
 	totalEmbeddingErrors = $state(0);
@@ -42,13 +55,29 @@ export class InboxController {
 			: Promise.reject(new Error('Unavailable'));
 
 	async selectScope(scope?: MailboxScope) {
-		if (JSON.stringify(scope) === JSON.stringify(this.scope)) return;
+		if (!this.savedView && JSON.stringify(scope) === JSON.stringify(this.scope)) return;
+		this.savedView = null;
 		// INVARIANT: Scope changes invalidate all old reads, selection and mutation feedback.
 		this.scope = scope === 'GlobalAllMail' ? undefined : scope;
 		this.mutationError = '';
 		this.mutationNotice = '';
 		clearTimeout(this.refreshTimer);
 		await this.search(this.query, this.mode);
+	}
+
+	private request(page: {
+		query: string;
+		mode: SearchMode;
+		limit: number;
+		offset: number;
+		scope?: MailboxScope;
+	}) {
+		const saved = this.savedView;
+		if (saved)
+			return this.transport.savedViews
+				? this.transport.savedViews.search(saved.id, saved.revision, page.limit, page.offset)
+				: Promise.reject('InvalidRequest');
+		return this.transport.search(page);
 	}
 
 	private scopeField() {
@@ -134,7 +163,7 @@ export class InboxController {
 
 	setExperimentalSemanticSearch(enabled: boolean) {
 		this.experimentalSemanticSearch = enabled;
-		if (!enabled && this.mode !== 'Lexical') {
+		if (!enabled && this.mode !== 'Lexical' && !this.savedView) {
 			this.mode = 'Lexical';
 			void this.search(this.query, 'Lexical');
 		}
@@ -142,7 +171,7 @@ export class InboxController {
 
 	async search(query: string, mode: SearchMode) {
 		const generation = ++this.generation;
-		if (!this.experimentalSemanticSearch && mode !== 'Lexical') {
+		if (!this.savedView && !this.experimentalSemanticSearch && mode !== 'Lexical') {
 			mode = 'Lexical';
 		}
 		this.query = query;
@@ -155,7 +184,7 @@ export class InboxController {
 		this.loading = true;
 		this.revision++;
 		try {
-			const rows = await this.transport.search({
+			const rows = await this.request({
 				query,
 				mode,
 				limit: PAGE_SIZE,
@@ -191,7 +220,7 @@ export class InboxController {
 		const offset = this.rows.length;
 		this.loading = true;
 		try {
-			const next = await this.transport.search({
+			const next = await this.request({
 				query: this.query,
 				mode: this.mode,
 				limit: PAGE_SIZE,
@@ -228,7 +257,7 @@ export class InboxController {
 			const rows: MessageRowDto[] = [];
 			let hasMore = false;
 			for (let offset = 0; offset < target; offset += PAGE_SIZE) {
-				const page = await this.transport.search({
+				const page = await this.request({
 					query: this.query,
 					mode: this.mode,
 					limit: PAGE_SIZE,
@@ -297,7 +326,8 @@ export class InboxController {
 		if (error === 'EmbeddingUnavailable')
 			return 'Experimental semantic search needs a local model. Choose Words to search without it.';
 		if (error === 'VaultUnavailable') return i18n.t.mailboxes.vaultError;
-		if (error === 'InvalidRequest' && this.scope) return i18n.t.mailboxes.unavailable;
+		if (error === 'InvalidRequest' && (this.scope || this.savedView))
+			return i18n.t.mailboxes.unavailable;
 		return i18n.t.mailboxes.loadError;
 	}
 	dispose() {

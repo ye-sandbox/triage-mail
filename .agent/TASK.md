@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[04.10] Saved Searches & Virtual Folders — READY FOR PLANNING
+[04.10] Saved Searches & Virtual Folders — RUNNING
 
 ---
 
@@ -525,7 +525,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [04.10]: Saved Searches & Virtual Folders
 
-- **Status:** READY FOR PLANNING
+- **Status:** RUNNING
 - **Priority:** 4
 - **Systems Involved:** `crates/storage`, desktop search IPC/sidebar.
 - **Scope:** Save named queries and scopes spanning selected accounts without moving
@@ -534,6 +534,65 @@ All tasks inherit the repository DoD when implemented.
 - **Acceptance:** Create/rename/delete views; refresh membership after sync or triage;
   preserve pagination, account isolation and canonical message identity. Validate
   full-result membership rather than filtering only the loaded frontend page.
+
+
+#### Approved Implementation Plan (2026-11-02)
+
+1. `[04.10.1]` **Typed saved-view definitions:** Add a versioned headless storage
+   model with opaque ID, revision, display name, query text/search mode, account
+   selection and structured predicates. Default to lexical search and all accounts;
+   an explicit nonempty account selection spans only those accounts. Support optional
+   read/starred/attachment states, exact local tags, parsed sender mailbox/domain,
+   deterministic extraction kind and boleto due-date bounds. Predicates combine with
+   AND; account selections combine with OR. Missing facts never satisfy positive
+   predicates. Sender identity is unauthenticated. Provide a relative upcoming-bills
+   window (today through the next 30 days, inclusive, UTC calendar dates), resolved
+   once per request; date and amount facts must not imply payment status. Do not add
+   arbitrary SQL, a query language, rules/actions, schedules or outbound requests.
+2. `[04.10.2]` **Encrypted persistence:** Add append-only migration v5 for saved
+   definitions and optimistic revisions; leave v1-v4 intact. Validate bounded names,
+   text, predicate collections, date ranges and account references natively. Support
+   create/update/rename/delete and deterministic listing. Never store definitions or
+   mail facts in browser persistence. Removed account references must never broaden
+   a selected-account view: retain the explicit selection and return a visible invalid
+   view until edited, while allowing unrelated definitions to be listed and managed.
+3. `[04.10.3]` **Full-result native execution:** Compile validated predicates into
+   parameterized SQL eligibility before LIMIT/OFFSET and before both hybrid candidate
+   windows. Reuse existing lexical ranking, exact cosine semantics, RRF behavior and
+   hydration; preserve canonical account/folder/UID and deduplicate memberships. Run
+   definition/revision validation, eligibility, ranking and hydration in one read
+   snapshot with one clock value. Semantic/hybrid retain existing opt-in/model gates;
+   save query text and mode, never embeddings. Keep HybridQuery, SearchEngine and
+   existing mailbox/IPC shapes compatible through additive saved-view APIs. Existing
+   performance deviations remain visible; no approximate or loaded-page filtering.
+4. `[04.10.4]` **Additive desktop IPC:** Add typed list/save/delete/search-saved-view
+   commands with revision checks, bounded pagination and fixed safe errors. Saved-view
+   search resolves the persisted definition natively; unknown IDs, stale revisions and
+   missing account references fail closed. CRUD never mutates messages or invokes
+   rules/deliveries. Existing ordinary search and mailbox navigation remain compatible.
+5. `[04.10.5]` **EN/PT-BR sidebar and editor:** Load svelte-dev before implementation.
+   Add a Saved searches sidebar section and accessible create/edit/rename/delete
+   controls, including Save current search. Offer editable starter definitions for
+   unread clients (sender/tag plus unread), invoices (NF-e extraction) and upcoming
+   bills (boleto with relative date window); never infer clients automatically or save
+   presets without user action. Support account multi-selection and predicate controls.
+   Reuse inbox virtualization, pagination and sync/triage refresh; selecting/editing a
+   view resets reader/selection/scroll and invalidates late requests. Deleting the active
+   view returns to All Mail. Refresh relative dates at UTC midnight and on focus/resume.
+   Preserve modal dirty/busy guards and clear transient state on teardown.
+6. `[04.10.6]` **Evidence and closure:** Test migration/reopen and revision conflicts,
+   all/selected-account isolation and removed-account failures, parsed senders, missing
+   extraction facts, UTC/date boundaries, full-result page unions/order, semantic and
+   hybrid prefiltering, duplicate memberships and canonical identity. Cover sync/triage
+   membership changes, stale async responses, active deletion and editor lifecycle.
+   Use synthetic reserved-domain fixtures and offline adapters only. Run every DoD
+   command plus SPA build, formatting and tracked-file secret/PII scans; measure
+   representative large-fixture saved-view workloads without weakening existing targets.
+   Record contracts/ADR and applicable knowledge cards; load readme-standard for paired
+   usage documentation. Make an atomic Conventional Commit, log its hash and promote
+   [04.11] to READY FOR PLANNING. Do not push or implement reminders/dashboard work.
+
+- **Approval:** User approved the full plan via `proceed` on 2026-11-02.
 
 ### Task [04.11]: Due-Date Dashboard & Scheduled Reminders
 
