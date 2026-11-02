@@ -10,7 +10,7 @@
 ### Task [04.1]: Account Mailboxes Navigation
 
 - **Description:** Implement an expandable account list below global All Mail, with local account photos, functional per-account mailbox views (Inbox, Starred, Snoozed, Spam, Archive, Trash, Other folders), same-account deduplication, and append-only Migration v2.
-- **Status:** RUNNING
+- **Status:** PLANNING
 - **Action Type:** Sequential / Wave implementation across tasks `[04.1.1]`–`[04.1.7]`.
 - **Plan and implementation tasks:** [Account Mailboxes Plan](plans/04.1-account-mailboxes.md).
 - **Scope:** Append-only Migration v2 (`folders`, `message_folder_memberships`, `account_avatars`, `messages` column additions), folder catalog synchronization, two-way Starred and local Snoozed behavior, account-scoped search, local private avatars, and Svelte 5 expandable account navigation.
@@ -59,9 +59,14 @@
   - `Closure:` Local atomic commit `01f8eb0`; next task [04.1.7] promoted to planning. No push performed.
   - `Environment:` Existing loopback tests and the Node policy scanner needed sandbox exceptions for local sockets/subprocesses. No dependency downloads, provider requests, system installation, or push occurred.
 
-- [ ] **[04.1.7]** `[READY FOR PLANNING]` `[SEQ: W7]` Validate and close the mailbox feature
-  - `Paths:` `feature tests, .agent/TASK.md, .agent/NOTES.md`
+- [ ] **[04.1.7]** `[PLANNING]` `[SEQ: W7]` Validate and close the mailbox feature
+  - `Paths:` `feature tests, crates/storage/examples/**, tools/performance/**, apps/desktop/src-tauri/examples/**, docs/performance/**, .agent/TASK.md, .agent/NOTES.md, applicable knowledge cards`
   - `Verify:` `cargo test --workspace && pnpm --filter desktop check && pnpm --filter desktop test && node scripts/ci-guard.mjs`
+  - `Plan:` `.agent/plans/04.1-account-mailboxes.md`, section `[04.1.7]`; detailed validation proposal approved by user `proceed` on 2026-11-02. Validation found a production query-plan blocker; returned to planning for scoped follow-up approval. No production fix or dependency change performed.
+  - `Evidence:` `docs/performance/mailbox-validation.md`, raw scoped CSVs/query plan, incomplete native JSON, and synthetic screenshots. Global/Starred/Snoozed: 720 warm samples with exact ordering/eligibility/identity assertions. Inbox: external 180-second budget exhausted before first returned sample (exit 124). Native: ready phase only, 90-second budget exhausted; no first-page/frame pass.
+  - `Diagnosis:` Correlated Inbox membership lookup chooses account-only `idx_memberships_account_folder` scans rather than the message-ID index on the 100k/200k fixture; potential ~1.25 billion visits. See k-020. Native wrapper timeout cleanup fixed within the validation harness and verified using a disposable wrapper/child.
+  - `Checks (2026-11-02):` Offline workspace check, all 209 Rust tests, fmt, all-target Clippy including an extra all-features pass, desktop zero-error/warning check, all 126 frontend tests, fixture build and restored ordinary SPA build pass. Local socket/subprocess exceptions only; no network downloads, provider access, system installation, push, or tag.
+  - `Closure:` NOT DONE. Remaining dense/empty/folder timings, native first-page/scroll reports and visual matrix are listed in the validation report. Next milestone is not promoted. Validation committed locally as `4dea59c`; production follow-up remains unapproved. Policy scan includes 236 tracked text files with zero findings; diff and Svelte invariants pass.
 
 ## Completed Tasks
 
