@@ -401,3 +401,26 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   existing candidate window and RRF fusion. Unscoped optimized paths are unchanged.
 - Existing semantic consent gates remain in force. Scoped predicate latency is not yet
   benchmarked; feature closure [04.1.7] must measure it against ADR-008.
+
+## Private Local Account Photos ([04.1.5])
+
+- Separate IPC commands: `cmd_get_account_avatar(accountId)` returns `AccountAvatar | null`,
+  `cmd_set_account_avatar(accountId, bytes)` returns the normalized avatar, and
+  `cmd_remove_account_avatar(accountId)` returns unit. `AccountAvatar` uses snake_case
+  `{ bytes: number[], mime_type: string, width: number, height: number }`. Existing account
+  configuration DTOs and message pages never carry image bytes or local paths.
+- All commands initialize the existing encrypted runtime first and validate account
+  identity. Unknown accounts return `NotFound`; decoding failures return fixed
+  `InvalidRequest` errors without paths, metadata, or decoder diagnostics.
+- Desktop-only `image` decoding runs on the existing blocking worker: PNG/JPEG/WebP,
+  nonempty input <= 2 MiB, strict decoder width/height <= 1024, and a 32 MiB best-effort
+  decoder allocation limit. Resize/crop to 128x128 and encode a fresh RGBA PNG, stripping
+  original metadata. Validation precedes SQL upsert, preserving the prior photo on failure.
+- Storage helpers reuse Migration v2's encrypted `account_avatars` table without schema
+  or repository trait changes. Upserts are account-bound; deletion is idempotent.
+- AccountList composes AccountPhoto with a separate injectable AvatarTransport/controller.
+  Only normalized thumbnails become in-memory data URLs, compatible with the existing
+  CSP. Raw files are never previewed; filenames/paths never cross IPC. No photos or
+  addresses are copied into localStorage. Disposal clears previews and ignores late
+  responses; busy operations prevent duplicate UI writes. Fallback initials and colors
+  derive locally from display labels and opaque account IDs. Labels support EN/PT-BR.

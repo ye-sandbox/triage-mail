@@ -142,6 +142,46 @@ pub async fn cmd_list_accounts(
 }
 
 #[tauri::command]
+pub async fn cmd_get_account_avatar(
+    state: State<'_, RuntimeState>,
+    account_id: String,
+) -> Result<Option<storage::AccountAvatar>, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .get_account_avatar(account_id)
+        .await
+}
+
+#[tauri::command]
+pub async fn cmd_set_account_avatar(
+    state: State<'_, RuntimeState>,
+    account_id: String,
+    bytes: Vec<u8>,
+) -> Result<storage::AccountAvatar, IpcError> {
+    if bytes.len() > crate::avatars::MAX_AVATAR_BYTES {
+        return Err(IpcError::InvalidRequest);
+    }
+    state
+        .initialize(None)
+        .await?
+        .set_account_avatar(account_id, bytes)
+        .await
+}
+
+#[tauri::command]
+pub async fn cmd_remove_account_avatar(
+    state: State<'_, RuntimeState>,
+    account_id: String,
+) -> Result<(), IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .remove_account_avatar(account_id)
+        .await
+}
+
+#[tauri::command]
 pub async fn cmd_list_folders(
     state: State<'_, RuntimeState>,
     account_id: String,
@@ -357,6 +397,9 @@ pub fn run() {
             cmd_unlock_vault,
             cmd_list_accounts,
             cmd_list_folders,
+            cmd_get_account_avatar,
+            cmd_set_account_avatar,
+            cmd_remove_account_avatar,
             cmd_add_account,
             cmd_authorize_account,
             cmd_cancel_authorization,
@@ -447,6 +490,9 @@ mod tests {
             .manage(state)
             .invoke_handler(tauri::generate_handler![
                 cmd_list_accounts,
+                cmd_get_account_avatar,
+                cmd_set_account_avatar,
+                cmd_remove_account_avatar,
                 cmd_add_account,
                 cmd_search_messages,
                 cmd_get_message_body,
@@ -534,5 +580,53 @@ mod tests {
         })).unwrap_err().to_string();
         assert!(response.contains("invalid credential material"));
         assert!(!response.contains("synthetic-private-value"));
+        for command in ["cmd_get_account_avatar", "cmd_remove_account_avatar"] {
+            assert_eq!(
+                invoke(&window, command, json!({"accountId":"missing"})),
+                Err(json!("NotFound"))
+            );
+        }
+        let state = window.state::<RuntimeState>();
+        let service = state.service.get().unwrap();
+        tauri::async_runtime::block_on(service.add_account(
+            serde_json::from_value(json!({"account_id":"photo-account","email_display":"reader@example.com","imap_host":"imap.example.com","imap_port":993,"auth_method":"AppPassword"})).unwrap(),
+            IncomingCredentials(vault::AccountAuthMaterial::AppPassword { secret: "synthetic-password".into() }),
+        )).unwrap();
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::new_rgb8(16, 16)
+            .write_to(&mut bytes, image::ImageFormat::Png)
+            .unwrap();
+        let photo = invoke(
+            &window,
+            "cmd_set_account_avatar",
+            json!({"accountId":"photo-account","bytes":bytes.into_inner()}),
+        )
+        .unwrap();
+        assert_eq!(photo["width"], 128);
+        assert_eq!(photo["mime_type"], "image/png");
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_get_account_avatar",
+                json!({"accountId":"photo-account"})
+            ),
+            Ok(photo)
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_remove_account_avatar",
+                json!({"accountId":"photo-account"})
+            ),
+            Ok(json!(null))
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_get_account_avatar",
+                json!({"accountId":"photo-account"})
+            ),
+            Ok(json!(null))
+        );
     }
 }

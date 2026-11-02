@@ -72,7 +72,9 @@ it('acknowledges native readiness and ignores channel messages after settlement'
 		},
 		ready
 	);
-	const { onReady } = vi.mocked(invoke).mock.calls[0][1] as { onReady: Channel<null> };
+	const { onReady } = vi.mocked(invoke).mock.calls[0][1] as {
+		onReady: Channel<null>;
+	};
 	expect(ready).not.toHaveBeenCalled();
 	onReady.onmessage(null);
 	expect(ready).toHaveBeenCalledTimes(1);
@@ -80,4 +82,16 @@ it('acknowledges native readiness and ignores channel messages after settlement'
 	await operation;
 	onReady.onmessage(null);
 	expect(ready).toHaveBeenCalledTimes(1);
+});
+
+it('keeps photo commands separate from account metadata and sends no file path', async () => {
+	const { nativeAvatarTransport } = await import('./avatar-transport');
+	await nativeAvatarTransport.get('a');
+	await nativeAvatarTransport.set('a', [1, 2]);
+	await nativeAvatarTransport.remove('a');
+	expect(vi.mocked(invoke).mock.calls).toEqual([
+		['cmd_get_account_avatar', { accountId: 'a' }],
+		['cmd_set_account_avatar', { accountId: 'a', bytes: [1, 2] }],
+		['cmd_remove_account_avatar', { accountId: 'a' }]
+	]);
 });
