@@ -13,7 +13,6 @@
 	}: { transport?: AccountTransport; available?: () => boolean } = $props();
 
 	const accounts = new AccountController(untrack(() => transport));
-	let managing = $state(false);
 
 	$effect(() => {
 		void accounts.load(available());
@@ -23,12 +22,8 @@
 
 {#if accounts.phase === 'browser'}
 	<InboxSession connected={false} />
-{:else if accounts.phase === 'ready' && accounts.accounts.length && !managing}
-	<InboxSession
-		connected={true}
-		manageAccounts={() => (managing = true)}
-		accountController={accounts}
-	/>
+{:else if accounts.phase === 'ready' && accounts.accounts.length}
+	<InboxSession connected={true} accountController={accounts} />
 {:else}
-	<OnboardingView controller={accounts} enterInbox={() => (managing = false)} />
+	<OnboardingView controller={accounts} />
 {/if}

@@ -127,7 +127,7 @@ describe('account startup', () => {
 		expect(controller.phase).toBe('ready');
 		await unmount(component);
 	});
-	it('renders onboarding only after account lookup and lets existing accounts open mail', async () => {
+	it('opens account management through settings while keeping existing mail mounted', async () => {
 		const { transport, target } = fixture();
 		const pending = deferred<AccountConfig[]>();
 		transport.list.mockReturnValueOnce(pending.promise);
@@ -141,13 +141,23 @@ describe('account startup', () => {
 		pending.resolve([account]);
 		await settle();
 		expect(target.textContent).toContain('Message actions');
-		const button = [...target.querySelectorAll('button')].find(
-			(b) => b.textContent === 'Accounts'
-		)!;
-		button.click();
+		const inbox = target.querySelector('main');
+		expect([...target.querySelectorAll('button')].some((b) => b.textContent === 'Accounts')).toBe(false);
+		expect(
+			[...target.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Settings')
+		).toHaveLength(1);
+		target.querySelector<HTMLButtonElement>('button[aria-label="Settings"]')!.click();
+		await settle();
+		target.querySelector<HTMLButtonElement>('#tab-accounts')!.click();
 		flushSync();
-		expect(target.textContent).toContain('reader@example.com');
-		expect(target.textContent).toContain('Connect an account');
+		const dialog = target.querySelector('[role="dialog"]')!;
+		expect(dialog.textContent).toContain('reader@example.com');
+		expect(dialog.textContent).toContain('Add account');
+		expect(target.querySelector('main')).toBe(inbox);
+		dialog.querySelector<HTMLButtonElement>('button[aria-label="Close settings"]')!.click();
+		flushSync();
+		expect(target.querySelector('[role="dialog"]')).toBeNull();
+		expect(target.querySelector('main')).toBe(inbox);
 		await unmount(component);
 	});
 	it('suppresses late updates after teardown', async () => {

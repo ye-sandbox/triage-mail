@@ -6,8 +6,10 @@
 	import { i18n } from '../i18n/index.svelte';
 	import { clearCredentialInputs } from './forms';
 
-	let { controller, enterInbox }: { controller: AccountController; enterInbox: () => void } =
-		$props();
+	let {
+		controller,
+		enterInbox = () => {}
+	}: { controller: AccountController; enterInbox?: () => void } = $props();
 	let form = $state<HTMLFormElement>();
 
 	const t = $derived(i18n.t.onboarding);
