@@ -23,7 +23,6 @@
 		inbox,
 		connected,
 		readerTransport,
-		manageAccounts,
 		openSettings,
 		settingsOpen = false,
 		accounts = [],
@@ -33,7 +32,6 @@
 		inbox: InboxController;
 		connected: boolean;
 		readerTransport?: ReaderTransport;
-		manageAccounts?: () => void;
 		openSettings?: () => void;
 		settingsOpen?: boolean;
 		accounts?: AccountConfig[];
@@ -192,8 +190,6 @@
 			mutate={(action) => {
 				if (selected) void inbox.mutate(selected.id, action);
 			}}
-			{openSettings}
-			{manageAccounts}
 		/>
 		{#if !connected}<div
 				class="border-b border-[var(--separator)] bg-[var(--surface)] px-6 py-3 text-sm text-[var(--secondary)]"

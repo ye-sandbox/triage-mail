@@ -9,12 +9,10 @@
 
 	let {
 		connected,
-		manageAccounts,
 		settingsTransport = nativeSettingsTransport,
 		accountController
 	}: {
 		connected: boolean;
-		manageAccounts?: () => void;
 		settingsTransport?: SettingsTransport;
 		accountController?: AccountController;
 	} = $props();
@@ -55,7 +53,6 @@
 	accounts={accountController?.accounts ?? []}
 	{photoRevision}
 	{connected}
-	{manageAccounts}
 	openSettings={() => (settingsOpen = true)}
 	{settingsOpen}
 />

@@ -6,16 +6,12 @@
 		selected,
 		disabled,
 		openPalette,
-		mutate,
-		openSettings,
-		manageAccounts
+		mutate
 	}: {
 		selected?: MessageRowDto;
 		disabled: boolean;
 		openPalette: (tag?: boolean, snooze?: boolean) => void;
 		mutate: (action: TriageAction) => void;
-		openSettings?: () => void;
-		manageAccounts?: () => void;
 	} = $props();
 	const t = $derived(i18n.t.mailboxes);
 </script>
@@ -52,14 +48,4 @@
 			>{(selected.snooze_until_epoch_ms ?? 0) > Date.now() ? t.unsnooze : t.snooze}</button
 		>
 	{/if}
-	{#if openSettings}<button
-			type="button"
-			class="ml-auto rounded px-2 py-2 text-sm text-[var(--accent)]"
-			onclick={openSettings}>{t.settings}</button
-		>{/if}
-	{#if manageAccounts}<button
-			type="button"
-			class="rounded px-2 py-2 text-sm text-[var(--accent)]"
-			onclick={manageAccounts}>{i18n.t.settingsModal.tabs.accounts}</button
-		>{/if}
 </div>
