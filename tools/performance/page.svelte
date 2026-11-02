@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import { themes } from './visual-themes.fixtures';
 	import { i18n } from '$lib/i18n/index.svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import InboxView from '$lib/inbox/InboxView.svelte';
@@ -13,6 +14,7 @@
 		avatars
 	} from './performance.fixtures';
 	const inbox = new InboxController(transport);
+	let visibleAccounts = $state(accounts);
 	const pause = (ms: number) =>
 		new Promise<void>((resolve) => setTimeout(resolve, ms));
 	const frame = () =>
@@ -115,11 +117,24 @@
 		});
 	}
 	$effect(() => {
-		i18n.setLocale(
-			new URLSearchParams(location.search).get('locale') === 'pt-BR'
-				? 'pt-BR'
-				: 'en'
+		const params = new URLSearchParams(location.search);
+		visibleAccounts = accounts.slice(
+			0,
+			params.get('accounts') === '0'
+				? 0
+				: params.get('accounts') === '1'
+					? 1
+					: 4
 		);
+		const theme = params.get('theme');
+		if (theme === 'light' || theme === 'dark')
+			for (const [name, value] of Object.entries(themes[theme]))
+				document.documentElement.style.setProperty(name, value);
+		document.documentElement.toggleAttribute(
+			'data-fixture-reduced-motion',
+			params.get('motion') === 'reduce'
+		);
+		i18n.setLocale(params.get('locale') === 'pt-BR' ? 'pt-BR' : 'en');
 		if ('__TAURI_INTERNALS__' in window)
 			void run().catch((error: unknown) =>
 				report({ phase: 'error', error: String(error) })
@@ -131,8 +146,17 @@
 
 <InboxView
 	{inbox}
-	{accounts}
+	accounts={visibleAccounts}
 	avatarTransport={avatars}
 	connected={true}
 	readerTransport={reader}
 />
+
+<style>
+	/* Fixture-only override verifies the static reduced-motion layout without changing OS settings. */
+	:global(html[data-fixture-reduced-motion] *) {
+		animation: none !important;
+		transition: none !important;
+		scroll-behavior: auto !important;
+	}
+</style>

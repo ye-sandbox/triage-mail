@@ -32,3 +32,20 @@ Measure all scoped branches after correcting the plan. This card does not prescr
 
 Never add ANALYZE, optimizer hints, extra indices or artificial statistics only to the fixture
 to obtain favorable results. Benchmark the actual migration and production entry point.
+
+
+## Approved fix and measured follow-up (2026-11-02)
+
+User `proceed` approved the scoped production fix. Inbox/folder predicates now explicitly
+use the existing message-ID membership index. Snoozed enumeration uses the existing
+snooze-deadline or account index, chosen by bounded index-only counts in the same snapshot.
+The account probe caps at 16,384 rows; the global active-deadline probe caps at that account
+count. This prevents tiny-account scans from traversing another account's entire active range.
+A skewed-population VM-step regression preserves that guard. Query-plan regressions cover blank/lexical/semantic branches; a
+5k-message/10k-membership VM-step budget detects renewed quadratic account scans without
+a hardware-specific wall-clock assertion. The native fixture now completes all phases.
+
+Final Snoozed semantic p95 is 16.702ms versus the 15ms budget; Inbox semantic is
+106.144ms. The index fix removes the stall but does not satisfy feature closure. See the current follow-up section of the
+validation report. KNN candidate shortcuts must also preserve zero-norm NULL ordering;
+see k-021 before attempting another semantic optimization.

@@ -1,10 +1,12 @@
 # Mailbox validation — 2026-11-02
 
-**Feature closure is blocked.** The production blank account Inbox search did not return
-its first page within a 180-second process budget on the migrated synthetic database.
-The native fixture reached ready state but its first scoped batch did not finish within
-its 90-second budget. No native first-page, frame-cadence or 60fps pass is claimed.
-Production code, schema, IPC contracts, dependencies and performance targets are unchanged.
+**Latest result:** the approved index fix removes the Inbox stall and the native fixture
+now completes. Feature closure remains open because scoped semantic, some native first-page,
+and frame-cadence budgets are still missed. See [index-fix follow-up](#index-fix-follow-up).
+No schema, IPC, dependency or latency target changed.
+
+The initial validation below records the original 180-second Inbox timeout and incomplete
+native run. Its raw files remain historical evidence; they do not describe current behavior.
 
 ## Reproduction and dataset
 
@@ -23,7 +25,7 @@ node tools/performance/sample-native.mjs target/release/examples/native_performa
 pnpm --filter desktop build
 ```
 
-The full storage command intentionally retains the failing Inbox workload. Its optional
+The full storage command retains the originally failing Inbox workload. Its optional
 case names are Global, Inbox, Starred, Snoozed, Archive, All-label and Empty; Plan prints
 EXPLAIN output for the production blank Inbox SQL. An external `timeout 180` bounded the
 recorded Inbox probe. Timed-out work is not assigned a fabricated latency percentile.
@@ -196,3 +198,162 @@ follow-up is approval to fix the production scoped-membership query plan within
 IPC contracts. Then repeat dense/sparse/empty/deep-page correctness and timing, finish the
 native report and remaining visual matrix, and close only against actual passing evidence.
 No timing-target relaxation, approximate search, fixture-only tuning or release is proposed.
+
+## Index-fix follow-up
+
+The user approved scoped storage fixes on 2026-11-02; fix commits `dcc320a` and `8794854`. Production changes are confined to
+`scoped_search.rs` and regression tests. Correlated Inbox/folder probes now explicitly use
+`idx_memberships_message_id`, preventing a whole-account membership scan for every candidate.
+Snoozed branches choose the account or deadline index using bounded index-only counts
+(up to 16,384 account rows, and at most that many active global deadlines) inside the same
+read snapshot. This avoids a cross-account scan regression for tiny accounts. Both indices
+already belong to Migration v2; no migration, extra vector index, public trait or IPC change
+was introduced. Eligibility, one read snapshot, pending overrides, UTC boundaries, full exact
+ranking, deterministic ties and canonical attachment identity are preserved.
+
+Five new regressions cover actual production query plans in blank/lexical/semantic branches,
+a 5k-message/10k-membership VM-step budget, skewed cross-account snooze populations,
+and existing NULL-distance order for zero-norm
+stored/query vectors. The VM budget is generous linear work, not a millisecond assertion.
+An experimental account-KNN candidate frontier was rejected: a zero-norm stored vector can
+be absent from its finite frontier while scalar SQL places its NULL distance first. The
+regression reproduces that incompatibility and passes with the retained exact scalar path.
+Sparse/missing embeddings, orphans, oversized ties and deep pages remain correctness gates;
+ordinary nonzero embedding fixtures must not be used to justify a narrower accepted domain.
+
+The following samples use the same migrated 100k/200k synthetic distribution, host,
+release profile, versions and oracle method documented above, using production snapshot
+`8794854`. Each storage case has three
+reopened samples, five warmups and 30 warm samples. All storage/native compilation and
+other measurement workloads finished before final timed runs. Native and storage sampling
+ran sequentially. Shared-host variability and the WSL/WebKit acceleration limitations still
+apply; no all-hardware latency or GPU-frame presentation claim follows.
+
+
+### Storage after the index fix
+
+[Raw samples](mailbox-indexed.csv), [current query plan](mailbox-indexed-query-plan.txt).
+All 56 distributions and 1,680 warm samples pass complete eligible ordering, counts,
+uniqueness and canonical identity assertions. There are 168 additional reopened samples
+and 280 untimed warmups. This includes previously blocked Inbox/Archive/All Mail-label/Empty
+cases, all four modes and offsets 0/4,000. The current plan uses
+`idx_memberships_message_id (message_id=?)` for correlated membership probes.
+The following table shows first pages; deep-page measurements remain in the raw CSV.
+
+| View | Mode | Eligible | Results | Warm p50 ms | Warm p95 ms |
+|---|---|---:|---:|---:|---:|
+| Global | Blank | 100000 | 200 | 0.343 | 0.372 |
+| Global | Lexical | 100000 | 200 | 32.402 | 35.372 |
+| Global | Semantic | 100000 | 200 | 45.927 | 48.702 |
+| Global | Hybrid | 100000 | 200 | 49.714 | 51.895 |
+| Inbox | Blank | 17500 | 200 | 31.715 | 35.373 |
+| Inbox | Lexical | 17500 | 200 | 43.740 | 44.985 |
+| Inbox | Semantic | 17500 | 200 | 101.549 | 106.144 |
+| Inbox | Hybrid | 17500 | 200 | 153.237 | 175.287 |
+| Starred | Blank | 31 | 31 | 0.066 | 0.092 |
+| Starred | Lexical | 31 | 31 | 5.774 | 6.075 |
+| Starred | Semantic | 31 | 31 | 0.157 | 0.210 |
+| Starred | Hybrid | 31 | 31 | 5.909 | 6.428 |
+| Snoozed | Blank | 2500 | 200 | 2.485 | 2.927 |
+| Snoozed | Lexical | 2500 | 200 | 14.482 | 15.419 |
+| Snoozed | Semantic | 2500 | 200 | 15.611 | 16.702 |
+| Snoozed | Hybrid | 2500 | 200 | 28.874 | 30.640 |
+| Archive | Blank | 5000 | 200 | 29.277 | 30.244 |
+| Archive | Lexical | 5000 | 200 | 41.336 | 48.347 |
+| Archive | Semantic | 5000 | 200 | 52.455 | 57.632 |
+| Archive | Hybrid | 5000 | 200 | 92.622 | 100.357 |
+| All-label | Blank | 25000 | 200 | 35.457 | 38.017 |
+| All-label | Lexical | 25000 | 200 | 49.527 | 52.028 |
+| All-label | Semantic | 25000 | 200 | 134.342 | 142.471 |
+| All-label | Hybrid | 25000 | 200 | 184.267 | 193.482 |
+| Empty | Blank | 0 | 0 | 28.305 | 29.515 |
+| Empty | Lexical | 0 | 0 | 33.114 | 35.948 |
+| Empty | Semantic | 0 | 0 | 28.890 | 31.022 |
+| Empty | Hybrid | 0 | 0 | 57.984 | 60.253 |
+
+Blank Inbox now completes at p95 **35.373ms**, replacing a process timeout before the
+first sample. Snoozed semantic p95 improves from **23.540ms to 16.702ms** (same synthetic workload),
+but still exceeds the 15ms filtered-semantic budget. Dense scoped semantic remains well
+over budget: Inbox 106.144ms, Archive 57.632ms, All Mail-label 142.471ms. Empty-scope
+semantic also misses at 31.022ms. These exact
+point-lookup paths have additional eligibility work and are different from the reference
+partition top-k workload; that difference does not count as a passed budget.
+
+Global first-page controls remain within the 40/50/60ms lexical/semantic/parallel-hybrid
+bounds. Scoped lexical misses 40ms for Inbox (44.985), Archive (48.347), and All Mail-label
+(52.028). Scoped hybrid is sequential within its single snapshot: Inbox (175.287), Archive
+(100.357) and All Mail-label (193.482) exceed the 95ms sequential bound. Starred has only 31
+eligible rows, and Empty has none; neither substitutes for dense-scope acceptance. Deep
+exact fallback budgets are still not established as passes. No approximation, target change,
+fixture-only ANALYZE or extra index was used to improve these numbers.
+
+### Completed native report
+
+[Raw native report](mailbox-native-fixed.json): exit 0, all twelve 30-sample first-page
+reports, both 180-frame scroll phases and a final `complete` phase. Lexical here is a blank
+mailbox listing, whereas semantic/hybrid use the fixed `newsletter` query/vector. The timer
+and exclusions remain those described above; actual embedding inference, service bootstrap,
+mail workers and toolbar debounce are outside these fixture measurements.
+
+| View | Mode | Rows | IPC p50 ms | IPC p95 ms | Submission-to-frame p50 ms | Submission-to-frame p95 ms |
+|---|---|---:|---:|---:|---:|---:|
+| Inbox | Lexical | 200 | 36.0 | 41.0 | 67.0 | 84.0 |
+| Inbox | Semantic | 200 | 113.5 | 138.0 | 150.0 | 185.0 |
+| Inbox | Hybrid | 200 | 157.0 | 180.0 | 187.0 | 230.0 |
+| Starred | Lexical | 31 | 3.0 | 5.0 | 34.0 | 45.0 |
+| Starred | Semantic | 31 | 3.0 | 4.0 | 33.0 | 39.0 |
+| Starred | Hybrid | 31 | 10.0 | 19.0 | 35.0 | 71.0 |
+| Snoozed | Lexical | 200 | 7.0 | 18.0 | 35.0 | 49.0 |
+| Snoozed | Semantic | 200 | 22.0 | 44.0 | 63.5 | 87.0 |
+| Snoozed | Hybrid | 200 | 35.0 | 44.0 | 67.5 | 86.0 |
+| Archive | Lexical | 200 | 35.0 | 42.0 | 67.0 | 84.0 |
+| Archive | Semantic | 200 | 59.0 | 73.0 | 95.0 | 117.0 |
+| Archive | Hybrid | 200 | 107.0 | 119.0 | 149.0 | 166.0 |
+
+The 100ms first-page budget is missed by Inbox semantic/hybrid and Archive semantic/hybrid.
+Completed reporting and bounded rendering do not turn those measured misses into passes.
+
+| Scroll phase | Loaded summaries at end | Max mounted rows | Frame p50 ms | Frame p95 ms | Max ms |
+|---|---:|---:|---:|---:|---:|
+| preloaded-scroll | 100000 | 18 | 17.0 | 23.0 | 45.0 |
+| paged-scroll | 1600 | 18 | 16.0 | 22.0 | 36.0 |
+
+Preloaded scrolling has 100,000 resident summaries and an 8,800,000px spacer. Paged scrolling
+finishes with 1,600 summaries (eight global pages); it does not traverse every persisted row.
+Both phases mount at most 18 rows. Frame p95 exceeds 16.7ms, so consistent 60fps is not
+established. These are animation-callback intervals, not GPU presentation measurements;
+the existing DRI3/GStreamer warnings and WSL limitations remain relevant.
+
+### Visual follow-up and final checks
+
+Additional browser-only captures at 1280x720:
+
+- [One account, light theme, local thumbnail, reduced-motion layout](mailbox-screenshots/desktop-inbox-light-photo-reduced.png).
+- [Zero-account InboxView shell, light theme](mailbox-screenshots/desktop-zero-accounts-light.png).
+- [Unavailable/offline catalog with cached synthetic messages and retry, dark PT-BR](mailbox-screenshots/desktop-offline-dark-pt.png).
+- [Loading folders, light theme](mailbox-screenshots/desktop-loading-light.png).
+- [Not-yet-synced folders, dark PT-BR](mailbox-screenshots/desktop-not-synced-dark-pt.png).
+
+These are injected InboxView scenes, not proof of DesktopApp's empty-account onboarding or
+provider connectivity. Light/dark token values are extracted from production CSS during
+fixture build. The thumbnail is a generated in-memory 128px PNG supplied through the existing
+avatar transport; native image decoding/encrypted persistence remain covered by their unit
+regressions. `motion=reduce` forces a fixture-only static CSS layout (computed transitions 0s);
+this does not establish dispatch of the operating system's reduced-motion media preference.
+The earlier narrow/keyboard/multiple-account/disclosure-reload observations remain applicable.
+A stale preview import after rebuilding assets was resolved by restarting the local preview;
+the loaded zero-account scene correctly has no account headers or message rows.
+
+Final verification: offline workspace check; all **214 Rust tests**; required workspace/all-target
+Clippy with warnings denied plus an all-features run covering the native example; fmt; desktop
+check with zero errors/warnings; all **126 frontend tests**; fixture build and restored ordinary
+SPA build; changed fixture formatting; Svelte invariant; whitespace and tracked/new-file policy
+review. No network downloads, live mailbox/vault access, system installation, tag or push.
+
+The approved query-plan fix and regressions are ready to retain, but **[04.1.7] is not DONE**.
+Its remaining gates are the measured scoped lexical/semantic/hybrid misses, native first-page
+misses, and unestablished 60fps cadence. An exact semantic/index design must account for zero
+norms, missing/orphan embeddings and oversized ties; a finite candidate shortcut cannot simply
+replace the existing contract. Further design must preserve append-only schema governance,
+full SQLCipher encryption and headless boundaries. No broader schema/dependency/UI production
+change is authorized or silently included by this follow-up.
