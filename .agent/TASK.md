@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[03.7] Telegram & Discord Alert Connectors — READY FOR PLANNING
+[03.7] Telegram & Discord Alert Connectors — PLANNING
 
 ---
 
@@ -417,7 +417,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [03.7]: Telegram & Discord Alert Connectors
 
-- **Status:** READY FOR PLANNING
+- **Status:** PLANNING
 - **Priority:** 3
 - **Depends On:** [03.6] and its approved network-policy exception.
 - **Systems Involved:** Delivery adapters, `crates/vault`, desktop IPC/UI.
@@ -427,6 +427,69 @@ All tasks inherit the repository DoD when implemented.
 - **Acceptance:** Synthetic offline connector tests cover formatting, escaping,
   provider size/rate limits, retryable failures and secret redaction. Tokens and
   secret webhook URLs never appear in logs, exports or returned configuration DTOs.
+
+#### Proposed Implementation Plan (2026-11-02; awaiting approval)
+
+1. `[03.7.1]` **Additive connector contracts:** Extend destination kinds with Telegram
+   and Discord, preserving existing Local/Webhook wire formats, migration history,
+   rule actions and delivery traits. Keep formatting and provider outcome parsing pure
+   and headless. Reuse destination revisions, ingestion snapshots, field consent,
+   durable queue, retry/age budgets, test/replay and safe execution history. Add an
+   append-only migration only if required by the existing storage representation.
+2. `[03.7.2]` **Vault-only setup:** Add input-only, redacted, zeroized connector secret
+   types and backward-compatible vault decoding. Telegram stores a user-supplied bot
+   token and chat ID only in vault; Discord stores the complete webhook URL there.
+   Safe DTOs expose kind, fixed public origin and credential-presence flags only.
+   Bind enablement to the provider, recipient configuration revision and selected fields;
+   changing kind/recipient/credentials requires fresh confirmation and cancels pending
+   revisions. Reuse immutable secret staging, orphan recovery and deletion cleanup.
+3. `[03.7.3]` **Restricted delivery:** Telegram POSTs only to its fixed HTTPS Bot API
+   sendMessage endpoint; Discord POSTs only to validated discord.com API webhook paths.
+   Reject alternate hosts, userinfo, fragments, arbitrary queries and injected path
+   segments; allow only explicitly constructed execution options. Preserve public-only
+   connection-time DNS validation, TLS 1.2+, port 443, no redirects/proxies and bounded
+   deadlines. No bot discovery, getUpdates, webhook inspection or credential-validation
+   calls occur during setup/save. All development validation uses offline adapters.
+4. `[03.7.4]` **Safe provider payloads/outcomes:** Render only the shared consent-filtered
+   payload. Telegram uses plain text without parse_mode, with link previews disabled;
+   Discord suppresses mentions and embeds. Bound Unicode text conservatively per
+   provider, with visible truncation; send one message per event without attachment
+   uploads or automatic splitting. Parse only bounded provider response envelopes for
+   acceptance/error codes and retry delays; discard descriptions, message/chat objects
+   and raw responses. Combine bounded provider/HTTP retry hints with existing persisted
+   rate gates and attempt/age caps. Malformed responses fail visibly. Do not claim
+   provider idempotency, exactly-once delivery or human visibility.
+5. `[03.7.5]` **Guided EN/PT-BR setup:** Extend Alerts settings with Telegram bot/chat
+   and Discord webhook instructions and detached secret inputs, clear external-export
+   disclosure, recipient confirmation, selected-field preview, explicit synthetic test,
+   replay and disable/delete controls. Existing Rules destination selection includes
+   both kinds. No setup/test sends automatically; retain dirty/busy/unmount guards,
+   stale-response protection and the mounted inbox. Load svelte-dev before UI edits.
+   Provider-side revocation is guided manually; disabling/deleting stops local dispatch
+   but cannot recall accepted messages or revoke a shared provider credential remotely.
+6. `[03.7.6]` **Evidence and closure:** Offline tests cover formatting/escaping, Unicode
+   bounds, mention/link suppression, endpoint validation, malformed/oversized responses,
+   provider retries, consent/revision races, vault redaction/recovery, upgrades and
+   existing generic/local behavior. Run the full repository DoD, frontend build,
+   applicable formatting and secret/PII scans. Record ADR/contracts and knowledge cards;
+   use readme-standard for paired usage documentation. Make an atomic Conventional
+   Commit, log its hash and promote [04.10] to planning. Do not push.
+
+#### Proposed P0 Extension (awaiting approval)
+
+- Extend [03.6]'s runtime exception to user-enabled Telegram sendMessage JSON POSTs
+  at api.telegram.org and Discord webhook JSON POSTs at discord.com, including explicit
+  synthetic tests and confirmed replay. Bot token, chat ID and full webhook URLs remain
+  vault-only. Per-destination field and recipient consent is mandatory.
+- Permit bounded, transient provider-response parsing for acceptance and retry metadata;
+  never log, persist or return response bodies or provider descriptions. Keep all existing
+  public-DNS/TLS/443/deadline/no-redirect/no-proxy restrictions. No discovery/polling,
+  inbound bot listener, provider credential revocation calls or live development delivery.
+- Approval authorizes this narrow AGENTS.md amendment and implementation only. Digests,
+  quiet hours, reminders and a runnable headless CLI remain separately scoped.
+
+- **Approval:** Pending. Repository AGENTS.md Execution Protocol step 2 requires plan
+  approval before transition from PLANNING to RUNNING.
 
 ### Task [04.10]: Saved Searches & Virtual Folders
 
