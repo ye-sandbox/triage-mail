@@ -21,11 +21,11 @@
   - `Paths:` `docs/adr/decisions.md, .agent/NOTES.md, .agent/plans/04.1-account-mailboxes.md`
   - `Verify:` `git diff --check && node scripts/ci-guard.mjs`
 
-- [ ] **[04.1.2]** `[READY FOR PLANNING]` `[SEQ: W2]` Discover and synchronize account folders
+- [x] **[04.1.2]** `[DONE: c4676d1]` `[SEQ: W2]` Discover and synchronize account folders
   - `Paths:` `crates/mail-engine/src/**, crates/storage/src/**, apps/desktop/src-tauri/src/**`
   - `Verify:` `cargo test --workspace`
 
-- [ ] **[04.1.3]** `[PLANNED]` `[SEQ: W3]` Add persisted Starred and local Snoozed behavior
+- [ ] **[04.1.3]** `[READY FOR PLANNING]` `[SEQ: W3]` Add persisted Starred and local Snoozed behavior
   - `Paths:` `crates/storage/src/**, crates/mail-engine/src/**, apps/desktop/src-tauri/src/**`
   - `Verify:` `cargo test --workspace`
 
