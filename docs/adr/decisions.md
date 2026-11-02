@@ -258,3 +258,46 @@ type: architectural-decision-log
   conditions/rule, 16 actions/rule and 100 selected simulation messages bound work/IPC;
   these are definition/work limits, with no account cap. Existing schema v1/v2 and search
   behavior remain unchanged. No notifications, external delivery or history replay is added.
+
+### [2026-11-02] ADR-013: Consent-Bound Durable Alert Deliveries
+
+- **Context:** [03.6] extends the shared local rule planner with optional notifications
+  and generic webhooks, without initial-history floods, secret persistence outside vault
+  or a GUI dependency in core. Arbitrary HTTP receivers cannot provide exactly-once delivery.
+- **Decision:** Add `RuleAction::Alert(destination_id)` to version-1 rules and append-only
+  migration v4. Freeze enabled destination revisions alongside rule revisions at ingestion;
+  finish rule jobs, local actions, IMAP outbox entries and alert enqueue in one transaction.
+  A destination edit/disable cancels old pending jobs; enabling never replays old events.
+  Account-bound event/destination deduplication markers outlive pruned execution history.
+  Existing [03.5] baselines and conservative identity limits still apply.
+- **Secrets/consent:** Stage immutable vault-only URL/bearer revisions using SQL intent
+  records before vault writes. Commit only opaque references and public origins to SQL;
+  clean unreferenced staged secrets after interruption. Explicit enablement confirms the
+  displayed public origin and exported fields. Test/replay confirmation carries the
+  destination revision; stale confirmation fails. Replay selects messages, creates fresh
+  event IDs and never executes mutation actions. Simulation remains free of deliveries.
+- **Network:** The user approved a narrow P0 exception: public DNS HTTPS port 443 only,
+  verified TLS 1.2+, exact validated DNS snapshots, no redirect/proxy inheritance, and a
+  ten-second dispatch deadline. Private/mixed/reserved addresses, IP literals, URL userinfo
+  and fragments are rejected. No live development deliveries are authorized by this change.
+- **Delivery:** SQL leases survive restart with stable event IDs/Idempotency-Key. Default
+  rate is one start/ten seconds/destination; desktop dispatches one job per worker tick,
+  globally serially. Retry transport failures, 408/429 and 5xx with bounded jitter/backoff
+  and Retry-After; cap at eight attempts and 24 hours. All other non-2xx outcomes are terminal.
+  Expired/canceled/completed payloads are cleared. Retain terminal history at most 30 days
+  and 1,000 rows/destination; history DTOs expose only IDs, statuses, counts and timestamps.
+- **Disclosure:** Default webhook payload is schema/event/time/truncation metadata. Optional
+  fields are individually selected; bodies/excerpts may contain sensitive data. Structured
+  extraction exports only boleto amounts/dates, never raw OTP/Pix badges. Plain-text body
+  export is capped at 6,000 UTF-8 bytes, excerpts at 512; metadata collections at 16 items.
+  JSON remains <=64 KiB with explicit truncation. Missing bodies/attachments are never fetched.
+  Local notices are generic, with no mail fields. Linux uses the session notification service;
+  absent/denied service and other operating systems return unavailable. Desktop-shell acceptance
+  is not proof of visibility, and lock-screen display is controlled by the operating system.
+- **Consequences:** Timeouts/crashes can duplicate accepted requests, so receivers should
+  deduplicate by event ID. Disable waits for an already-started bounded attempt; no recall
+  promise. An active unlocked runner is required. Core contracts permit a separate headless
+  composition but no CLI runner, Telegram/Discord adapter, digest or reminder is delivered.
+  Message/account removal cancels related pending work; cache removal after MOVE without
+  COPYUID can therefore suppress an undelivered alert. Settings explain export and lifecycle
+  limits. Existing IPC, trait signatures, migrations v1-v3 and search contracts are preserved.

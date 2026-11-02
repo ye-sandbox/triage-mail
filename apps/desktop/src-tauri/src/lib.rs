@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 //! Desktop-only orchestration. Core crates remain independent of Tauri.
+pub mod alerts;
 pub mod avatars;
 pub mod dto;
 pub mod events;

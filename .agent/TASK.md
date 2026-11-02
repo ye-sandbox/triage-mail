@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[03.6] Local Notifications & Generic Webhook Alerts — READY FOR PLANNING
+[03.6] Local Notifications & Generic Webhook Alerts — RUNNING
 
 ---
 
@@ -270,7 +270,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [03.6]: Local Notifications & Generic Webhook Alerts
 
-- **Status:** READY FOR PLANNING
+- **Status:** RUNNING
 - **Priority:** 2
 - **Depends On:** [03.5]
 - **Systems Involved:** `crates/storage`, `crates/vault`, desktop runtime/IPC/UI;
@@ -289,6 +289,100 @@ All tasks inherit the repository DoD when implemented.
   before enabling external deliveries. Specify destination consent, TLS, DNS/redirect
   protections and any explicitly configured private-network webhook behavior. This
   backlog entry does not amend `AGENTS.md` or authorize outbound requests.
+
+#### Approved Implementation Plan (2026-11-02)
+
+1. `[03.6.1]` **Shared alert planning:** Extend the typed local rule model additively
+   with destination-referencing alert actions; preserve existing version-1 rules,
+   ordering, stop semantics and mutation actions. Use the same immutable facts and
+   evaluator for simulation and execution. Coalesce matching rules to one automatic
+   delivery per account-bound event and destination. Add headless delivery request,
+   outcome and adapter contracts in existing core modules; no new crate or Tauri
+   dependency in core. Desktop composes the native notification and HTTP adapters.
+2. `[03.6.2]` **Consent and vault lifecycle:** Destinations start disabled. Explicit
+   enablement confirms destination identity, selected exported fields and external
+   disclosure. Keep complete webhook URLs (including paths/query secrets) and optional
+   bearer credentials exclusively in vault, behind opaque destination IDs. Return only
+   safe metadata, public origin and credential-presence flags. Credential inputs stay
+   transient and are cleared after submission/teardown. Stage immutable secret revisions
+   before SQL configuration commit; recover/clean orphan revisions without exposing
+   secrets. Configuration or field changes invalidate queued old revisions; re-enabling
+   never silently replays canceled work. Serialize disable/delete against dispatch;
+   an already-started request cannot be recalled. Saving never contacts a destination.
+3. `[03.6.3]` **Durable encrypted delivery:** Add append-only migration v4 for safe
+   destination metadata/revisions, delivery jobs, leases, attempts and bounded history.
+   Enqueue alert jobs in the same transaction that completes rule jobs, local actions
+   and existing IMAP outbox entries. Reuse [03.5] eligibility/frontiers and account-bound
+   identity tombstones; retain compact automatic-delivery deduplication markers until
+   account/destination deletion, independently of pruned history. Persist selected-field
+   payload snapshots only in SQLCipher, with bounded size; never store destination
+   secrets there. Account/message deletion cancels related pending jobs and removes
+   payloads. Completed/canceled jobs clear payloads; keep at most 30 days/1,000 safe
+   history records per destination. No credentials, subjects, bodies, URLs or receiver
+   response bodies enter errors/history. No network operation holds a SQLite lock.
+4. `[03.6.4]` **Bounded execution and delivery semantics:** Resume leased work after
+   restart through the existing worker; processing requires an active unlocked app
+   or a future separately deployed headless runner. Use one in-flight attempt per
+   destination, default at most six starts/minute/destination, persisted scheduling,
+   a ten-second total attempt deadline and bounded concurrency across destinations.
+   Retry transport failures, 408/429 and 5xx with jittered exponential backoff (30s
+   initial, one-hour cap), capped at eight attempts/24 hours; honor bounded Retry-After.
+   Treat redirects and other 4xx as terminal; only 2xx counts as receiver acceptance.
+   Send stable versioned event IDs on every attempt for receiver deduplication. Crash
+   and timeout ambiguity can cause duplicates, including OS notifications; promise
+   neither exactly-once delivery nor proof that the user saw an accepted notification.
+   Expired work fails visibly rather than producing an unbounded resume burst.
+5. `[03.6.5]` **Payload and native notification controls:** Default local alerts to
+   a generic new-mail notice without sender/subject/body on the lock screen; request
+   OS permission only on explicit enablement and show denied/unavailable status.
+   Webhook JSON defaults to schema version, opaque event ID and event timestamp.
+   Independently opt in account identifier, sender, subject, bounded plain-text excerpt,
+   extracted facts, attachment metadata or full plain-text body per destination.
+   Never include raw HTML/headers, attachment bytes, OTP/Pix values or credentials
+   implicitly; sensitive extraction/body export requires explicit disclosure. Bound
+   payloads to 64 KiB with explicit truncation flags. Do not fetch missing bodies or
+   attachments to enrich an alert. Simulation previews fields without delivering.
+6. `[03.6.6]` **Additive IPC and EN/PT-BR settings:** Add typed destination CRUD,
+   enable/disable, safe history, explicit synthetic test delivery and selected-message
+   replay commands. Test requires an enabled/confirmed destination and visibly states
+   it sends externally; replay requires selected messages/destinations and confirmation,
+   creates a separate replay event ID and never invokes mail mutation actions. Preserve
+   mounted inbox, revision checks and dirty/busy guards. Extend Rules settings with
+   destination selection and side-effect-free explanations. Load `svelte-dev` before
+   UI edits; keep Telegram/Discord setup, quiet hours/digests, reminders and a runnable
+   headless CLI outside this task.
+7. `[03.6.7]` **Evidence and closure:** Offline adapters and injected clocks/resolvers
+   cover atomic rollback, encrypted reopen, lease expiry, retries/rate limits, ambiguous
+   outcomes, disabled/edited/deleted destinations, vault/SQL partial failures, consent,
+   field allowlists, history pruning, deduplication, manual replay isolation and initial
+   history suppression. Cover TLS/DNS/redirect policy and secret-free failures without
+   live outbound requests. Run all repository DoD commands, SPA build, formatting and
+   tracked-file secret/PII scans. Record ADR, contracts and applicable knowledge cards;
+   load `readme-standard` for paired usage documentation. Make an atomic Conventional
+   Commit, log its hash and promote [03.7] to planning; do not push.
+
+#### Approved P0 Exception (2026-11-02)
+
+- Permit only user-enabled generic webhook JSON POST delivery, explicit synthetic tests
+  and confirmed selected-message replay to that destination's vault-stored HTTPS URL.
+  Background deliveries require prior destination/field consent and matching new-mail
+  rules; no automatic destination discovery, browser requests or provider calls.
+- Require verified TLS 1.2+ and public DNS hosts on port 443 in this iteration. Reject
+  URL userinfo/fragments, IP literals, localhost and private/link-local/reserved/mixed
+  DNS answer sets. Validate and pin the exact resolved public addresses used by each
+  connection; revalidate each retry. Disable redirects and inherited proxies. Never
+  forward secrets to another origin or log URLs/HTTP response content. Bound DNS,
+  connection, request/response processing and payload sizes.
+- Private-network, loopback and plain-HTTP webhook destinations are unsupported,
+  including locally hosted n8n. Public HTTPS user-owned n8n remains supported. Any
+  private-network exception requires a separately approved address/consent design.
+- Approval authorizes implementation and amendment of AGENTS.md with this narrow
+  exception. It does not authorize live test deliveries from the development session;
+  validation remains offline. Runtime delivery always requires the user's configured
+  destination consent. No other P0 exception or telemetry is introduced.
+
+- **Approval:** User approved the complete plan and public-HTTPS-only P0 exception via
+  `proceed` on 2026-11-02. Implementation is RUNNING; development validation stays offline.
 
 ### Task [03.7]: Telegram & Discord Alert Connectors
 

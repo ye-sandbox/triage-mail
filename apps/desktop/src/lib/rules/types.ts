@@ -18,7 +18,7 @@ export type Condition = {
 		? { [P in K]: number }
 		: { [P in K]: string };
 }[Field];
-export type RuleAction = { Tag: string } | 'Star' | 'Archive';
+export type RuleAction = { Tag: string } | { Alert: string } | 'Star' | 'Archive';
 export interface Rule {
 	version: number;
 	id: string;

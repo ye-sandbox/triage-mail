@@ -21,7 +21,7 @@ export interface SettingsTransport {
 	summarize(messageId: string, consent: boolean, expected: AiSettings): Promise<string>;
 }
 
-export type SettingsTab = 'general' | 'accounts' | 'search' | 'ai' | 'privacy' | 'rules';
+export type SettingsTab = 'general' | 'accounts' | 'search' | 'ai' | 'privacy' | 'rules' | 'alerts';
 
 export interface SettingsTabItem {
 	id: SettingsTab;
@@ -34,7 +34,8 @@ export const SETTINGS_TABS: readonly SettingsTabItem[] = [
 	{ id: 'search', label: 'Search' },
 	{ id: 'ai', label: 'AI' },
 	{ id: 'privacy', label: 'Privacy' },
-	{ id: 'rules', label: 'Rules' }
+	{ id: 'rules', label: 'Rules' },
+	{ id: 'alerts', label: 'Alerts' }
 ] as const;
 
 export interface SettingsModuleProps {

@@ -10,6 +10,7 @@
 	import AccountsModule from './modules/AccountsModule.svelte';
 	import SearchModule from './modules/SearchModule.svelte';
 	import AiModule from './modules/AiModule.svelte';
+	import AlertsModule from '../alerts/AlertsModule.svelte';
 	import RulesModule from '../rules/RulesModule.svelte';
 	import PrivacyModule from './modules/PrivacyModule.svelte';
 
@@ -231,6 +232,8 @@
 						{:else}
 							<p class="text-sm text-[var(--secondary)]">Account manager unavailable.</p>
 						{/if}
+					{:else if activeTab === 'alerts'}
+						<AlertsModule {guard} selectedIds={selectedMessageIds} />
 					{:else if activeTab === 'rules'}
 						<RulesModule
 							accounts={accountController?.accounts ?? []}

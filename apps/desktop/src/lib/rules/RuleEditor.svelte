@@ -4,6 +4,8 @@
 	import { i18n } from '../i18n/index.svelte';
 	import { labels } from './labels';
 	import type { Rule, RuleAction } from './types';
+	import type { Destination } from '../alerts/types';
+	import { labels as alertLabels } from '../alerts/labels';
 	import ConditionsEditor from './ConditionsEditor.svelte';
 	let {
 		draft,
@@ -11,7 +13,8 @@
 		change,
 		save,
 		cancel,
-		accounts = []
+		accounts = [],
+		destinations = []
 	}: {
 		draft: Rule;
 		busy: boolean;
@@ -19,10 +22,13 @@
 		save: () => void;
 		cancel: () => void;
 		accounts?: AccountConfig[];
+		destinations?: Destination[];
 	} = $props();
 	const t = $derived(labels[i18n.locale]);
 	let tags = $state(
-		untrack(() => draft.actions.flatMap((a) => (typeof a === 'object' ? [a.Tag] : [])).join('\n'))
+		untrack(() =>
+			draft.actions.flatMap((a) => (typeof a === 'object' && 'Tag' in a ? [a.Tag] : [])).join('\n')
+		)
 	);
 	function toggle(action: RuleAction, enabled: boolean) {
 		change({
@@ -30,12 +36,22 @@
 			actions: enabled ? [...draft.actions, action] : draft.actions.filter((a) => a !== action)
 		});
 	}
+	function toggleAlert(id: string, enabled: boolean) {
+		const actions = draft.actions.filter(
+			(a) => typeof a !== 'object' || !('Alert' in a) || a.Alert !== id
+		);
+		change({
+			...draft,
+			actions: enabled ? [...actions, { Alert: id }] : actions
+		});
+	}
+
 	function setTags(value: string) {
 		tags = value;
 		change({
 			...draft,
 			actions: [
-				...draft.actions.filter((a) => typeof a === 'string'),
+				...draft.actions.filter((a) => typeof a === 'string' || 'Alert' in a),
 				...value
 					.split('\n')
 					.filter((v) => v.trim())
@@ -112,6 +128,32 @@
 				onchange={(e) => toggle('Archive', e.currentTarget.checked)}
 			/>{t.archive}</label
 		>
+		<fieldset class="space-y-2">
+			<legend>{alertLabels[i18n.locale].title}</legend>
+			{#each draft.actions as action}
+				{#if typeof action === 'object' && 'Alert' in action && !destinations.some((d) => d.id === action.Alert)}
+					<label class="flex gap-2"
+						><input
+							type="checkbox"
+							checked
+							onchange={() => toggleAlert(action.Alert, false)}
+						/>{action.Alert} · {alertLabels[i18n.locale].status.Unavailable}</label
+					>
+				{/if}
+			{/each}
+			{#each destinations as destination (destination.id)}
+				<label class="flex gap-2"
+					><input
+						type="checkbox"
+						checked={draft.actions.some(
+							(a) => typeof a === 'object' && 'Alert' in a && a.Alert === destination.id
+						)}
+						onchange={(e) => toggleAlert(destination.id, e.currentTarget.checked)}
+					/>{destination.name} · {destination.public_origin ??
+						alertLabels[i18n.locale].local}</label
+				>
+			{/each}
+		</fieldset>
 		<label class="flex gap-2"
 			><input
 				type="checkbox"

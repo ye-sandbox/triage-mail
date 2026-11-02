@@ -125,6 +125,75 @@ fn bootstrap(
 }
 
 #[tauri::command]
+pub async fn cmd_list_alert_destinations(
+    state: State<'_, RuntimeState>,
+) -> Result<Vec<triage_ai::alerts::Destination>, IpcError> {
+    state.initialize(None).await?.list_alerts().await
+}
+#[tauri::command]
+pub async fn cmd_save_alert_destination(
+    state: State<'_, RuntimeState>,
+    destination: triage_ai::alerts::Destination,
+    secret: Option<vault::alerts::IncomingWebhook>,
+    consent: bool,
+) -> Result<triage_ai::alerts::Destination, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .save_alert(destination, secret, consent)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_delete_alert_destination(
+    state: State<'_, RuntimeState>,
+    id: String,
+    revision: u32,
+) -> Result<(), IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .delete_alert(id, revision)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_alert_history(
+    state: State<'_, RuntimeState>,
+) -> Result<Vec<storage::alerts::DeliveryHistory>, IpcError> {
+    state.initialize(None).await?.alert_history().await
+}
+#[tauri::command]
+pub async fn cmd_test_alert(
+    state: State<'_, RuntimeState>,
+    id: String,
+    revision: u32,
+    consent: bool,
+) -> Result<(), IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .test_alert(id, revision, consent)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_replay_alert(
+    state: State<'_, RuntimeState>,
+    ids: Vec<String>,
+    destination: String,
+    revision: u32,
+    consent: bool,
+) -> Result<(), IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .replay_alert(ids, destination, revision, consent)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_local_alert_available(state: State<'_, RuntimeState>) -> Result<bool, IpcError> {
+    Ok(state.initialize(None).await?.local_alert_available().await)
+}
+
+#[tauri::command]
 pub async fn cmd_list_rules(
     state: State<'_, RuntimeState>,
 ) -> Result<Vec<triage_ai::rules::Rule>, IpcError> {
@@ -465,6 +534,13 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            cmd_list_alert_destinations,
+            cmd_save_alert_destination,
+            cmd_delete_alert_destination,
+            cmd_alert_history,
+            cmd_test_alert,
+            cmd_replay_alert,
+            cmd_local_alert_available,
             cmd_list_rules,
             cmd_save_rule,
             cmd_delete_rule,
@@ -574,6 +650,13 @@ mod tests {
         let app = mock_builder()
             .manage(state)
             .invoke_handler(tauri::generate_handler![
+                cmd_list_alert_destinations,
+                cmd_save_alert_destination,
+                cmd_delete_alert_destination,
+                cmd_alert_history,
+                cmd_test_alert,
+                cmd_replay_alert,
+                cmd_local_alert_available,
                 cmd_list_rules,
                 cmd_save_rule,
                 cmd_delete_rule,

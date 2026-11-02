@@ -6,21 +6,27 @@
 	import { labels } from './labels';
 	import { newRule, type Rule, type Plan, type RulesTransport, type Field } from './types';
 	import { nativeRulesTransport } from './transport';
+	import { nativeAlertsTransport } from '../alerts/transport';
+	import type { AlertsTransport, Destination } from '../alerts/types';
+	import { labels as alertLabels } from '../alerts/labels';
 	import RuleEditor from './RuleEditor.svelte';
 	let {
 		transport = nativeRulesTransport,
 		guard,
 		selectedIds = [],
 		seedMessageId,
-		accounts = []
+		accounts = [],
+		alertsTransport = nativeAlertsTransport
 	}: {
 		transport?: RulesTransport;
 		guard: SettingsFormGuard;
 		selectedIds?: string[];
 		seedMessageId?: string;
 		accounts?: AccountConfig[];
+		alertsTransport?: AlertsTransport;
 	} = $props();
 	let rules = $state<Rule[]>([]);
+	let destinations = $state<Destination[]>([]);
 	let draft = $state<Rule | null>(null);
 	let busy = $state(false);
 	let message = $state('');
@@ -50,6 +56,8 @@
 	}
 	async function load() {
 		const loaded = await transport.list();
+		const alerts = await alertsTransport.list().catch(() => []);
+		if (active) destinations = alerts;
 		if (active) rules = loaded;
 	}
 	$effect(() => {
@@ -91,7 +99,13 @@
 		});
 	}
 	function actionName(action: Plan['actions'][number]) {
-		return typeof action === 'object' ? action.Tag : action === 'Star' ? t.star : t.archive;
+		return typeof action === 'object'
+			? 'Tag' in action
+				? action.Tag
+				: `${alertLabels[i18n.locale].title}: ${destinations.find((d) => d.id === action.Alert)?.name ?? action.Alert}`
+			: action === 'Star'
+				? t.star
+				: t.archive;
 	}
 </script>
 
@@ -102,6 +116,7 @@
 	{#if draft}
 		{#key draft.id}<RuleEditor
 				{accounts}
+				{destinations}
 				{draft}
 				{busy}
 				change={setDraft}

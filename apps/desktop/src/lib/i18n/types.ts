@@ -187,6 +187,7 @@ export interface Translations {
 		navAria: string;
 		tabs: {
 			rules: string;
+			alerts: string;
 			general: string;
 			accounts: string;
 			search: string;
