@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { i18n } from '../i18n/index.svelte';
 	import { tick, untrack } from 'svelte';
 	import Icon from './Icon.svelte';
 	import BadgePreview from './BadgePreview.svelte';
@@ -138,11 +139,7 @@
 								{#if row.triage_badges && row.triage_badges.length > 0}
 									<TriageBadges badges={row.triage_badges} />
 								{:else if badgeLoader}
-									<BadgePreview
-										id={row.id}
-										loader={badgeLoader}
-										revision={inbox.badgeRevision}
-									/>
+									<BadgePreview id={row.id} loader={badgeLoader} revision={inbox.badgeRevision} />
 								{/if}
 							</div>
 						</div>
@@ -155,7 +152,7 @@
 			class="border-t border-[var(--separator)] p-3 text-center text-xs text-[var(--secondary)]"
 			role="status"
 		>
-			Loading messages…
+			{i18n.t.mailboxes.loading}
 		</p>{/if}
 	{#if inbox.error}<div class="border-t border-[var(--separator)] p-4 text-sm" role="alert">
 			<p>{inbox.error}</p>
@@ -169,12 +166,10 @@
 			class="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 px-8 py-12 text-center"
 		>
 			<p class="font-medium">
-				{inbox.query ? 'No messages found' : 'No mail yet'}
+				{inbox.query ? i18n.t.mailboxes.empty : i18n.t.mailboxes.noCached}
 			</p>
 			<p class="mt-2 text-sm text-[var(--secondary)]">
-				{inbox.query
-					? 'Try a different search or matching option.'
-					: 'Messages from connected accounts will appear here.'}
+				{i18n.t.mailboxes.emptyHelp}
 			</p>
 		</div>{/if}
 </div>

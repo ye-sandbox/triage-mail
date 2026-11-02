@@ -1,4 +1,11 @@
-import type { InboxTransport, MessageRowDto, SearchMode, SyncProgressEvent } from './types';
+import type {
+	InboxTransport,
+	MailboxScope,
+	MessageRowDto,
+	SearchMode,
+	SyncProgressEvent
+} from './types';
+import { i18n } from '../i18n/index.svelte';
 import { validTag, type TriageAction } from './triage';
 export const PAGE_SIZE = 200;
 
@@ -11,6 +18,7 @@ export class InboxController {
 	syncStatus = $state('Connecting…');
 	query = $state('');
 	mode = $state<SearchMode>('Lexical');
+	scope = $state.raw<MailboxScope | undefined>(undefined);
 	experimentalSemanticSearch = $state(false);
 	totalEmbeddingErrors = $state(0);
 	revision = $state(0);
@@ -28,10 +36,30 @@ export class InboxController {
 	private refreshAgain = false;
 	constructor(private transport: InboxTransport) {}
 
+	listFolders = (accountId: string) =>
+		this.transport.listFolders
+			? this.transport.listFolders(accountId)
+			: Promise.reject(new Error('Unavailable'));
+
+	async selectScope(scope?: MailboxScope) {
+		if (JSON.stringify(scope) === JSON.stringify(this.scope)) return;
+		// INVARIANT: Scope changes invalidate all old reads, selection and mutation feedback.
+		this.scope = scope === 'GlobalAllMail' ? undefined : scope;
+		this.mutationError = '';
+		this.mutationNotice = '';
+		clearTimeout(this.refreshTimer);
+		await this.search(this.query, this.mode);
+	}
+
+	private scopeField() {
+		return this.scope ? { scope: this.scope } : {};
+	}
+
 	async mutate(id: string, action: TriageAction) {
 		if (this.disposed || this.mutating || this.loading) return;
 		const original = this.rows.find((row) => row.id === id);
-		if (!original || (typeof action === 'object' && !validTag(action.Tag))) return;
+		if (!original || (typeof action === 'object' && 'Tag' in action && !validTag(action.Tag)))
+			return;
 		// INVARIANT: Invalidate reads begun before this optimistic write; defer sync until it settles.
 		const generation = ++this.generation;
 		this.mutating = true;
@@ -40,23 +68,26 @@ export class InboxController {
 		this.applyOptimistic(id, action);
 		try {
 			await this.transport.triage({ message_ids: [id], action });
-			if (!this.disposed)
+			if (!this.disposed && generation === this.generation)
 				this.mutationNotice =
 					action === 'OneClickUnsubscribe'
 						? 'Unsubscribe request sent.'
-						: typeof action === 'object'
-							? 'Local tag saved.'
-							: 'Saved locally. Server changes sync in the background.';
+						: typeof action === 'object' && 'Tag' in action
+							? i18n.t.mailboxes.localSaved
+							: (typeof action === 'object' && 'Snooze' in action) || action === 'Unsnooze'
+								? i18n.t.mailboxes.localSaved
+								: i18n.t.mailboxes.saved;
 		} catch {
 			if (this.disposed) return;
 			if (generation === this.generation) {
 				this.rows = this.rows.map((row) => (row.id === id ? original : row));
 				this.rehydrateFeedback();
 			}
+			if (generation !== this.generation) return;
 			this.mutationError =
 				action === 'OneClickUnsubscribe'
 					? 'Unsubscribe could not be confirmed. Check before trying again.'
-					: 'Change could not be saved. Please try again.';
+					: i18n.t.mailboxes.saveError;
 		} finally {
 			this.mutating = false;
 			if (!this.disposed) this.scheduleRefresh();
@@ -69,8 +100,18 @@ export class InboxController {
 			if (row.id !== id) return row;
 			if (action === 'MarkRead' || action === 'MarkUnread')
 				return { ...row, is_read: action === 'MarkRead' };
-			if (action === 'Archive' || action === 'Trash') return { ...row, folder_override: action };
-			if (typeof action === 'object')
+			if (action === 'Archive' || action === 'Trash')
+				return {
+					...row,
+					folder_override: action,
+					...(row.snooze_until_epoch_ms !== undefined ? { snooze_until_epoch_ms: null } : {})
+				};
+			if (action === 'Star' || action === 'Unstar')
+				return { ...row, is_starred: action === 'Star' };
+			if (action === 'Unsnooze') return { ...row, snooze_until_epoch_ms: null };
+			if (typeof action === 'object' && 'Snooze' in action)
+				return { ...row, snooze_until_epoch_ms: action.Snooze.until_epoch_ms };
+			if (typeof action === 'object' && 'Tag' in action)
 				return { ...row, tags: [...new Set([...row.tags, action.Tag])].sort() };
 			return row;
 		});
@@ -118,7 +159,8 @@ export class InboxController {
 				query,
 				mode,
 				limit: PAGE_SIZE,
-				offset: 0
+				offset: 0,
+				...this.scopeField()
 			});
 			if (generation !== this.generation || this.disposed) return;
 			this.rows = rows;
@@ -153,7 +195,8 @@ export class InboxController {
 				query: this.query,
 				mode: this.mode,
 				limit: PAGE_SIZE,
-				offset
+				offset,
+				...this.scopeField()
 			});
 			if (generation !== this.generation || this.disposed) return;
 			const known = new Set(this.rows.map((row) => row.id));
@@ -189,7 +232,8 @@ export class InboxController {
 					query: this.query,
 					mode: this.mode,
 					limit: PAGE_SIZE,
-					offset
+					offset,
+					...this.scopeField()
 				});
 				if (generation !== this.generation || this.disposed) break;
 				rows.push(...page);
@@ -252,8 +296,9 @@ export class InboxController {
 		// INVARIANT: Never display arbitrary IPC errors that could contain private account data.
 		if (error === 'EmbeddingUnavailable')
 			return 'Experimental semantic search needs a local model. Choose Words to search without it.';
-		if (error === 'VaultUnavailable') return 'Unlock your local vault to access mail.';
-		return 'Mail could not be loaded. Please try again.';
+		if (error === 'VaultUnavailable') return i18n.t.mailboxes.vaultError;
+		if (error === 'InvalidRequest' && this.scope) return i18n.t.mailboxes.unavailable;
+		return i18n.t.mailboxes.loadError;
 	}
 	dispose() {
 		this.disposed = true;

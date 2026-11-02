@@ -186,6 +186,34 @@ describe('keyboard palette', () => {
 		);
 		expect(attachment).not.toHaveBeenCalled();
 	});
+
+	it('opens the snooze form from the palette and sends a UTC deadline with keyboard focus', async () => {
+		const { trigger, triage } = setup();
+		trigger.click();
+		flushSync();
+		const command = filter('snooze');
+		key(command, 'Enter');
+		await vi.waitFor(() =>
+			expect(document.activeElement).toBe(document.querySelector('input[type=datetime-local]'))
+		);
+		const input = document.querySelector<HTMLInputElement>('input[type=datetime-local]')!;
+		const date = new Date(Date.now() + 86400000);
+		const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+			.toISOString()
+			.slice(0, 16);
+		input.value = local;
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		flushSync();
+		document
+			.querySelector<HTMLFormElement>('[role=dialog] form')!
+			.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+		await vi.waitFor(() =>
+			expect(triage).toHaveBeenCalledWith({
+				message_ids: [row.id],
+				action: { Snooze: { until_epoch_ms: new Date(local).getTime() } }
+			})
+		);
+	});
 	it('keeps unsupported unsubscribe disabled', async () => {
 		const { trigger, triage } = setup(false);
 		trigger.click();

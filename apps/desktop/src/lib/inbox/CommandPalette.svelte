@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { Dialog } from 'bits-ui';
+	import { i18n } from '../i18n/index.svelte';
+	import SnoozeForm from './SnoozeForm.svelte';
 	import { tick, untrack } from 'svelte';
-	import { commands, type PaletteCommand } from './commands';
+	import { mailboxCommands, type PaletteCommand } from './commands';
 	import { validTag, type TriageAction } from './triage';
 	let {
 		open = $bindable(false),
 		tagging = $bindable(false),
+		snoozing = $bindable(false),
 		subject,
 		canUnsubscribe,
 		execute,
@@ -13,6 +16,7 @@
 	}: {
 		open?: boolean;
 		tagging?: boolean;
+		snoozing?: boolean;
 		subject: string;
 		canUnsubscribe: boolean;
 		execute: (action: TriageAction) => void;
@@ -26,10 +30,16 @@
 		if (open) untrack(reset);
 	});
 	const matches = $derived(
-		commands.filter((command) => command.label.toLowerCase().includes(query.trim().toLowerCase()))
+		mailboxCommands().filter((command) =>
+			command.label.toLowerCase().includes(query.trim().toLowerCase())
+		)
 	);
 	function choose(command: PaletteCommand | undefined) {
 		if (!command) return;
+		if (command.action === 'snooze') {
+			snoozing = true;
+			return;
+		}
 		if (command.action === 'tag') {
 			tagging = true;
 			void tick().then(() => input?.focus());
@@ -40,7 +50,7 @@
 		execute(command.action);
 	}
 	function navigate(event: KeyboardEvent) {
-		if (tagging || event.isComposing) return;
+		if (tagging || snoozing || event.isComposing) return;
 		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
 			event.preventDefault();
 			index =
@@ -73,14 +83,27 @@
 		>
 			<div class="mb-2 flex items-center justify-between gap-4">
 				<Dialog.Title class="font-semibold"
-					>{tagging ? 'Add local tag' : 'Message actions'}</Dialog.Title
+					>{snoozing
+						? i18n.t.mailboxes.snooze
+						: tagging
+							? i18n.t.mailboxes.tag
+							: i18n.t.mailboxes.actions}</Dialog.Title
 				>
-				<Dialog.Close class="rounded px-2 py-1 text-sm text-[var(--secondary)]">Close</Dialog.Close>
+				<Dialog.Close class="rounded px-2 py-1 text-sm text-[var(--secondary)]"
+					>{i18n.t.mailboxes.close}</Dialog.Close
+				>
 			</div>
 			<Dialog.Description class="mb-4 truncate text-sm text-[var(--secondary)]"
 				>{subject || '(No subject)'}</Dialog.Description
 			>
-			{#if tagging}
+			{#if snoozing}
+				<SnoozeForm
+					execute={(action) => {
+						open = false;
+						execute(action);
+					}}
+				/>
+			{:else if tagging}
 				<form
 					onsubmit={(event) => {
 						event.preventDefault();
@@ -116,7 +139,7 @@
 					oninput={() => (index = 0)}
 					onkeydown={navigate}
 					role="combobox"
-					aria-label="Find a message action"
+					aria-label={i18n.t.mailboxes.actionSearch}
 					aria-autocomplete="list"
 					aria-expanded="true"
 					aria-controls="triage-commands"
@@ -148,7 +171,7 @@
 					{/each}
 				</ul>
 				{#if !matches.length}<p role="status" class="px-3 py-3 text-sm">
-						No matching actions.
+						{i18n.t.mailboxes.noActions}
 					</p>{/if}
 				<p class="mt-4 text-xs text-[var(--secondary)]">
 					Unsubscribe sends a request to the sender. Available only when this message supports

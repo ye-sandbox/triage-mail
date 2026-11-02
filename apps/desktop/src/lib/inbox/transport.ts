@@ -1,10 +1,11 @@
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
-import type { InboxTransport, MessageRowDto, SyncProgressEvent } from './types';
+import type { FolderDto, InboxTransport, MessageRowDto, SyncProgressEvent } from './types';
 
 export function nativeAvailable() {
 	return isTauri();
 }
 export const nativeTransport: InboxTransport = {
+	listFolders: (accountId) => invoke<FolderDto[]>('cmd_list_folders', { accountId }),
 	triage: (mutation) => invoke<void>('cmd_triage_action', { mutation }),
 	search: (query) => invoke<MessageRowDto[]>('cmd_search_messages', { query }),
 	async subscribe(handler) {
