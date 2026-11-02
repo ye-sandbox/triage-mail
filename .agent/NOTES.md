@@ -503,3 +503,16 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   cancellation/staging-vault behavior. EN/PT-BR labels remain paired.
 - User approved the narrow P0 discovery-network exception and user-provided Microsoft
   client ID scope on 2026-11-02. No first-use shared application registration is implied.
+
+## Binary Candidate Evaluation ([01.1])
+
+- ADR-011 retains exact production int8 cosine search after evaluating ADR-008's
+  fixed-budget sign-code proposal. Experimental vec0 bit[384] indexing exists only
+  in an offline disposable SQLCipher example; schema v2, IPC and traits are unchanged.
+- Exact reranking cannot recover omitted cosine neighbors. Hamming ties can exceed
+  sqlite-vec's 4,096 cap; neither a full page nor a finite reranked distance gap proves
+  coverage. Zero norms retain k-021 NULL-first scoped ordering. See k-023.
+- Reproduce with `cargo run --offline --release -p storage --example binary_quantization`;
+  adversarial probes use `cargo test --offline -p storage --example binary_quantization`.
+  Raw latency/equivalence data and measurement limits live in
+  `docs/performance/binary-quantization.md`. Existing mailbox/native deviations remain.

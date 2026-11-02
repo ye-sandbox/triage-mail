@@ -278,6 +278,12 @@ A validação de correção e latência específica das caixas de correio usa
 Consulte o [relatório de validação das caixas de correio](docs/performance/mailbox-validation.md)
 para os cenários por escopo, tempos de IPC nativo, capturas e critérios ainda pendentes.
 
+A investigação de candidatos binários usa a mesma base criptografada de caixas de correio:
+`cargo run --offline --release -p storage --example binary_quantization`.
+Execute os testes adversariais com `cargo test --offline -p storage --example binary_quantization`.
+Consulte a [avaliação de quantização binária](docs/performance/binary-quantization.md) para
+os limites de candidatos, equivalência com o oráculo e a decisão de adoção.
+
 ## License
 
 Licenciado sob a **GNU Affero General Public License v3.0 (AGPLv3)** — consulte [`LICENSE`](LICENSE) para mais detalhes.

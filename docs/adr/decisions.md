@@ -134,6 +134,7 @@ type: architectural-decision-log
   3. *Page Cache Memory Overhead Budget:* Empirically establish that each active SQLCipher connection configured with a 64 MiB soft page cache target (`cache_size = -65536`) consumes at most ~25.5 MiB of net additional resident memory (VmRSS) under 100k vector workloads, maintaining overall process RSS under ~105 MiB.
   4. *v0.1 Strict Scope Boundaries:* Strictly prohibit approximate nearest neighbor (ANN) graph indexing (HNSW, IVF, etc.) in v0.1 to avoid index corruption risks, memory bloat, and non-deterministic recalls in local desktop installations.
   5. *v0.2 Roadmap Evaluation:* Evaluate 1-bit scalar quantization (binary vectors with bitwise POPCNT Hamming distance for 48-byte candidate filtering) followed by int8 dot-product reranking of the top 200 candidates to achieve sub-15ms global semantic search in v0.2.
+     **Evaluation outcome (2026-11-02):** ADR-011 declines fixed-budget BQ under the existing exact cosine/oracle contract; latency targets and concurrency decisions remain unchanged.
 - **Alternatives Considered:**
   - *Keep blanket <15ms requirement for global exact search:* Rejected as physically impossible on CPU for exact linear 100k scans without approximations or caching.
   - *Adopt ANN vector graphs (e.g. HNSW) for v0.1:* Rejected due to complexity, memory bloat, write amplification during background sync, and risk of index corruption in local-first desktop apps.
@@ -184,3 +185,41 @@ type: architectural-decision-log
   - *Remote server snooze extensions (IMAP METADATA / custom flags):* Rejected due to lack of provider standardization; local UTC deadlines provide 100% reliable provider-agnostic behavior.
   - *Gravatar / External avatar lookups:* Rejected under Rule P0 (Zero Telemetry & External Network Isolation).
 - **Consequences:** Unlocks expandable per-account mailbox navigation in the desktop sidebar while preserving sub-15ms search and database integrity. Adds Migration v2 idempotently. Preserves complete backwards compatibility for existing IPC callers and All Mail queries.
+
+### [2026-11-02] ADR-011: Retain Exact Cosine Search After Binary Candidate Evaluation
+
+- **Context:** [01.1] evaluates ADR-008's proposed 48-byte sign-code candidate scan and
+  exact int8 reranking over the existing 100k-message SQLCipher mailbox fixture.
+  The current contract requires complete ordered-page oracle equivalence, not only
+  plausible recall. Scoped search also accepts zero-norm vectors (NULL-first cosine
+  ordering), missing embeddings, orphan vectors and arbitrarily large ties (k-021).
+- **Decision:** Retain production exact int8 cosine ranking. Reject fixed Hamming
+  budgets (including the proposed 200) as an exact replacement. Magnitude information
+  is absent from sign codes: an omitted binary candidate can be the unique exact
+  nearest neighbor. Reranking retained candidates does not prove coverage. Widening
+  cannot fix every case: sqlite-vec 0.1.9 caps k at 4,096 and Hamming tie groups can be
+  larger. Deep requests beyond this cap require existing exact fallback. Keep the
+  experiment in an offline example with a disposable index in the encrypted file;
+  no released schema, IPC, trait, production dispatcher or latency target changes.
+- **Evidence:** [Reproduction, latency/recall tables and oracle probes](../performance/binary-quantization.md),
+  [raw samples](../performance/binary-quantization.csv). Seed 4242 global BQ-200 p95 is
+  21.226ms with 56/200 oracle hits; BQ-4096 is 156.361ms with 166/200. All 270 global
+  warm BQ samples across three query seeds fail ordered equality. Full-page equality and page-set
+  recall are reported separately; empty pages and exact fallback do not count as
+  successful binary acceleration. Fixture vectors do not establish learned semantic recall.
+- **Alternatives Considered:**
+  - *Adopt 200/800/4,096 candidates based on observed latency or full output pages:*
+    rejected because these cannot guarantee ordered oracle equivalence.
+  - *Silently use raw int8 dot products or discard zero norms:* rejected because
+    unnormalized cosine and accepted input ordering would change.
+  - *Run a full exact scan to verify every binary result:* preserves coverage but
+    retains exact scan cost; no sub-15ms certified path is established here.
+  - *Separate approximate product mode:* requires explicit approval of new semantics
+    and representative learned-embedding recall evaluation; outside this investigation.
+- **Consequences:** ADR-008's performance targets and concurrency decisions remain.
+  Its v0.2 binary stage is evaluated and declined under current exactness requirements.
+  [04.1.7] scoped/native/frame-cadence deviations remain unresolved. Future work should
+  investigate exact contiguous eligible scans or admissible residual bounds, including
+  NULL norms, lifecycle correctness, unlimited ties, encrypted storage and memory cost.
+  Any persisted index requires a separately reviewed append-only migration. No ANN graph,
+  dependency, unsafe code, user-data access or external network behavior is introduced.

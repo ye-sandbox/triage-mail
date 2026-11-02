@@ -273,6 +273,12 @@ Mailbox-specific correctness and latency validation uses
 See the [mailbox validation report](docs/performance/mailbox-validation.md) for scoped
 workloads, native IPC timings, screenshots, and remaining acceptance gaps.
 
+The binary-candidate investigation uses the same encrypted mailbox fixture:
+`cargo run --offline --release -p storage --example binary_quantization`.
+Run its adversarial probes with `cargo test --offline -p storage --example binary_quantization`.
+See the [binary quantization evaluation](docs/performance/binary-quantization.md) for
+candidate budgets, oracle equivalence and the adoption decision.
+
 ## License
 
 Licensed under the **GNU Affero General Public License v3.0 (AGPLv3)** — see [`LICENSE`](LICENSE) for details.
