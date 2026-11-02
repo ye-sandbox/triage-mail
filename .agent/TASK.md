@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[03.7] Telegram & Discord Alert Connectors — PLANNING
+[03.7] Telegram & Discord Alert Connectors — RUNNING
 
 ---
 
@@ -127,18 +127,18 @@ schemas, IPC and ranking remain unchanged; no ANN graphs, downloads or provider 
 
 ---
 
-## Definition of Done (DoD) Checklist — [03.6]
+## Definition of Done (DoD) Checklist — [03.7]
 
 A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
-- [x] Strict Typing: `cargo check --workspace` and `pnpm --filter desktop check` exit with code 0.
-- [x] Automated Tests: `cargo test --workspace` and `pnpm --filter desktop test` exit with code 0.
-- [x] Linters: `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` exit with code 0.
-- [x] Svelte 5 Invariant: `! grep -rn "export let" apps/desktop/src/` exits with code 0.
-- [x] Secret & PII Scrubbing: Zero real email addresses, tokens, or secrets in tracked files; `git diff --check` exits with code 0.
-- [x] Documentation Perimeter: If CLI flags, `.env.example` variables, or validation commands changed, synchronize `README.md` and `README.pt-br.md` (following `readme-standard` skill).
-- [x] Knowledge Preservation: Document obscure platform/runtime gotchas or workarounds as an atomic card in `.agent/knowledge/` (if applicable).
-- [x] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
-- [x] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
+- [ ] Strict Typing: `cargo check --workspace` and `pnpm --filter desktop check` exit with code 0.
+- [ ] Automated Tests: `cargo test --workspace` and `pnpm --filter desktop test` exit with code 0.
+- [ ] Linters: `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` exit with code 0.
+- [ ] Svelte 5 Invariant: `! grep -rn "export let" apps/desktop/src/` exits with code 0.
+- [ ] Secret & PII Scrubbing: Zero real email addresses, tokens, or secrets in tracked files; `git diff --check` exits with code 0.
+- [ ] Documentation Perimeter: If CLI flags, `.env.example` variables, or validation commands changed, synchronize `README.md` and `README.pt-br.md` (following `readme-standard` skill).
+- [ ] Knowledge Preservation: Document obscure platform/runtime gotchas or workarounds as an atomic card in `.agent/knowledge/` (if applicable).
+- [ ] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
+- [ ] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
 
 ---
 
@@ -417,7 +417,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [03.7]: Telegram & Discord Alert Connectors
 
-- **Status:** PLANNING
+- **Status:** RUNNING
 - **Priority:** 3
 - **Depends On:** [03.6] and its approved network-policy exception.
 - **Systems Involved:** Delivery adapters, `crates/vault`, desktop IPC/UI.
@@ -428,7 +428,7 @@ All tasks inherit the repository DoD when implemented.
   provider size/rate limits, retryable failures and secret redaction. Tokens and
   secret webhook URLs never appear in logs, exports or returned configuration DTOs.
 
-#### Proposed Implementation Plan (2026-11-02; awaiting approval)
+#### Approved Implementation Plan (2026-11-02)
 
 1. `[03.7.1]` **Additive connector contracts:** Extend destination kinds with Telegram
    and Discord, preserving existing Local/Webhook wire formats, migration history,
@@ -475,7 +475,7 @@ All tasks inherit the repository DoD when implemented.
    use readme-standard for paired usage documentation. Make an atomic Conventional
    Commit, log its hash and promote [04.10] to planning. Do not push.
 
-#### Proposed P0 Extension (awaiting approval)
+#### Approved P0 Extension (2026-11-02)
 
 - Extend [03.6]'s runtime exception to user-enabled Telegram sendMessage JSON POSTs
   at api.telegram.org and Discord webhook JSON POSTs at discord.com, including explicit
@@ -488,8 +488,8 @@ All tasks inherit the repository DoD when implemented.
 - Approval authorizes this narrow AGENTS.md amendment and implementation only. Digests,
   quiet hours, reminders and a runnable headless CLI remain separately scoped.
 
-- **Approval:** Pending. Repository AGENTS.md Execution Protocol step 2 requires plan
-  approval before transition from PLANNING to RUNNING.
+- **Approval:** User approved this plan and narrow P0 extension via `proceed` on
+  2026-11-02. Implementation and development validation remain offline.
 
 ### Task [04.10]: Saved Searches & Virtual Folders
 

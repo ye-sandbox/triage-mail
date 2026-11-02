@@ -227,7 +227,7 @@ conditions, attachment bytes are never fetched, and a sender match does not auth
 identity. Processing requires the app to be running. Alert destinations can also be selected
 as rule actions after configuration.
 
-### Local notifications and webhook alerts
+### Local notifications, Telegram, Discord and webhook alerts
 
 Open **Settings → Alerts** to add a destination. Destinations start disabled. Local notices
 are generic and may appear on the lock screen; this build uses the Linux desktop notification
@@ -235,6 +235,25 @@ service and reports unavailable/denied service explicitly. Other operating syste
 report unavailable. Webhooks accept public DNS HTTPS endpoints on port 443, including public
 user-owned n8n workflows; private-network, loopback, IP-literal and HTTP endpoints are unsupported.
 Complete URLs and optional bearer credentials are stored only in vault; lists show public origins.
+
+For **Telegram**, create a bot with BotFather, start it in the intended chat (or add it to a
+group/channel with posting permission), and enter its bot token and exact numeric chat ID from
+your own Telegram administration tools. Chat discovery is not performed; usernames and automatic
+chat migration are unsupported. Confirm the intended recipient before enabling. Tokens and chat
+IDs stay in vault; configuration lists show only `https://api.telegram.org`.
+
+For **Discord**, create a webhook under the intended channel's **Integrations → Webhooks** settings
+and paste its canonical `https://discord.com/api/webhooks/…` URL. Confirm the channel in Discord;
+queries, alternate hosts, thread selection and attachments are unsupported. The full secret URL
+stays in vault; configuration lists show only `https://discord.com`.
+
+Both connectors send one text message containing the selected JSON fields, with visible truncation
+at conservative limits of 3,500 UTF-16 units for Telegram and 1,800 for Discord. Telegram uses plain
+text with link previews disabled; Discord suppresses mentions and embeds. They do not promise
+idempotency. Bounded responses supply acceptance/error codes and retry delays only; response bodies
+are never logged, stored or returned. Retry outcomes persist a conservative cooldown across all
+destinations of that provider, including those sharing credentials. No setup/save request contacts
+a provider. Offline tests cover protocol behavior; live receiver interoperability is unverified.
 
 Select exported fields and confirm the displayed destination before enabling it, then choose
 it in a rule. Defaults contain only schema version, opaque event ID, event timestamp and
@@ -257,6 +276,9 @@ receivers should deduplicate by event ID. Accepted means receiver/service accept
 visibility. Disabling waits for an already-started request (at most ten seconds), which cannot
 be recalled. Execution history contains safe statuses/counts/times, retained up to 30 days and
 1,000 records per destination. Completed payloads are cleared. No live test is sent automatically.
+Disable or delete a destination to stop local dispatch. Revoke a Telegram token in BotFather or
+delete the Discord webhook in Discord to revoke provider access; this app does not revoke shared
+credentials remotely. Neither operation recalls already accepted messages.
 
 ## Development
 

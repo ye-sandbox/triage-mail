@@ -591,3 +591,30 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   references. Credentials remain detached inputs with cleanup; modal dirty/busy guards persist.
   Local notices use Linux D-Bus and generic text only; unavailable/denied platforms fail visibly.
   Runtime must stay unlocked/active. No runnable headless CLI or provider-specific connector added.
+
+## Telegram and Discord Connectors ([03.7] / ADR-014)
+
+- Additive `DestinationKind::Telegram` / `Discord` reuse v4 JSON destinations, immutable
+  vault revisions, ingestion snapshots, rules, queue, consent, tests/replay and history.
+  No migration, existing command argument or trait signature changes. Input-only secret
+  additionally accepts `{ token, chat_id }`; existing `{ url, bearer }` still works.
+- Typed Telegram input normalizes to the existing vault-only envelope: fixed sendMessage
+  URL containing token plus numeric chat ID in the bearer slot. Never send that slot as
+  Authorization. Discord uses a canonical discord.com/api/webhooks URL with no bearer.
+  Kind changes require complete new material; preserving secrets is same-kind only.
+  List/save responses contain only fixed public origins and credential-presence flags.
+- Explicit recipient/field confirmation is required on enablement; replacement/edit
+  resets UI consent and invalidates pending revisions. Secret inputs stay detached and
+  clear on submit, kind switch and teardown. No setup/save contacts a provider; no chat
+  discovery, username routing, automatic migration, remote revocation or attachments.
+- One consent-filtered JSON text per event; conservative UTF-16 limits 3500/1800 with
+  visible truncation. Telegram plain text disables previews; Discord disables mentions
+  and embeds. Pure formatting/response classification stays in triage-ai. Response
+  buffering is bounded to 64KiB, transient/zeroized; no response text escapes dispatch.
+- P0's approved provider exception retains TLS/public-only pinned DNS/443/no proxy/no
+  redirects and total ten-second attempt timeout. DNS deadline is 3s, <=32 addresses.
+  Retry delays and backoff persist next_start across every destination of the same
+  provider conservatively, including shared credentials; no secret fingerprint in SQL.
+- Existing acceptance/duplicate/active-runner limits apply. Revoke credentials manually
+  in BotFather/Discord; local disable/delete does not revoke them or recall messages.
+  Offline validation does not establish live provider interoperability. See k-027.

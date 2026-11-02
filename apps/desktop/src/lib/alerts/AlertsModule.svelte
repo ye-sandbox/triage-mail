@@ -8,7 +8,7 @@
 		type Destination,
 		type History,
 		type AlertsTransport,
-		type WebhookSecret
+		type AlertSecret
 	} from './types';
 	import { nativeAlertsTransport } from './transport';
 	import DestinationEditor from './DestinationEditor.svelte';
@@ -69,7 +69,7 @@
 			guard.reset();
 		};
 	});
-	async function save(secret: WebhookSecret | null, consent: boolean) {
+	async function save(secret: AlertSecret | null, consent: boolean) {
 		if (!draft) return;
 		const value = $state.snapshot(draft);
 		await operation(async () => {
