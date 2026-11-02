@@ -29,9 +29,14 @@
   - `Paths:` `crates/storage/src/**, crates/mail-engine/src/**, apps/desktop/src-tauri/src/**`
   - `Verify:` `cargo test --workspace`
 
-- [ ] **[04.1.4]** `[READY FOR PLANNING]` `[SEQ: W4]` Expose account-scoped mailbox search
+- [ ] **[04.1.4]** `[RUNNING]` `[SEQ: W4]` Expose account-scoped mailbox search
   - `Paths:` `crates/storage/src/**, apps/desktop/src-tauri/src/**`
   - `Verify:` `cargo test --workspace`
+  - `Plan:` `.agent/plans/04.1-account-mailboxes.md`, section `[04.1.4]`; approved on 2026-11-02.
+  - `Implementation:` Optional IPC scope, validated account/view identity, snapshot-consistent eligibility before ranking/pagination, exact scoped vector ranking, and storage/IPC regressions added. Existing folder catalog command reused.
+  - `Validation (2026-11-02):` Full native `cargo check --workspace`, `cargo test --workspace` (204 tests), `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo fmt --all -- --check` pass using an authorized temporary pkg-config/GTK/WebKitGTK sysroot. Desktop check reports zero errors/warnings and all 102 frontend tests pass. Svelte invariant, policy scan, and diff checks pass. All Cargo dependency resolution remained offline; system packages were not installed.
+  - `Compatibility correction:` Native IPC tests exposed an extra null scope field in legacy serialized search requests; omit absent scopes and assert the original wire shape in the DTO regression.
+  - `Closure:` Implementation and validation are complete. User authorized the atomic commit and promotion of [04.1.5] to planning on 2026-11-02. Record the resulting commit before promoting the next task. Temporary sysroot downloads were authorized; no system installation is authorized.
 
 - [ ] **[04.1.5]** `[PLANNED]` `[SEQ: W5]` Add private local account photos
   - `Paths:` `crates/storage/src/**, apps/desktop/src-tauri/src/**, apps/desktop/src/lib/onboarding/**`

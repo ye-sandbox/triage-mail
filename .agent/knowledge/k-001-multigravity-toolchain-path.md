@@ -53,6 +53,18 @@ allowBuilds:
 
 **Root Cause:** Profile isolation changes `$HOME`, causing `$HOME/.cargo/bin/zig` inside the shared `.cargo/bin/cc` shim to point to a non-existent path unless `/usr/bin/cc` takes precedence on `PATH`.
 
+### Direct toolchain and clippy fallback (2026-11-02)
+
+If the login environment has no Cargo on PATH, use the existing stable toolchain `bin`
+directory and set `CARGO_HOME`, `RUSTUP_HOME`, and `RUSTUP_TOOLCHAIN=stable` for that command.
+Do not pass `+stable` to the direct Cargo executable; toolchain selectors belong to the
+rustup proxy. Cargo subcommands such as fmt still need the rustup environment.
+
+Clippy subprocesses can resolve the shared profile's broken `cc` wrapper even when a
+previous Cargo check passed. Set `CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=/usr/bin/cc`
+and `CC=/usr/bin/cc` for validation instead of editing shared wrappers or changing HOME.
+This does not supply GTK/WebKit development dependencies; follow k-006 for native builds.
+
 ---
 
 ## What NEVER to Do
