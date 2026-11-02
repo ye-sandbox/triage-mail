@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[04.10] Saved Searches & Virtual Folders — RUNNING
+[04.11] Due-Date Dashboard & Scheduled Reminders — READY FOR PLANNING
 
 ---
 
@@ -525,7 +525,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [04.10]: Saved Searches & Virtual Folders
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Priority:** 4
 - **Systems Involved:** `crates/storage`, desktop search IPC/sidebar.
 - **Scope:** Save named queries and scopes spanning selected accounts without moving
@@ -594,9 +594,37 @@ All tasks inherit the repository DoD when implemented.
 
 - **Approval:** User approved the full plan via `proceed` on 2026-11-02.
 
+#### Completion (2026-11-02)
+
+- **Commit:** `1e8ebca` (`feat(search): add encrypted saved searches and virtual folders`).
+- **Delivered:** Versioned encrypted definitions, append-only migration v5, revision-safe
+  CRUD/deletion tombstones, all/selected accounts and optional existing mailbox scopes;
+  typed read/star/attachment/tag/sender/extraction/boleto date predicates before native
+  lexical/semantic/hybrid ranking and pagination. Canonical identity and existing public
+  search/IPC contracts remain intact. Additive saved-view IPC retains semantic consent.
+  EN/PT-BR sidebar editor, Save current search, editable starter drafts and active-view
+  lifecycle reuse inbox virtualization, sync/triage refresh and UTC-midnight/focus updates.
+- **Validation:** Offline workspace check/test/fmt/all-target Clippy pass (260 Rust tests).
+  Desktop check reports zero errors/warnings; all 148 frontend tests and SPA build pass.
+  Changed frontend files pass Prettier; five policy guard regressions and a 299-text-file
+  tracked/new-file secret/PII scan pass with zero findings. Legacy syntax, README perimeter
+  and diff whitespace checks pass. Required socket/child-process fixtures ran outside the
+  restrictive sandbox; all validation remained offline without live providers or downloads.
+- **Performance:** Six complete-membership/identity workloads on 100k messages/200k
+  memberships, 180 warm samples: p95 19.111-21.812ms blank lexical, 10.178-13.331ms
+  semantic, 25.249-28.801ms hybrid. These narrow starred populations meet the applicable
+  ADR-008 budgets but do not establish broad parsed-fact/native UI performance. Existing
+  mailbox deviations/targets remain unchanged. Reproduction/limits: docs/performance/saved-views.md.
+- **Contracts:** ADR-015, active notes, k-028 and paired usage guides record missing-account
+  fail-closed behavior, same-boleto UTC date bounds, revision guards and deferred draft
+  lifecycle. Definitions never enter browser persistence. Views do not move messages,
+  authenticate senders, infer clients/payment status, schedule reminders or deliver alerts.
+- **Next:** [04.11] promoted to READY FOR PLANNING; implementation needs its own approved
+  plan. No reminder/dashboard work started. Nothing pushed.
+
 ### Task [04.11]: Due-Date Dashboard & Scheduled Reminders
 
-- **Status:** BACKLOG
+- **Status:** READY FOR PLANNING
 - **Priority:** 5
 - **Depends On:** [03.5], [03.6]; [03.7] for Telegram/Discord destinations.
 - **Systems Involved:** Existing deterministic extractors, `crates/storage`, runtime
