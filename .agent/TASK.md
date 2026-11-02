@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[03.6] Local Notifications & Generic Webhook Alerts — RUNNING
+[03.7] Telegram & Discord Alert Connectors — READY FOR PLANNING
 
 ---
 
@@ -127,7 +127,7 @@ schemas, IPC and ranking remain unchanged; no ANN graphs, downloads or provider 
 
 ---
 
-## Definition of Done (DoD) Checklist — [03.5]
+## Definition of Done (DoD) Checklist — [03.6]
 
 A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
 - [x] Strict Typing: `cargo check --workspace` and `pnpm --filter desktop check` exit with code 0.
@@ -270,7 +270,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [03.6]: Local Notifications & Generic Webhook Alerts
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Priority:** 2
 - **Depends On:** [03.5]
 - **Systems Involved:** `crates/storage`, `crates/vault`, desktop runtime/IPC/UI;
@@ -382,11 +382,42 @@ All tasks inherit the repository DoD when implemented.
   destination consent. No other P0 exception or telemetry is introduced.
 
 - **Approval:** User approved the complete plan and public-HTTPS-only P0 exception via
-  `proceed` on 2026-11-02. Implementation is RUNNING; development validation stays offline.
+  `proceed` on 2026-11-02. Implementation is complete; development validation stayed offline.
+
+#### Completion (2026-11-02)
+
+- **Commit:** `0a76794` (`feat(alerts): add consent-bound notifications and webhooks`).
+- **Delivered:** Additive rule destination actions and SQLCipher migration v4, ingestion-time
+  destination revision snapshots, atomic rule/delivery enqueue, durable leases/rate limits,
+  bounded retry/history, selected-field payloads, vault-only immutable URL/auth revisions
+  and orphan cleanup. Additive typed IPC and EN/PT-BR Alerts settings provide CRUD, explicit
+  origin/field consent, synthetic tests, confirmed selected-message replay and safe history.
+  Linux generic notifications use D-Bus; rule simulation never sends or mutates mail.
+- **Validation:** Offline workspace check/test/fmt/all-target Clippy pass (246 Rust tests).
+  Desktop check has zero errors/warnings; all 140 frontend tests and the SPA build pass.
+  Changed frontend files pass Prettier; all five policy regressions pass. Tracked/new-file
+  scan covers 286 text files with zero findings; Svelte invariant and diff checks pass.
+- **Environment:** Existing k-001/k-006 toolchain/native sysroot; cached chrono/zbus only,
+  no dependency download or system modification. Existing loopback test fixtures and policy
+  child-process tests ran outside restrictive sandbox. No live notifications, external
+  webhook requests, provider credentials or model downloads were used during validation.
+- **Contracts/documentation:** Approved narrow P0 exception is in AGENTS.md. ADR-013,
+  active notes, k-026 and paired README guides document payload/privacy limits, vault/SQL
+  recovery, destination revision consent and delivery ambiguity. Existing IPC, traits and
+  prior migrations remain compatible.
+- **Limits:** Requires an active unlocked runner; no runnable headless CLI is added.
+  Local notifications currently require the Linux desktop notification service; other
+  platforms report unavailable. Webhooks support public DNS HTTPS/443 only. Retry/timeout
+  ambiguity can produce duplicates; acceptance is not proof of human visibility. Plain-text
+  bodies and metadata are bounded with explicit truncation. Message/account removal cancels
+  pending jobs, including cache deletion after MOVE without COPYUID. No live-OS visibility
+  or receiver interoperability claim is made from offline adapter tests.
+- **Next:** [03.7] promoted to READY FOR PLANNING; Telegram/Discord implementation requires
+  its own approved plan. No subsequent task implementation has started.
 
 ### Task [03.7]: Telegram & Discord Alert Connectors
 
-- **Status:** BACKLOG
+- **Status:** READY FOR PLANNING
 - **Priority:** 3
 - **Depends On:** [03.6] and its approved network-policy exception.
 - **Systems Involved:** Delivery adapters, `crates/vault`, desktop IPC/UI.
