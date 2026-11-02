@@ -49,12 +49,17 @@
   - `Regression coverage:` Raster format/byte/dimension rejection, JPEG comment/EXIF removal, account identity/isolation, replacement failure preserving the previous photo, encrypted reopen/wrong-key rejection, idempotent removal, native wire shapes, local file selection, late-result disposal, UI remount, and bilingual errors. One frontend test fixture failure was corrected by making its mocked File method configurable.
   - `Closure:` Committed as `a1c25ad` after user authorization on 2026-11-02. Next task promoted to planning. No push is authorized.
 
-- [ ] **[04.1.6]** `[PLANNING]` `[SEQ: W6]` Build expandable account navigation and view controls
+- [x] **[04.1.6]** `[DONE: 01f8eb0]` `[SEQ: W6]` Build expandable account navigation and view controls
   - `Paths:` `apps/desktop/src/lib/inbox/**, apps/desktop/src/lib/onboarding/{DesktopApp,InboxSession}.svelte, apps/desktop/src/lib/i18n/**`
   - `Verify:` `pnpm --filter desktop check && pnpm --filter desktop test && ! grep -rn "export let" apps/desktop/src/`
-  - `Plan:` `.agent/plans/04.1-account-mailboxes.md`, section `[04.1.6]`; implementation proposal prepared for approval. No application edits started for this task.
+  - `Plan:` `.agent/plans/04.1-account-mailboxes.md`, section `[04.1.6]`; implementation proposal approved by user `proceed` on 2026-11-02; implemented and committed as `01f8eb0`.
 
-- [ ] **[04.1.7]** `[PLANNED]` `[SEQ: W7]` Validate and close the mailbox feature
+  - `Implementation:` Expandable account navigation with private thumbnails, real folder catalogs, native scoped search/pagination/refresh, stale-response guards, star/unstar and local snooze controls, expiry/focus refresh, and EN/PT-BR labels. Settings preserves the inbox; localStorage contains only opaque disclosure IDs.
+  - `Validation (2026-11-02):` Offline native workspace check, all 209 Rust tests, all-target Clippy with warnings denied, and fmt pass using the existing temporary sysroot/cache. Desktop check has zero errors/warnings; all 126 frontend tests pass and SPA build passes. Policy scan, Svelte invariant, changed-file formatting, and diff checks pass. Full visual/performance closure remains [04.1.7].
+  - `Closure:` Local atomic commit `01f8eb0`; next task [04.1.7] promoted to planning. No push performed.
+  - `Environment:` Existing loopback tests and the Node policy scanner needed sandbox exceptions for local sockets/subprocesses. No dependency downloads, provider requests, system installation, or push occurred.
+
+- [ ] **[04.1.7]** `[READY FOR PLANNING]` `[SEQ: W7]` Validate and close the mailbox feature
   - `Paths:` `feature tests, .agent/TASK.md, .agent/NOTES.md`
   - `Verify:` `cargo test --workspace && pnpm --filter desktop check && pnpm --filter desktop test && node scripts/ci-guard.mjs`
 
