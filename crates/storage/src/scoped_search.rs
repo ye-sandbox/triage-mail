@@ -63,6 +63,7 @@ impl SqliteMailStore {
             account_id,
             folder: &folder,
             eligibility: eligibility(view),
+            messages: messages_source(view),
             now,
         };
         let ids = search.execute(query)?;
@@ -72,20 +73,28 @@ impl SqliteMailStore {
     }
 }
 
+fn messages_source(view: &MailboxView) -> &'static str {
+    if matches!(view, MailboxView::Snoozed) {
+        "messages m INDEXED BY idx_messages_snooze_until"
+    } else {
+        "messages m"
+    }
+}
+
 fn eligibility(view: &MailboxView) -> &'static str {
     match view {
         MailboxView::Starred => "m.is_starred = 1",
         MailboxView::Snoozed => "m.snooze_until_epoch_ms > ?3",
         MailboxView::Inbox => {
             "(m.snooze_until_epoch_ms IS NULL OR m.snooze_until_epoch_ms <= ?3) AND EXISTS (
-            SELECT 1 FROM message_folder_memberships membership
+            SELECT 1 FROM message_folder_memberships membership INDEXED BY idx_memberships_message_id
             LEFT JOIN message_folder_overrides o ON o.message_id=m.id
             WHERE membership.message_id=m.id AND membership.account_id=m.account_id
             AND COALESCE(o.folder, membership.folder)=?2)"
         }
         MailboxView::Folder(_) => {
             "EXISTS (
-            SELECT 1 FROM message_folder_memberships membership
+            SELECT 1 FROM message_folder_memberships membership INDEXED BY idx_memberships_message_id
             LEFT JOIN message_folder_overrides o ON o.message_id=m.id
             WHERE membership.message_id=m.id AND membership.account_id=m.account_id
             AND COALESCE(o.folder, membership.folder)=?2)"
@@ -131,6 +140,7 @@ struct ScopedSearch<'connection> {
     account_id: &'connection str,
     folder: &'connection str,
     eligibility: &'static str,
+    messages: &'static str,
     now: i64,
 }
 
@@ -174,23 +184,32 @@ impl ScopedSearch<'_> {
             .collect())
     }
 
-    fn branch(&self, query: &HybridQuery, semantic: bool) -> Result<Vec<String>, StorageError> {
+    fn sql(&self, query: &HybridQuery, semantic: bool) -> String {
         let selection = if semantic {
             // INVARIANT: Rank every eligible vector before LIMIT; a global top-k can omit mailbox results.
-            "SELECT m.id FROM messages m CROSS JOIN vec_messages v
+            "SELECT m.id FROM {messages} CROSS JOIN vec_messages v
              WHERE m.account_id=?1 AND v.message_id=m.id AND ({eligibility})
              ORDER BY vec_distance_cosine(v.embedding_int8, vec_int8(?5)), m.id LIMIT ?6 OFFSET ?7"
         } else if query.query_text.trim().is_empty() {
-            "SELECT m.id FROM messages m WHERE m.account_id=?1 AND ({eligibility})
+            "SELECT m.id FROM {messages} WHERE m.account_id=?1 AND ({eligibility})
              ORDER BY m.received_at_epoch_ms DESC, m.id LIMIT ?6 OFFSET ?7"
         } else {
             "WITH ranked AS (SELECT rowid AS rid, rank AS score FROM messages_fts
              WHERE messages_fts MATCH ?4 AND +rowid IN (
-                SELECT m.rowid FROM messages m WHERE m.account_id=?1 AND ({eligibility}))
+                SELECT m.rowid FROM {messages} WHERE m.account_id=?1 AND ({eligibility}))
              ORDER BY rank, rowid LIMIT ?6 OFFSET ?7)
              SELECT m.id FROM ranked r JOIN messages m ON m.rowid=r.rid ORDER BY r.score, r.rid"
         };
-        let sql = selection.replace("{eligibility}", self.eligibility);
+        // INVARIANT: Correlated membership probes must use message identity, not scan an
+        // entire account per candidate. Snoozed enumerates the deadline range before
+        // account filtering, avoiding payload reads for every unsnoozed account row.
+        selection
+            .replace("{eligibility}", self.eligibility)
+            .replace("{messages}", self.messages)
+    }
+
+    fn branch(&self, query: &HybridQuery, semantic: bool) -> Result<Vec<String>, StorageError> {
+        let sql = self.sql(query, semantic);
         let expression = format!("\"{}\"", query.query_text.trim().replace('"', "\"\""));
         let bytes = query
             .query_embedding_int8
@@ -221,4 +240,137 @@ fn invalid_scope() -> StorageError {
 
 fn query_error(error: rusqlite::Error) -> StorageError {
     StorageError::Query(error.to_string())
+}
+
+#[cfg(test)]
+mod plan_tests {
+    use super::*;
+    use crate::{connection::open_in_memory_connection, migrations::SchemaMigrator, DatabaseKey};
+
+    fn connection() -> Connection {
+        let mut conn = open_in_memory_connection(&DatabaseKey::from_bytes([47; 32])).unwrap();
+        SchemaMigrator::new(Default::default())
+            .migrate(&mut conn)
+            .unwrap();
+        conn
+    }
+
+    fn query(text: &str) -> HybridQuery {
+        HybridQuery {
+            query_text: text.into(),
+            query_embedding_int8: Some(vec![1; 384]),
+            account_filter: None,
+            mode: SearchMode::Lexical,
+            limit: 200,
+            offset: 0,
+        }
+    }
+
+    fn search<'a>(conn: &'a Connection, view: &MailboxView) -> ScopedSearch<'a> {
+        ScopedSearch {
+            conn,
+            account_id: "a",
+            folder: "INBOX",
+            eligibility: eligibility(view),
+            messages: messages_source(view),
+            now: 1000,
+        }
+    }
+
+    #[test]
+    fn every_folder_branch_probes_memberships_by_message_identity() {
+        let conn = connection();
+        for view in [MailboxView::Inbox, MailboxView::Folder("INBOX".into())] {
+            for (text, semantic) in [("", false), ("synthetic", false), ("", true)] {
+                let sql = format!(
+                    "EXPLAIN QUERY PLAN {}",
+                    search(&conn, &view).sql(&query(text), semantic)
+                );
+                let mut stmt = conn.prepare(&sql).unwrap();
+                let details = stmt
+                    .query_map(
+                        params!["a", "INBOX", 1000, "synthetic", vec![1_u8; 384], 200, 0],
+                        |r| r.get::<_, String>(3),
+                    )
+                    .unwrap()
+                    .collect::<rusqlite::Result<Vec<_>>>()
+                    .unwrap();
+                assert!(
+                    details
+                        .iter()
+                        .any(|line| line.contains("idx_memberships_message_id (message_id=?)")),
+                    "{details:?}"
+                );
+                assert!(
+                    !details
+                        .iter()
+                        .any(|line| line.contains("membership") && line.contains("(account_id=?)")),
+                    "{details:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn snoozed_branches_enumerate_deadlines_instead_of_whole_accounts() {
+        let conn = connection();
+        for (text, semantic) in [("", false), ("synthetic", false), ("", true)] {
+            let sql = format!(
+                "EXPLAIN QUERY PLAN {}",
+                search(&conn, &MailboxView::Snoozed).sql(&query(text), semantic)
+            );
+            let mut stmt = conn.prepare(&sql).unwrap();
+            let details = stmt
+                .query_map(
+                    params!["a", "", 1000, "synthetic", vec![1_u8; 384], 200, 0],
+                    |r| r.get::<_, String>(3),
+                )
+                .unwrap()
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap();
+            assert!(
+                details.iter().any(
+                    |line| line.contains("idx_messages_snooze_until (snooze_until_epoch_ms>?)")
+                ),
+                "{details:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn blank_inbox_vm_work_stays_linear_with_duplicate_label_memberships() {
+        let conn = connection();
+        conn.execute_batch("INSERT INTO accounts VALUES ('a','a@example.com','synthetic',0,0);
+            WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<5000)
+            INSERT INTO messages(id,account_id,folder,uid,subject,sender,recipients,
+                received_at_epoch_ms,raw_headers,created_at_epoch_ms)
+            SELECT printf('message-%05d',i),'a','INBOX',i,'synthetic','sender@example.org',
+                'reader@example.com',i,'',0 FROM n;
+            INSERT INTO message_folder_memberships SELECT 'a','INBOX',uid,id,0 FROM messages;
+            INSERT INTO message_folder_memberships SELECT 'a','Archive',uid+5000,id,0 FROM messages;").unwrap();
+        let sql = search(&conn, &MailboxView::Inbox).sql(&query(""), false);
+        let mut stmt = conn.prepare(&sql).unwrap();
+        let ids = stmt
+            .query_map(
+                params!["a", "INBOX", 1000, "", vec![1_u8; 384], 200, 0],
+                |r| r.get::<_, String>(0),
+            )
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(
+            ids,
+            (4801..=5000)
+                .rev()
+                .map(|id| format!("message-{id:05}"))
+                .collect::<Vec<_>>()
+        );
+        // INVARIANT: Count VM work, not hardware-dependent milliseconds. An account scan
+        // per candidate grows quadratically and exceeds this generous linear-work budget.
+        let steps = stmt.get_status(rusqlite::StatementStatus::VmStep);
+        assert!(
+            steps < 5000 * 200,
+            "unexpected membership amplification: {steps} VM steps"
+        );
+    }
 }
