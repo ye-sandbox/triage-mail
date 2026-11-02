@@ -309,7 +309,7 @@ fn query_error(error: rusqlite::Error) -> StorageError {
     StorageError::Query(error.to_string())
 }
 
-fn load_summaries(
+pub(crate) fn load_summaries(
     conn: &Connection,
     ids: &[String],
 ) -> Result<Vec<MessageRowSummary>, StorageError> {

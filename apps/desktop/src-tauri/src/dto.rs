@@ -6,6 +6,7 @@
 use mail_engine::{AttachmentMeta, AuthMethod, ImapEndpointConfig};
 use serde::{Deserialize, Serialize};
 use storage::{HybridQuery, MessageRowSummary, SearchMode};
+pub use storage::{MailboxScope as MailboxScopeDto, MailboxView as MailboxViewDto};
 use triage_ai::{DeterministicTriageResult, TriageBadge, TriageCategory};
 use vault::VaultKey;
 
@@ -44,6 +45,8 @@ pub struct SearchQueryDto {
     pub mode: SearchMode,
     pub limit: usize,
     pub offset: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<MailboxScopeDto>,
 }
 
 impl SearchQueryDto {
@@ -126,6 +129,31 @@ pub fn workspace_bridge_health() -> (&'static str, MessageRowSummary, TriageBadg
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mailbox_scope_is_optional_and_uses_existing_enum_encoding() {
+        let legacy =
+            serde_json::json!({ "query": "", "mode": "Lexical", "limit": 10, "offset": 0 });
+        let request: SearchQueryDto = serde_json::from_value(legacy.clone()).unwrap();
+        assert_eq!(request.scope, None);
+        assert_eq!(serde_json::to_value(&request).unwrap(), legacy);
+        for scope in [
+            MailboxScopeDto::GlobalAllMail,
+            MailboxScopeDto::AccountView {
+                account_id: "synthetic".into(),
+                view: MailboxViewDto::Folder("Archive".into()),
+            },
+        ] {
+            let mut value = legacy.clone();
+            value["scope"] = serde_json::to_value(&scope).unwrap();
+            let request: SearchQueryDto = serde_json::from_value(value).unwrap();
+            assert_eq!(request.scope, Some(scope));
+        }
+        assert!(serde_json::from_value::<SearchQueryDto>(serde_json::json!({
+            "query": "", "mode": "Lexical", "limit": 10, "offset": 0, "scope": "unknown"
+        }))
+        .is_err());
+    }
 
     #[test]
     fn validates_account_dto_and_rejects_remote_proton_self_signed() {

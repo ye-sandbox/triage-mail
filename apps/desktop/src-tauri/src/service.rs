@@ -265,11 +265,19 @@ impl DesktopService {
                     )
                 }
             };
+            let scope = query.scope.clone();
             let query = query
                 .into_hybrid_query(embedding)
                 .map_err(|_| IpcError::InvalidRequest)?;
             // INVARIANT: Display overrides never replace the canonical IMAP folder/UID.
-            s.store.search(&query).map_err(storage_error)
+            match scope {
+                Some(scope) => s.store.search_scoped(&query, &scope),
+                None => s.store.search(&query),
+            }
+            .map_err(|error| match error {
+                storage::StorageError::InvalidSearchQuery(_) => IpcError::InvalidRequest,
+                _ => storage_error(error),
+            })
         })
         .await
     }

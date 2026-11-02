@@ -185,6 +185,7 @@ fn query(mode: SearchMode) -> SearchQueryDto {
         mode,
         limit: 20,
         offset: 0,
+        scope: None,
     }
 }
 fn mutation(action: TriageActionDto) -> TriageMutationDto {
@@ -192,6 +193,44 @@ fn mutation(action: TriageActionDto) -> TriageMutationDto {
         message_ids: vec!["m-1".into()],
         action,
     }
+}
+
+#[tokio::test]
+async fn scoped_search_preserves_global_requests_and_rejects_unknown_accounts() {
+    let (service, store, _) = setup(Arc::new(FakeRemote::default()));
+    seed(&service, &store).await;
+    let unscoped = service
+        .search_messages(query(SearchMode::Lexical))
+        .await
+        .unwrap();
+    let mut request = query(SearchMode::Lexical);
+    request.scope = Some(MailboxScopeDto::GlobalAllMail);
+    assert_eq!(
+        service.search_messages(request.clone()).await.unwrap(),
+        unscoped
+    );
+    request.scope = Some(MailboxScopeDto::AccountView {
+        account_id: "unknown".into(),
+        view: MailboxViewDto::Starred,
+    });
+    assert_eq!(
+        service.search_messages(request.clone()).await,
+        Err(IpcError::InvalidRequest)
+    );
+    request.scope = Some(MailboxScopeDto::AccountView {
+        account_id: "acct-1".into(),
+        view: MailboxViewDto::Starred,
+    });
+    assert!(service
+        .search_messages(request.clone())
+        .await
+        .unwrap()
+        .is_empty());
+    service
+        .triage_action(mutation(TriageActionDto::Star))
+        .await
+        .unwrap();
+    assert_eq!(service.search_messages(request).await.unwrap()[0].id, "m-1");
 }
 
 #[tokio::test]
@@ -870,6 +909,7 @@ async fn blank_lexical_inbox_reads_persisted_mail_without_an_embedding_provider(
             mode: SearchMode::Lexical,
             limit: 200,
             offset: 0,
+            scope: None,
         })
         .await
         .unwrap();
@@ -1383,6 +1423,7 @@ async fn test_snooze_unsnooze_and_expiration_reconciliation() {
             mode: storage::SearchMode::Lexical,
             limit: 10,
             offset: 0,
+            scope: None,
         })
         .await
         .unwrap();

@@ -27,7 +27,7 @@ All core domain crates MUST remain pure Rust (zero dependency on `tauri`) so the
 | IPC Command / Channel | Direction | Payload Schema | Performance / Security Invariant |
 |---|---|---|---|
 | `cmd_list_accounts` / `cmd_add_account` | UI $\rightarrow$ Rust | `AccountConfigDto` (supports App Password, OAuth2 Public PKCE, BYO-OAuth credentials, Proton Bridge; never returns raw secrets to UI) | Secrets stored immediately in `vault` (`keyring` or Argon2 fallback); UI only sees opaque `account_id` |
-| `cmd_search_messages` | UI $\rightarrow$ Rust | `SearchQueryDto { query, mode: Lexical \| Semantic \| Hybrid, limit, offset }` $\rightarrow$ `Vec<MessageRowDto>` | Filtered semantic $\le 15$ms, lexical $\le 40$ms, global semantic $\le 50$ms, hybrid $\le 60$ms (ADR-008) |
+| `cmd_search_messages` | UI $\rightarrow$ Rust | `SearchQueryDto { query, mode: Lexical \| Semantic \| Hybrid, limit, offset, scope? }` $\rightarrow$ `Vec<MessageRowDto>` | Filtered semantic $\le 15$ms, lexical $\le 40$ms, global semantic $\le 50$ms, hybrid $\le 60$ms (ADR-008); mailbox predicate latency awaits measurement |
 | `cmd_triage_action` | UI $\rightarrow$ Rust | `TriageMutationDto { message_ids, action: MarkRead \| Archive \| Trash \| Tag(String) \| OneClickUnsubscribe }` | Optimistic local SQLite update + queued async IMAP `STORE FLAGS` sync (or RFC 8058 HTTP POST on explicit unsubscribe) |
 | `cmd_get_message_body` | UI $\rightarrow$ Rust | `MessageId` $\rightarrow$ `MessageDetailDto { headers, text_plain, html_raw, triage_badges, attachments_meta }` | HTML sanitized in UI with `DOMPurify` + `<iframe sandbox="">` + normalized base dark-mode CSS |
 | `cmd_fetch_attachment` | UI $\rightarrow$ Rust | `AttachmentRequestDto { account_id, folder, uid, part_id }` $\rightarrow$ `AttachmentBytesDto` | **Lazy Attachment Invariant:** Fetched on-demand via `IMAP BODY.PEEK[section]` |
@@ -376,3 +376,28 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   - `reconcile_expired_snoozes(now_ms)` runs on startup, during periodic outbox loops, and can be invoked manually; it resets expired deadlines to `NULL` and emits `SyncProgressEvent(ResyncRequired)` to refresh reactive views.
   - Remote sync message upsert queries preserve `messages.snooze_until_epoch_ms` so remote refreshes never wipe local deadlines.
   - `MessageRowSummary` / `MessageRowDto` and `MessageDetailDto` additively expose `#[serde(default)] is_starred: bool` and `#[serde(default)] snooze_until_epoch_ms: Option<i64>`.
+
+## Account-Scoped Search ([04.1.4])
+
+- IPC scope aliases the headless storage `MailboxScope` / `MailboxView` types, retaining
+  externally tagged serde enums: `"GlobalAllMail"` or
+  `{ "AccountView": { "account_id": "opaque-id", "view": "Inbox" } }`; explicit folders
+  use `{ "Folder": "server-path" }`. Omitted/null scope preserves existing global search;
+  serialization omits absent scopes to retain the original legacy request shape.
+- `SqliteMailStore::search_scoped` extends search without changing `HybridQuery` or the
+  `SearchEngine` trait. Unknown accounts, conflicting account filters, and unavailable or
+  nonselectable folders fail closed; IPC returns `InvalidRequest`. Inbox resolves an
+  advertised inbox role before the case-insensitive canonical INBOX fallback.
+- Scope validation, branch ranking, RRF fusion, and final hydration share one read
+  transaction and one UTC timestamp. Membership uses account-bound EXISTS with effective
+  pending folder overrides, avoiding duplicate rows from provider labels. Canonical
+  message folder/UID and attachment identity remain unchanged.
+- Inbox excludes deadlines strictly greater than the request timestamp; Snoozed includes
+  only those active deadlines. Explicit folders, Starred, and global All Mail retain
+  snoozed messages. Expiration affects visibility without requiring reconciliation first.
+- Blank and lexical eligibility precede LIMIT/OFFSET. Scoped semantic queries rank all
+  eligible existing vectors by exact cosine distance, then message ID; orphan/missing
+  embeddings cannot consume page slots. Both hybrid branches apply scope before their
+  existing candidate window and RRF fusion. Unscoped optimized paths are unchanged.
+- Existing semantic consent gates remain in force. Scoped predicate latency is not yet
+  benchmarked; feature closure [04.1.7] must measure it against ADR-008.

@@ -16,6 +16,7 @@ pub mod desktop;
 pub mod migrations;
 pub mod models;
 pub mod repository;
+mod scoped_search;
 pub mod search;
 pub mod settings;
 pub mod vec_ext;
@@ -26,6 +27,10 @@ pub use models::{
     MessageFolderMembershipRecord, MessageRecord,
 };
 pub use repository::SqliteMailStore;
+pub use scoped_search::{MailboxScope, MailboxView};
+
+#[cfg(test)]
+mod scoped_search_tests;
 
 /// Errors returned by SQLCipher storage, migrations, and hybrid search operations.
 #[derive(Debug, Error, PartialEq, Eq)]
