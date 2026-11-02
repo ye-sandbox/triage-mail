@@ -1,5 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+/// Returns the current epoch timestamp in milliseconds.
+pub fn now_epoch_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64
+}
+
 /// Account configuration record persisted in SQLite.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccountRecord {
@@ -25,6 +33,30 @@ pub struct AttachmentRecord {
     pub size_bytes: i64,
     pub content_id: Option<String>,
     pub is_inline: bool,
+}
+
+/// Account folder record persisted in SQLite (Migration v2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FolderRecord {
+    pub account_id: String,
+    pub folder_name: String,
+    pub display_name: String,
+    pub delimiter: Option<String>,
+    pub role: String,
+    pub is_selectable: bool,
+    pub total_messages: Option<u32>,
+    pub unread_messages: Option<u32>,
+    pub updated_at_epoch_ms: i64,
+}
+
+/// Mapping between an account/folder/UID and canonical message identity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MessageFolderMembershipRecord {
+    pub account_id: String,
+    pub folder: String,
+    pub uid: u32,
+    pub message_id: String,
+    pub created_at_epoch_ms: i64,
 }
 
 /// Inbound email message record persisted in SQLite.
@@ -55,4 +87,8 @@ pub struct MessageRecord {
     pub created_at_epoch_ms: i64,
     pub attachments: Vec<AttachmentRecord>,
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub is_starred: bool,
+    pub snooze_until_epoch_ms: Option<i64>,
+    pub provider_message_id: Option<String>,
 }

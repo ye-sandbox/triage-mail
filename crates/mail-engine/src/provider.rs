@@ -115,6 +115,25 @@ pub enum SpecialFolderRole {
     Sent,
     Drafts,
     AllMail,
+    Starred,
+    Other,
+}
+
+impl SpecialFolderRole {
+    /// Returns the canonical database role string corresponding to this role.
+    pub fn as_role_str(&self) -> &'static str {
+        match self {
+            Self::Inbox => "inbox",
+            Self::Archive => "archive",
+            Self::Trash => "trash",
+            Self::Junk => "junk",
+            Self::Sent => "sent",
+            Self::Drafts => "drafts",
+            Self::AllMail => "all",
+            Self::Starred => "starred",
+            Self::Other => "other",
+        }
+    }
 }
 
 /// Classifies a folder name and RFC 6154 attributes into a standardized special folder role.
@@ -133,6 +152,7 @@ pub fn classify_folder<S1: AsRef<str>, S2: AsRef<str>>(
             "\\sent" => return Some(SpecialFolderRole::Sent),
             "\\drafts" => return Some(SpecialFolderRole::Drafts),
             "\\all" => return Some(SpecialFolderRole::AllMail),
+            "\\flagged" | "\\starred" => return Some(SpecialFolderRole::Starred),
             _ => {}
         }
     }
@@ -160,6 +180,9 @@ pub fn classify_folder<S1: AsRef<str>, S2: AsRef<str>>(
         | "[gmail]/sent mail" | "[gmail]/enviados" => Some(SpecialFolderRole::Sent),
         "drafts" | "rascunhos" | "borradores" | "[gmail]/drafts" | "[gmail]/rascunhos" => {
             Some(SpecialFolderRole::Drafts)
+        }
+        "starred" | "com estrela" | "destacados" | "[gmail]/starred" | "[gmail]/com estrela" => {
+            Some(SpecialFolderRole::Starred)
         }
         _ => None,
     }
@@ -227,11 +250,19 @@ mod tests {
             classify_folder("Bin", &["\\Trash"]),
             Some(SpecialFolderRole::Trash)
         );
+        assert_eq!(
+            classify_folder("Important", &["\\Flagged"]),
+            Some(SpecialFolderRole::Starred)
+        );
 
         // Fallback names (Portuguese & English)
         assert_eq!(
             classify_folder("Caixa de Entrada", &[] as &[&str]),
             Some(SpecialFolderRole::Inbox)
+        );
+        assert_eq!(
+            classify_folder("Com Estrela", &[] as &[&str]),
+            Some(SpecialFolderRole::Starred)
         );
         assert_eq!(
             classify_folder("Lixeira", &[] as &[&str]),
@@ -245,6 +276,10 @@ mod tests {
             classify_folder("[Gmail]/All Mail", &[] as &[&str]),
             Some(SpecialFolderRole::AllMail)
         );
+
+        assert_eq!(SpecialFolderRole::Inbox.as_role_str(), "inbox");
+        assert_eq!(SpecialFolderRole::Starred.as_role_str(), "starred");
+        assert_eq!(SpecialFolderRole::Other.as_role_str(), "other");
 
         assert!(is_gmail_virtual_all_mail("[Gmail]/All Mail"));
         assert!(is_gmail_virtual_all_mail("[Gmail]/Todos os e-mails"));

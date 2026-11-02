@@ -42,6 +42,13 @@ pub use idle::{
     AdaptivePollConfig, AdaptivePollSchedule, IdleConfig, IdleCycleOutcome, IdleManager,
     DEFAULT_IDLE_HEARTBEAT_SECS,
 };
+pub use protocol::{
+    decode_modified_utf7, parse_list_line, DiscoveredFolder, FolderStatus, IdleNotification,
+    IdleWaitOutcome, ImapSession, RawFetchedMessage, TaggedStatus, UidFlags,
+};
+pub use provider::{
+    classify_folder, is_gmail_virtual_all_mail, ProviderKind, ServerCapabilities, SpecialFolderRole,
+};
 pub use unsubscribe::{
     validate_rfc8058_descriptor, validate_rfc8058_uri, Rfc8058ClientConfig,
     Rfc8058UnsubscribeClient, UnsubscribeOutcome, RFC8058_CONTENT_TYPE, RFC8058_POST_BODY,
@@ -132,6 +139,7 @@ pub struct UnsubscribeDescriptor {
 pub struct ParsedInboundMessage {
     pub uid: u32,
     pub modseq: Option<u64>,
+    pub provider_message_id: Option<String>,
     pub message_id_header: Option<String>,
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,

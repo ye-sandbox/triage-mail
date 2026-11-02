@@ -1,11 +1,24 @@
 // INVARIANT: IMAP protocol communication must safely parse untagged responses,
 // quoted strings, and RFC 3501/7162 literals without buffering unconstrained streams.
 
+use base64::Engine;
+use serde::{Deserialize, Serialize};
 use std::str;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-use crate::provider::ServerCapabilities;
+use crate::provider::{classify_folder, ServerCapabilities, SpecialFolderRole};
 use crate::EngineError;
+
+/// Metadata for a discovered mailbox returned by IMAP `LIST`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiscoveredFolder {
+    pub name: String,
+    pub display_name: String,
+    pub delimiter: Option<String>,
+    pub attributes: Vec<String>,
+    pub role: Option<SpecialFolderRole>,
+    pub is_selectable: bool,
+}
 
 /// Tagged response status code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,6 +75,7 @@ pub struct RawFetchedMessage {
     pub seq: u32,
     pub uid: u32,
     pub modseq: Option<u64>,
+    pub provider_message_id: Option<String>,
     pub flags: Vec<String>,
     pub header_bytes: Vec<u8>,
     pub text_bytes: Vec<u8>,
@@ -312,6 +326,19 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
                 }
             }
 
+            if msg.provider_message_id.is_none() {
+                if let Some(pos) = current_chunk.find("X-GM-MSGID ") {
+                    let remainder = &current_chunk[pos + 11..];
+                    let token = remainder
+                        .split(|c: char| !c.is_ascii_digit())
+                        .next()
+                        .unwrap_or_default();
+                    if !token.is_empty() {
+                        msg.provider_message_id = Some(token.to_string());
+                    }
+                }
+            }
+
             if msg.flags.is_empty() {
                 if let Some(flags_pos) = current_chunk.find("FLAGS (") {
                     let remainder = &current_chunk[flags_pos + 7..];
@@ -432,6 +459,37 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
         let mut status = res.folder_status.unwrap_or_default();
         status.name = folder.to_string();
         Ok(status)
+    }
+
+    /// Discovers all mailboxes on the server using RFC 3501 `LIST "" "*"`.
+    pub async fn discover_folders(&mut self) -> Result<Vec<DiscoveredFolder>, EngineError> {
+        let res = self.execute_command("LIST \"\" \"*\"").await?;
+        if res.status != TaggedStatus::Ok {
+            return Err(EngineError::ImapProtocol(format!(
+                "LIST command failed: {}",
+                res.message
+            )));
+        }
+
+        let mut folders = Vec::new();
+        for line in &res.untagged_lines {
+            if let Some(folder) = parse_list_line(line) {
+                folders.push(folder);
+            }
+        }
+
+        if folders.is_empty() {
+            let res2 = self.execute_command("LIST \"\" \"%\"").await?;
+            if res2.status == TaggedStatus::Ok {
+                for line in &res2.untagged_lines {
+                    if let Some(folder) = parse_list_line(line) {
+                        folders.push(folder);
+                    }
+                }
+            }
+        }
+
+        Ok(folders)
     }
 
     /// Searches for message UIDs matching a search criterion (e.g. `UID 101:*`).
@@ -844,6 +902,173 @@ pub fn escape_imap_string(input: &str) -> String {
     input.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+/// Decodes an IMAP modified UTF-7 (RFC 3501 section 5.1.3) string into standard UTF-8.
+pub fn decode_modified_utf7(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '&' {
+            if chars.peek() == Some(&'-') {
+                chars.next();
+                result.push('&');
+                continue;
+            }
+
+            let mut b64_str = String::new();
+            let mut closed = false;
+            while let Some(&next_ch) = chars.peek() {
+                chars.next();
+                if next_ch == '-' {
+                    closed = true;
+                    break;
+                }
+                if next_ch == ',' {
+                    b64_str.push('/');
+                } else {
+                    b64_str.push(next_ch);
+                }
+            }
+
+            if closed && !b64_str.is_empty() {
+                let remainder = b64_str.len() % 4;
+                if remainder != 0 {
+                    b64_str.extend(std::iter::repeat_n('=', 4 - remainder));
+                }
+                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&b64_str) {
+                    if bytes.len() % 2 == 0 {
+                        let u16s: Vec<u16> = bytes
+                            .as_chunks::<2>()
+                            .0
+                            .iter()
+                            .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
+                            .collect();
+                        if let Ok(decoded) = String::from_utf16(&u16s) {
+                            result.push_str(&decoded);
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            result.push('&');
+            result.push_str(&b64_str.replace('/', ","));
+            if closed {
+                result.push('-');
+            }
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
+}
+
+/// Parses an untagged IMAP `* LIST (<attributes>) "<delim>" <name>` response line.
+pub fn parse_list_line(line: &str) -> Option<DiscoveredFolder> {
+    let trimmed = line.trim();
+    if !trimmed.to_ascii_uppercase().starts_with("* LIST ") {
+        return None;
+    }
+
+    let rest = trimmed[7..].trim_start();
+    if !rest.starts_with('(') {
+        return None;
+    }
+    let close_paren = rest.find(')')?;
+    let attrs_str = &rest[1..close_paren];
+    let attributes: Vec<String> = attrs_str
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect();
+
+    let after_attrs = rest[close_paren + 1..].trim_start();
+
+    // Parse delimiter (quoted or NIL)
+    let (delimiter, after_delim) = if let Some(stripped) = after_attrs.strip_prefix('"') {
+        let closing_quote = stripped.find('"')?;
+        let delim_str = &stripped[..closing_quote];
+        (
+            Some(delim_str.to_string()),
+            stripped[closing_quote + 1..].trim_start(),
+        )
+    } else if after_attrs.starts_with("NIL") || after_attrs.starts_with("nil") {
+        (None, after_attrs[3..].trim_start())
+    } else {
+        let mut parts = after_attrs.splitn(2, |c: char| c.is_whitespace());
+        let part1 = parts.next()?;
+        let rem = parts.next().unwrap_or("").trim_start();
+        if part1.is_empty() {
+            (None, rem)
+        } else {
+            (Some(part1.to_string()), rem)
+        }
+    };
+
+    // Parse mailbox name (quoted or unquoted token)
+    let raw_name = if let Some(stripped) = after_delim.strip_prefix('"') {
+        let mut name = String::new();
+        let chars = stripped.chars();
+        let mut escaped = false;
+        let mut closed = false;
+        for c in chars {
+            if escaped {
+                name.push(c);
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                closed = true;
+                break;
+            } else {
+                name.push(c);
+            }
+        }
+        if !closed {
+            return None;
+        }
+        name
+    } else {
+        after_delim.trim().to_string()
+    };
+
+    if raw_name.is_empty() {
+        return None;
+    }
+
+    let decoded_name = decode_modified_utf7(&raw_name);
+
+    let display_name = if let Some(ref delim) = delimiter {
+        if !delim.is_empty() {
+            decoded_name
+                .rsplit(delim.as_str())
+                .next()
+                .filter(|s| !s.is_empty())
+                .unwrap_or(&decoded_name)
+                .to_string()
+        } else {
+            decoded_name.clone()
+        }
+    } else {
+        decoded_name.clone()
+    };
+
+    let is_selectable = !attributes
+        .iter()
+        .any(|a| a.eq_ignore_ascii_case("\\noselect"));
+
+    let role = classify_folder(&decoded_name, &attributes);
+
+    Some(DiscoveredFolder {
+        name: decoded_name,
+        display_name,
+        delimiter,
+        attributes,
+        role,
+        is_selectable,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -918,5 +1143,66 @@ mod tests {
             extract_body_section_name("* 1 FETCH (FLAGS (\\Seen))"),
             None
         );
+    }
+
+    #[test]
+    fn decodes_modified_utf7_correctly() {
+        assert_eq!(decode_modified_utf7("INBOX"), "INBOX");
+        assert_eq!(decode_modified_utf7("foo&-bar"), "foo&bar");
+        // &AOU- -> å
+        assert_eq!(decode_modified_utf7("&AOU-"), "å");
+        // &AOk- -> é
+        assert_eq!(decode_modified_utf7("&AOk-"), "é");
+        // &ANo- -> Ú
+        assert_eq!(decode_modified_utf7("&ANo-ltimas"), "Últimas");
+        // Standard ASCII unchanged
+        assert_eq!(decode_modified_utf7("[Gmail]/All Mail"), "[Gmail]/All Mail");
+    }
+
+    #[test]
+    fn parses_list_line_various_formats() {
+        // Standard INBOX
+        let inbox = parse_list_line("* LIST (\\HasNoChildren) \"/\" \"INBOX\"").unwrap();
+        assert_eq!(inbox.name, "INBOX");
+        assert_eq!(inbox.display_name, "INBOX");
+        assert_eq!(inbox.delimiter.as_deref(), Some("/"));
+        assert_eq!(inbox.role, Some(SpecialFolderRole::Inbox));
+        assert!(inbox.is_selectable);
+
+        // Gmail Sent
+        let sent =
+            parse_list_line("* LIST (\\HasNoChildren \\Sent) \"/\" \"[Gmail]/Sent Mail\"").unwrap();
+        assert_eq!(sent.name, "[Gmail]/Sent Mail");
+        assert_eq!(sent.display_name, "Sent Mail");
+        assert_eq!(sent.delimiter.as_deref(), Some("/"));
+        assert_eq!(sent.role, Some(SpecialFolderRole::Sent));
+        assert!(sent.is_selectable);
+
+        // Non-selectable parent
+        let noselect =
+            parse_list_line("* LIST (\\Noselect \\HasChildren) \"/\" \"[Gmail]\"").unwrap();
+        assert_eq!(noselect.name, "[Gmail]");
+        assert!(!noselect.is_selectable);
+
+        // Dot delimiter and unquoted token
+        let dot = parse_list_line("* LIST (\\Archive) \".\" Archive").unwrap();
+        assert_eq!(dot.name, "Archive");
+        assert_eq!(dot.delimiter.as_deref(), Some("."));
+        assert_eq!(dot.role, Some(SpecialFolderRole::Archive));
+
+        // NIL delimiter
+        let nil_delim = parse_list_line("* LIST () NIL \"CustomFolder\"").unwrap();
+        assert_eq!(nil_delim.name, "CustomFolder");
+        assert_eq!(nil_delim.delimiter, None);
+        assert_eq!(nil_delim.role, None);
+
+        // Modified UTF-7 in name
+        let utf7 = parse_list_line("* LIST (\\HasNoChildren) \"/\" \"&AOk-cole\"").unwrap();
+        assert_eq!(utf7.name, "école");
+        assert_eq!(utf7.display_name, "école");
+
+        // Starred folder
+        let starred = parse_list_line("* LIST (\\Flagged) \"/\" \"[Gmail]/Com Estrela\"").unwrap();
+        assert_eq!(starred.role, Some(SpecialFolderRole::Starred));
     }
 }

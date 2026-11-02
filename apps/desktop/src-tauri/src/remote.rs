@@ -58,6 +58,10 @@ pub trait RemoteMail: Send + Sync {
         config: &AccountConfigDto,
         checkpoint: &FolderSyncState,
     ) -> Result<bool, IpcError>;
+    async fn discover_folders(
+        &self,
+        config: &AccountConfigDto,
+    ) -> Result<Vec<mail_engine::DiscoveredFolder>, IpcError>;
 }
 
 type NativeSession =
@@ -207,6 +211,14 @@ impl RemoteMail for NativeRemoteMail {
                 Ok(true)
             }
         }
+    }
+
+    async fn discover_folders(
+        &self,
+        config: &AccountConfigDto,
+    ) -> Result<Vec<mail_engine::DiscoveredFolder>, IpcError> {
+        let (mut session, _) = self.session(config).await?;
+        session.discover_folders().await.map_err(remote_error)
     }
 }
 

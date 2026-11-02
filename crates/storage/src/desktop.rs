@@ -229,28 +229,100 @@ impl SqliteMailStore {
     ) -> Result<Vec<crate::MessageRecord>, StorageError> {
         self.transaction(|tx| {
             if reset {
-                tx.execute("DELETE FROM vec_messages WHERE message_id IN (SELECT id FROM messages WHERE account_id=?1 AND folder=?2)", params![state.account_id,state.folder_name]).map_err(query_error)?;
-                tx.execute("DELETE FROM messages WHERE account_id=?1 AND folder=?2", params![state.account_id,state.folder_name]).map_err(query_error)?;
+                // 1. Remove memberships for this folder
+                tx.execute(
+                    "DELETE FROM message_folder_memberships WHERE account_id=?1 AND folder=?2",
+                    params![state.account_id, state.folder_name],
+                )
+                .map_err(query_error)?;
+
+                // 2. Remove orphan messages (no remaining memberships in any folder)
+                tx.execute(
+                    "DELETE FROM vec_messages WHERE message_id IN (
+                        SELECT id FROM messages WHERE account_id=?1 AND folder=?2
+                        AND NOT EXISTS (SELECT 1 FROM message_folder_memberships m WHERE m.message_id = messages.id)
+                    )",
+                    params![state.account_id, state.folder_name],
+                )
+                .map_err(query_error)?;
+
+                tx.execute(
+                    "DELETE FROM messages WHERE account_id=?1 AND folder=?2
+                     AND NOT EXISTS (SELECT 1 FROM message_folder_memberships m WHERE m.message_id = messages.id)",
+                    params![state.account_id, state.folder_name],
+                )
+                .map_err(query_error)?;
             }
-            let mut persisted=Vec::with_capacity(messages.len());
+            let mut persisted = Vec::with_capacity(messages.len());
             for message in messages {
-                let mut message=message.clone();
-                // INVARIANT: MOVE may retain a UI ID while changing its canonical folder/UID.
-                let existing:Option<String>=tx.query_row(
-                    "SELECT id FROM messages WHERE account_id=?1 AND folder=?2 AND uid=?3",
-                    params![message.account_id,message.folder,message.uid],|r|r.get(0)
-                ).optional().map_err(query_error)?;
-                if let Some(id)=existing {
-                    message.id=id;
-                    for attachment in &mut message.attachments {
-                        attachment.message_id=message.id.clone();
-                        attachment.id=format!("{}:{}",message.id,attachment.part_id);
+                let message = message.clone();
+
+                // INVARIANT: Same-account deduplication (ADR-010).
+                // Check provider_message_id -> message_id_header + timestamp -> folder + uid.
+                // Deduplication NEVER occurs across distinct accounts.
+                let mut existing_id: Option<String> = None;
+                if let Some(ref pmid) = message.provider_message_id {
+                    existing_id = tx
+                        .query_row(
+                            "SELECT id FROM messages WHERE account_id=?1 AND provider_message_id=?2 LIMIT 1",
+                            params![message.account_id, pmid],
+                            |r| r.get(0),
+                        )
+                        .optional()
+                        .map_err(query_error)?;
+                }
+                if existing_id.is_none() {
+                    if let Some(ref mid) = message.message_id_header {
+                        existing_id = tx
+                            .query_row(
+                                "SELECT id FROM messages WHERE account_id=?1 AND message_id_header=?2 AND received_at_epoch_ms=?3 LIMIT 1",
+                                params![message.account_id, mid, message.received_at_epoch_ms],
+                                |r| r.get(0),
+                            )
+                            .optional()
+                            .map_err(query_error)?;
                     }
                 }
-                Self::insert_message_in_transaction(tx, &message)?;
-                persisted.push(message);
+                if existing_id.is_none() {
+                    existing_id = tx
+                        .query_row(
+                            "SELECT id FROM messages WHERE account_id=?1 AND folder=?2 AND uid=?3",
+                            params![message.account_id, message.folder, message.uid],
+                            |r| r.get(0),
+                        )
+                        .optional()
+                        .map_err(query_error)?;
+                }
+
+                let now_ms = crate::models::now_epoch_ms();
+
+                if let Some(id) = existing_id {
+                    // Message already exists in this account: register folder membership without duplicating content
+                    tx.execute(
+                        "INSERT INTO message_folder_memberships (account_id, folder, uid, message_id, created_at_epoch_ms)
+                         VALUES (?1, ?2, ?3, ?4, ?5)
+                         ON CONFLICT(account_id, folder, uid) DO NOTHING",
+                        params![message.account_id, message.folder, message.uid, id, now_ms],
+                    )
+                    .map_err(query_error)?;
+
+                    let mut deduped_message = message;
+                    deduped_message.id = id;
+                    persisted.push(deduped_message);
+                } else {
+                    // Brand new message
+                    Self::insert_message_in_transaction(tx, &message)?;
+                    tx.execute(
+                        "INSERT INTO message_folder_memberships (account_id, folder, uid, message_id, created_at_epoch_ms)
+                         VALUES (?1, ?2, ?3, ?4, ?5)
+                         ON CONFLICT(account_id, folder, uid) DO NOTHING",
+                        params![message.account_id, message.folder, message.uid, message.id, now_ms],
+                    )
+                    .map_err(query_error)?;
+                    persisted.push(message);
+                }
             }
-            for (uid,read) in flags {
+            for (uid, read) in flags {
                 tx.execute("UPDATE messages SET is_read=?1 WHERE account_id=?2 AND folder=?3 AND uid=?4 AND NOT EXISTS(SELECT 1 FROM pending_mutations p WHERE p.message_id=messages.id)", params![read,state.account_id,state.folder_name,uid]).map_err(query_error)?;
             }
             tx.execute("INSERT INTO folder_sync_state VALUES (?1,?2,?3,?4,?5,0) ON CONFLICT(account_id,folder_name) DO UPDATE SET uidvalidity=excluded.uidvalidity,uidnext=excluded.uidnext,highest_modseq=excluded.highest_modseq", params![state.account_id,state.folder_name,state.uidvalidity,state.uidnext,state.highest_modseq]).map_err(query_error)?;
@@ -268,5 +340,108 @@ impl SqliteMailStore {
             .query_map([account], |r| r.get(0))
             .map_err(query_error)?;
         rows.collect::<Result<_, _>>().map_err(query_error)
+    }
+
+    pub fn save_folders(
+        &self,
+        account_id: &str,
+        folders: &[crate::FolderRecord],
+    ) -> Result<(), StorageError> {
+        self.transaction(|tx| {
+            for folder in folders {
+                tx.execute(
+                    "INSERT INTO folders (
+                        account_id, folder_name, display_name, delimiter, role,
+                        is_selectable, total_messages, unread_messages, updated_at_epoch_ms
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                     ON CONFLICT(account_id, folder_name) DO UPDATE SET
+                        display_name = excluded.display_name,
+                        delimiter = excluded.delimiter,
+                        role = excluded.role,
+                        is_selectable = excluded.is_selectable,
+                        total_messages = COALESCE(excluded.total_messages, folders.total_messages),
+                        unread_messages = COALESCE(excluded.unread_messages, folders.unread_messages),
+                        updated_at_epoch_ms = excluded.updated_at_epoch_ms",
+                    params![
+                        account_id,
+                        folder.folder_name,
+                        folder.display_name,
+                        folder.delimiter,
+                        folder.role,
+                        if folder.is_selectable { 1 } else { 0 },
+                        folder.total_messages,
+                        folder.unread_messages,
+                        folder.updated_at_epoch_ms,
+                    ],
+                )
+                .map_err(query_error)?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn list_folders(&self, account_id: &str) -> Result<Vec<crate::FolderRecord>, StorageError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StorageError::Query("storage lock unavailable".into()))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT account_id, folder_name, display_name, delimiter, role, is_selectable,
+                        total_messages, unread_messages, updated_at_epoch_ms
+                 FROM folders WHERE account_id = ?1 ORDER BY role = 'inbox' DESC, display_name ASC",
+            )
+            .map_err(query_error)?;
+        let rows = stmt
+            .query_map([account_id], |r| {
+                Ok(crate::FolderRecord {
+                    account_id: r.get(0)?,
+                    folder_name: r.get(1)?,
+                    display_name: r.get(2)?,
+                    delimiter: r.get(3)?,
+                    role: r.get(4)?,
+                    is_selectable: r.get::<_, i64>(5)? != 0,
+                    total_messages: r.get(6)?,
+                    unread_messages: r.get(7)?,
+                    updated_at_epoch_ms: r.get(8)?,
+                })
+            })
+            .map_err(query_error)?;
+        rows.collect::<Result<_, _>>().map_err(query_error)
+    }
+
+    pub fn get_message_folders(&self, message_id: &str) -> Result<Vec<String>, StorageError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StorageError::Query("storage lock unavailable".into()))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT folder FROM message_folder_memberships WHERE message_id = ?1 ORDER BY folder ASC",
+            )
+            .map_err(query_error)?;
+        let rows = stmt
+            .query_map([message_id], |r| r.get(0))
+            .map_err(query_error)?;
+        rows.collect::<Result<_, _>>().map_err(query_error)
+    }
+
+    pub fn find_membership(
+        &self,
+        account_id: &str,
+        folder: &str,
+        uid: u32,
+    ) -> Result<Option<String>, StorageError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StorageError::Query("storage lock unavailable".into()))?;
+        conn.query_row(
+            "SELECT message_id FROM message_folder_memberships WHERE account_id = ?1 AND folder = ?2 AND uid = ?3",
+            params![account_id, folder, uid],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(query_error)
     }
 }

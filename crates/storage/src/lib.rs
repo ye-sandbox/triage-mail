@@ -21,7 +21,9 @@ pub mod settings;
 pub mod vec_ext;
 
 pub use connection::DatabaseKey;
-pub use models::{AccountRecord, AttachmentRecord, MessageRecord};
+pub use models::{
+    AccountRecord, AttachmentRecord, FolderRecord, MessageFolderMembershipRecord, MessageRecord,
+};
 pub use repository::SqliteMailStore;
 
 /// Errors returned by SQLCipher storage, migrations, and hybrid search operations.

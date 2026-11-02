@@ -135,6 +135,7 @@ impl StalwartMimeParser {
         Ok(ParsedInboundMessage {
             uid,
             modseq,
+            provider_message_id: None,
             message_id_header,
             in_reply_to,
             references,

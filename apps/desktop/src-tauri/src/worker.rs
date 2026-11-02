@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use mail_engine::{AdaptivePollConfig, AdaptivePollSchedule, ParsedInboundMessage};
-use storage::{AttachmentRecord, FolderSyncState, MailRepository, MessageRecord};
+use storage::{AttachmentRecord, FolderRecord, FolderSyncState, MailRepository, MessageRecord};
 use tokio::sync::watch;
 use triage_ai::{
     DefaultDeterministicTriage, DeterministicTriage, DeterministicTriageResult, TriageCategory,
@@ -149,13 +149,61 @@ pub async fn sync_account_once(
     service: &Arc<DesktopService>,
     config: &AccountConfigDto,
 ) -> Result<usize, IpcError> {
-    let account = config.account_id.clone();
-    let mut folders = service
-        .blocking(move |s| s.store.list_synced_folders(&account).map_err(storage_error))
-        .await?;
-    if !folders.iter().any(|f| f == "INBOX") {
-        folders.push("INBOX".into());
+    // 1. Discover folders from remote and save catalog
+    let discovered = service.remote.discover_folders(config).await;
+    if let Ok(ref discovered_list) = discovered {
+        let account_id = config.account_id.clone();
+        let folder_records: Vec<FolderRecord> = discovered_list
+            .iter()
+            .map(|f| FolderRecord {
+                account_id: account_id.clone(),
+                folder_name: f.name.clone(),
+                display_name: f.display_name.clone(),
+                delimiter: f.delimiter.clone(),
+                role: f
+                    .role
+                    .map(|r| r.as_role_str())
+                    .unwrap_or("other")
+                    .to_string(),
+                is_selectable: f.is_selectable,
+                total_messages: None,
+                unread_messages: None,
+                updated_at_epoch_ms: now_ms(),
+            })
+            .collect();
+
+        let acct_copy = account_id.clone();
+        let _ = service
+            .blocking(move |s| {
+                s.store
+                    .save_folders(&acct_copy, &folder_records)
+                    .map_err(storage_error)
+            })
+            .await;
     }
+
+    // 2. Determine folders to synchronize (selectable folders)
+    let mut folders: Vec<String> = Vec::new();
+    if let Ok(ref discovered_list) = discovered {
+        for f in discovered_list {
+            if f.is_selectable {
+                folders.push(f.name.clone());
+            }
+        }
+    }
+    if folders.is_empty() {
+        let account = config.account_id.clone();
+        folders = service
+            .blocking(move |s| s.store.list_synced_folders(&account).map_err(storage_error))
+            .await?;
+        if !folders.iter().any(|f| f == "INBOX") {
+            folders.push("INBOX".into());
+        }
+    } else if let Some(pos) = folders.iter().position(|f| f.eq_ignore_ascii_case("INBOX")) {
+        let inbox = folders.remove(pos);
+        folders.insert(0, inbox);
+    }
+
     let mut count = 0;
     for folder in folders {
         loop {
@@ -345,6 +393,9 @@ fn message_record(
         created_at_epoch_ms: now_ms(),
         attachments,
         tags: Vec::new(),
+        is_starred: false,
+        snooze_until_epoch_ms: None,
+        provider_message_id: message.provider_message_id,
     })
 }
 

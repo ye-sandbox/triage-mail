@@ -175,6 +175,34 @@ pub struct AttachmentBytesDto {
     pub bytes: Vec<u8>,
 }
 
+/// Mailbox folder metadata returned to the UI (`cmd_list_folders`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FolderDto {
+    pub account_id: String,
+    pub folder_name: String,
+    pub display_name: String,
+    pub delimiter: Option<String>,
+    pub role: String,
+    pub is_selectable: bool,
+    pub total_messages: Option<u32>,
+    pub unread_messages: Option<u32>,
+}
+
+impl From<storage::FolderRecord> for FolderDto {
+    fn from(r: storage::FolderRecord) -> Self {
+        Self {
+            account_id: r.account_id,
+            folder_name: r.folder_name,
+            display_name: r.display_name,
+            delimiter: r.delimiter,
+            role: r.role,
+            is_selectable: r.is_selectable,
+            total_messages: r.total_messages,
+            unread_messages: r.unread_messages,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SyncState {
     Syncing,
