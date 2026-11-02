@@ -2,7 +2,7 @@
 	import { InboxController } from '$lib/inbox/controller.svelte';
 	import { nativeTransport } from '$lib/inbox/transport';
 	import { nativeSettingsTransport } from '$lib/settings/transport';
-	import type { SettingsTransport } from '$lib/settings/types';
+	import type { SettingsTransport, SettingsTab } from '$lib/settings/types';
 	import type { AccountController } from './controller.svelte';
 	import InboxView from '$lib/inbox/InboxView.svelte';
 	import SettingsDialog from '$lib/settings/SettingsDialog.svelte';
@@ -20,6 +20,8 @@
 	const inbox = new InboxController(nativeTransport);
 	let settingsOpen = $state(false);
 	let photoRevision = $state(0);
+	let settingsTab = $state<SettingsTab>('general');
+	let ruleSeedMessageId = $state<string | undefined>();
 
 	$effect(() => {
 		if (!connected) {
@@ -38,6 +40,7 @@
 
 	function handleCloseSettings() {
 		settingsOpen = false;
+		ruleSeedMessageId = undefined;
 		photoRevision++;
 		void settingsTransport
 			.get()
@@ -53,11 +56,22 @@
 	accounts={accountController?.accounts ?? []}
 	{photoRevision}
 	{connected}
-	openSettings={() => (settingsOpen = true)}
+	openSettings={() => {
+		settingsTab = 'general';
+		settingsOpen = true;
+	}}
+	createRule={(id) => {
+		ruleSeedMessageId = id;
+		settingsTab = 'rules';
+		settingsOpen = true;
+	}}
 	{settingsOpen}
 />
 <SettingsDialog
 	open={settingsOpen}
+	initialTab={settingsTab}
+	{ruleSeedMessageId}
+	selectedMessageIds={inbox.selectedId ? [inbox.selectedId] : []}
 	close={handleCloseSettings}
 	transport={settingsTransport}
 	{accountController}

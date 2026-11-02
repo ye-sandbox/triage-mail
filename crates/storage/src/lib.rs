@@ -17,6 +17,7 @@ pub mod desktop;
 pub mod migrations;
 pub mod models;
 pub mod repository;
+pub mod rules;
 mod scoped_search;
 pub mod search;
 pub mod settings;

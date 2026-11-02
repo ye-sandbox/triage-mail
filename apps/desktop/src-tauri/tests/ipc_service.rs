@@ -634,6 +634,7 @@ fn sync_result(messages: Vec<mail_engine::ParsedInboundMessage>) -> IncrementalS
         folder: "INBOX".into(),
         uidvalidity: 7,
         uidvalidity_reset: false,
+        server_uidnext: 3,
         new_last_uid: 2,
         highest_modseq: Some(9),
         new_messages: messages,
@@ -986,6 +987,7 @@ async fn test_worker_sync_account_once_batches_and_commits_sequentially() {
                     folder: "INBOX".into(),
                     uidvalidity: 100,
                     uidvalidity_reset: false,
+                    server_uidnext: 3,
                     new_last_uid: 300,
                     highest_modseq: Some(10),
                     new_messages: messages,
@@ -1006,6 +1008,7 @@ async fn test_worker_sync_account_once_batches_and_commits_sequentially() {
                     folder: "INBOX".into(),
                     uidvalidity: 100,
                     uidvalidity_reset: false,
+                    server_uidnext: 3,
                     new_last_uid: 350,
                     highest_modseq: Some(20),
                     new_messages: messages,
@@ -1109,6 +1112,7 @@ async fn test_worker_sync_account_once_retains_committed_batches_on_interruption
                     folder: "INBOX".into(),
                     uidvalidity: 100,
                     uidvalidity_reset: false,
+                    server_uidnext: 3,
                     new_last_uid: 300,
                     highest_modseq: Some(10),
                     new_messages: messages,
@@ -1230,6 +1234,7 @@ async fn test_desktop_service_discovers_and_lists_folders() {
                 folder: checkpoint.folder_name.clone(),
                 uidvalidity: 100,
                 uidvalidity_reset: false,
+                server_uidnext: 3,
                 new_last_uid: 0,
                 highest_modseq: Some(1),
                 new_messages: vec![],
@@ -1509,4 +1514,85 @@ async fn test_snooze_unsnooze_and_expiration_reconciliation() {
             .snooze_until_epoch_ms,
         None
     );
+}
+
+#[tokio::test]
+async fn rules_observe_new_arrivals_without_replaying_history_or_duplicate_sync() {
+    use triage_ai::rules::{Condition, Rule, RuleAction};
+    let remote = Arc::new(FakeRemote::default());
+    let (service, store, _) = setup(remote.clone());
+    service
+        .add_account(config("acct-1"), credentials())
+        .await
+        .unwrap();
+    let r = Rule {
+        version: 1,
+        id: "rule".into(),
+        revision: 0,
+        name: "Synthetic arrivals".into(),
+        enabled: true,
+        position: 0,
+        all: vec![Condition::Account("acct-1".into())],
+        any: vec![],
+        except: vec![],
+        actions: vec![RuleAction::Star, RuleAction::Tag("new".into())],
+        stop_processing: false,
+    };
+    service.save_rule(r).await.unwrap();
+    let mut initial = sync_result(vec![mock_parsed_message(1)]);
+    initial.server_uidnext = 2;
+    initial.new_last_uid = 1;
+    *remote.sync_result.lock().unwrap() = Some(initial);
+    worker::sync_account_once(&service, &config("acct-1"))
+        .await
+        .unwrap();
+    let old = store
+        .find_message_id("acct-1", "INBOX", 1)
+        .unwrap()
+        .unwrap();
+    assert!(!store.get_message_by_id(&old).unwrap().unwrap().is_starred);
+    let mut arrival = sync_result(vec![mock_parsed_message(2)]);
+    arrival.server_uidnext = 3;
+    *remote.sync_result.lock().unwrap() = Some(arrival);
+    worker::sync_account_once(&service, &config("acct-1"))
+        .await
+        .unwrap();
+    let id = store
+        .find_message_id("acct-1", "INBOX", 2)
+        .unwrap()
+        .unwrap();
+    let m = store.get_message_by_id(&id).unwrap().unwrap();
+    assert!(m.is_starred);
+    assert_eq!(m.tags, ["new"]);
+    let outbox = store.pending_mutations().unwrap();
+    assert_eq!(outbox.len(), 1);
+    let mutation: RemoteMutation = serde_json::from_str(&outbox[0].1).unwrap();
+    assert_eq!(mutation.account_id, "acct-1");
+    assert_eq!(mutation.folder, "INBOX");
+    assert_eq!(mutation.uid, 2);
+    assert_eq!(mutation.uidvalidity, 7);
+    assert_eq!(mutation.action, TriageActionDto::Star);
+    let draft = service
+        .rule_draft(id.clone(), "draft".into())
+        .await
+        .unwrap();
+    assert!(!draft.enabled);
+    assert_eq!(draft.revision, 0);
+    assert!(draft
+        .all
+        .contains(&Condition::Sender("sender@example.org".into())));
+    let simulated = service
+        .simulate_rules(vec![id.clone()], None)
+        .await
+        .unwrap();
+    assert_eq!(simulated[0].1.actions.len(), 2);
+    assert_eq!(store.pending_mutations().unwrap().len(), 1);
+    worker::sync_account_once(&service, &config("acct-1"))
+        .await
+        .unwrap();
+    service.process_rules().await.unwrap();
+    assert_eq!(store.pending_mutations().unwrap().len(), 1);
+    assert_eq!(remote.attachments.load(Ordering::SeqCst), 0);
+    assert_eq!(remote.unsubscribes.load(Ordering::SeqCst), 0);
+    assert!(remote.mutations.lock().unwrap().is_empty());
 }

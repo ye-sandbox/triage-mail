@@ -237,6 +237,14 @@ pub async fn sync_account_once(
             let _guard = service.mutation_gate.lock().await;
             service
                 .blocking(move |s| {
+                    s.store
+                        .establish_rule_baseline(
+                            &state.account_id,
+                            &state.folder_name,
+                            state.uidvalidity,
+                            result.server_uidnext,
+                        )
+                        .map_err(storage_error)?;
                     let records = result
                         .new_messages
                         .into_iter()
@@ -261,7 +269,7 @@ pub async fn sync_account_once(
                         .store
                         .commit_sync_batch(&records, &flags, &state, result.uidvalidity_reset)
                         .map_err(storage_error)?;
-                    for record in &records {
+                    for (index, record) in records.iter().enumerate() {
                         let category = record
                             .category_badge
                             .as_deref()
@@ -281,6 +289,15 @@ pub async fn sync_account_once(
                         events
                             .on_message_triaged(&record.id, &triage)
                             .map_err(|_| IpcError::Internal)?;
+                        // INVARIANT: One post-triage queue drain per committed batch;
+                        // failures remain durable and retry independently of ingestion.
+                        if index + 1 == records.len()
+                            && crate::rules::RuleObserver(&s)
+                                .on_message_triaged(&record.id, &triage)
+                                .is_err()
+                        {
+                            status(&s, &state.account_id, SyncState::MutationFailed);
+                        }
                     }
                     // Index only with an explicitly configured provider; missing models never trigger downloads.
                     if let Some(provider) = &s.embedding {
@@ -404,6 +421,9 @@ fn message_record(
 
 async fn outbox_loop(service: Arc<DesktopService>) {
     loop {
+        if service.process_rules().await.is_err() {
+            status(&service, "", SyncState::MutationFailed);
+        }
         let _ = process_outbox_once(&service).await;
         let _ = service.reconcile_snoozes().await;
         tokio::time::sleep(Duration::from_secs(5)).await;

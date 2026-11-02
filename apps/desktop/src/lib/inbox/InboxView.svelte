@@ -24,6 +24,7 @@
 		connected,
 		readerTransport,
 		openSettings,
+		createRule,
 		settingsOpen = false,
 		accounts = [],
 		avatarTransport,
@@ -33,6 +34,7 @@
 		connected: boolean;
 		readerTransport?: ReaderTransport;
 		openSettings?: () => void;
+		createRule?: (id: string) => void;
 		settingsOpen?: boolean;
 		accounts?: AccountConfig[];
 		avatarTransport?: AvatarTransport;
@@ -184,6 +186,7 @@
 			experimentalSemanticSearch={inbox.experimentalSemanticSearch}
 		/>
 		<MessageActions
+			{createRule}
 			{selected}
 			disabled={!connected || inbox.mutating || inbox.loading}
 			{openPalette}

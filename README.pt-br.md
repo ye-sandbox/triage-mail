@@ -212,6 +212,24 @@ pnpm --filter desktop build
 cargo build --release --package triage-mail-desktop
 ```
 
+### Regras locais e filtros automáticos
+
+Abra **Configurações → Regras** para criar, editar, desativar ou reordenar filtros locais.
+A ação **Criar regra da mensagem** preenche conta e remetente em um rascunho não salvo.
+Escolha condições de todas/qualquer/exceto e ações de etiqueta, estrela ou arquivamento;
+ative a regra antes de salvar. O texto ignora maiúsculas; domínios são exatos, salvo quando
+subdomínios são selecionados. Valores usam centavos inteiros de BRL e datas `YYYY-MM-DD`.
+
+As regras seguem a ordem exibida e processam novas mensagens após a referência inicial
+de histórico de cada pasta. Uma regra correspondente com parada ignora as seguintes;
+ações repetidas são unificadas. Importações iniciais e reconstruções por UIDVALIDITY não
+acionam regras. Salvar ou ativar uma regra nunca altera mensagens antigas. Selecione uma
+mensagem na caixa de entrada e use **Simular mensagens selecionadas** para conferir
+correspondências e ações sem alterar mensagens. Dados ausentes no cache não satisfazem
+condições positivas, anexos binários nunca são baixados e uma correspondência de remetente
+não autentica identidade. O processamento exige o aplicativo em execução. Notificações
+e webhooks permanecem como trabalho futuro separado.
+
 ## Development
 
 ### Estrutura do Repositório
