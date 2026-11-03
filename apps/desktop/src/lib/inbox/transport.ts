@@ -1,3 +1,4 @@
+import { nativeCategories } from '../categories/transport';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import type { FolderDto, InboxTransport, MessageRowDto, SyncProgressEvent } from './types';
 
@@ -5,6 +6,7 @@ export function nativeAvailable() {
 	return isTauri();
 }
 export const nativeTransport: InboxTransport = {
+	categories: nativeCategories,
 	savedViews: {
 		list: () => invoke('cmd_list_saved_views'),
 		save: (view) => invoke('cmd_save_saved_view', { view }),

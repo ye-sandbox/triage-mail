@@ -196,6 +196,16 @@ impl SqliteMailStore {
         )
         .map_err(|e| StorageError::Query(format!("failed to insert message: {e}")))?;
 
+        // INVARIANT: Upsert conflicts retain the stored canonical ID, not a proposed replacement ID.
+        let canonical: String = tx
+            .query_row(
+                "SELECT id FROM messages WHERE account_id=?1 AND folder=?2 AND uid=?3",
+                rusqlite::params![message.account_id, message.folder, message.uid],
+                |r| r.get(0),
+            )
+            .map_err(|_| StorageError::Query("category identity unavailable".into()))?;
+        crate::categories::refresh(tx, &canonical)?;
+
         for att in &message.attachments {
             tx.execute(
                 "INSERT INTO attachments (

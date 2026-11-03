@@ -67,6 +67,7 @@ pub enum TriageCategory {
     Shopping,
     Newsletter,
     Personal,
+    Notifications,
 }
 
 /// Structured badges extracted deterministically in Tier 1 (zero LLM cost).

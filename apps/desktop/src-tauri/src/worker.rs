@@ -42,7 +42,10 @@ impl WorkerSupervisor {
             let service = self.service.clone();
             let mut stop = self.shutdown.subscribe();
             *outbox = Some(tokio::spawn(async move {
-                tokio::select! { _ = outbox_loop(service) => {}, _ = stop.changed() => {} }
+                let work = async {
+                    tokio::join!(outbox_loop(service.clone()), category_loop(service));
+                };
+                tokio::select! { _ = work => {}, _ = stop.changed() => {} }
             }));
         }
         Ok(())
@@ -78,7 +81,7 @@ impl Drop for WorkerSupervisor {
     }
 }
 
-fn status(service: &DesktopService, account: &str, state: SyncState) {
+pub(crate) fn status(service: &DesktopService, account: &str, state: SyncState) {
     service.events.publish(SyncProgressEvent {
         account_id: account.into(),
         state,
@@ -279,6 +282,7 @@ pub async fn sync_account_once(
                                 "Shopping" => Some(TriageCategory::Shopping),
                                 "Newsletter" => Some(TriageCategory::Newsletter),
                                 "Personal" => Some(TriageCategory::Personal),
+                                "Notifications" => Some(TriageCategory::Notifications),
                                 _ => None,
                             })
                             .unwrap_or(TriageCategory::Personal);
@@ -425,6 +429,21 @@ fn message_record(
         snooze_until_epoch_ms: None,
         provider_message_id: message.provider_message_id,
     })
+}
+
+async fn category_loop(service: Arc<DesktopService>) {
+    loop {
+        // INVARIANT: Yield between local batches; backfill cannot stall alert/outbox scheduling.
+        let delay = match service.backfill_categories().await {
+            Ok(300) => Duration::from_millis(25),
+            Ok(_) => Duration::from_secs(5),
+            Err(_) => {
+                status(&service, "", SyncState::MutationFailed);
+                Duration::from_secs(5)
+            }
+        };
+        tokio::time::sleep(delay).await;
+    }
 }
 
 async fn outbox_loop(service: Arc<DesktopService>) {

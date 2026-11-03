@@ -1,0 +1,7 @@
+mode,workload,eligible,samples,p50_ms,p95_ms,max_ms
+Lexical,category,25001,30,1.829,2.120,2.595
+Lexical,category+starred,32,30,17.469,18.250,18.457
+Semantic,category,25001,30,259.338,262.892,264.127
+Semantic,category+starred,32,30,8.468,9.237,9.246
+Hybrid,category,25001,30,423.723,451.471,462.031
+Hybrid,category+starred,32,30,22.281,25.273,26.952

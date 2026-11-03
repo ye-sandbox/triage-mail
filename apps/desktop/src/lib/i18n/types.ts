@@ -190,6 +190,7 @@ export interface Translations {
 			rules: string;
 			alerts: string;
 			reminders: string;
+			categories: string;
 			general: string;
 			accounts: string;
 			search: string;

@@ -13,6 +13,8 @@ use triage_ai::{
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ViewFilters {
+    #[serde(default)]
+    pub category: Option<triage_ai::TriageCategory>,
     pub is_read: Option<bool>,
     pub is_starred: Option<bool>,
     pub has_attachments: Option<bool>,
@@ -220,65 +222,82 @@ impl SqliteMailStore {
         let (limit, offset) = page;
         self.transaction(|tx| {
             let view = read(tx, id, revision)?;
-            let query = HybridQuery {
-                query_text: view.query.clone(),
-                mode: view.mode,
-                query_embedding_int8: embedding,
-                account_filter: None,
-                limit,
-                offset,
-            };
-            query.validate()?;
-            let mut value = serde_json::to_value(&view).map_err(error)?;
-            let mut eligibility = ELIGIBILITY.to_string();
-            if let Some(crate::MailboxScope::AccountView {
-                account_id,
-                view: mailbox,
-            }) = &view.scope
-            {
-                value["resolved_folder"] =
-                    crate::scoped_search::validate_scope(tx, account_id, mailbox)?.into();
-                eligibility.push_str(
-                    " AND m.account_id=json_extract(?2,'$.scope.AccountView.account_id') AND (",
-                );
-                eligibility.push_str(
-                    &crate::scoped_search::eligibility(mailbox)
-                        .replace("?2", "json_extract(?2,'$.resolved_folder')"),
-                );
-                eligibility.push(')');
-            }
-            let json = serde_json::to_string(&value).map_err(error)?;
-            let filters = view.filters.clone();
-            // INVARIANT: The connection mutex encloses registration, all branches and hydration.
-            // Sender parsing and typed extraction checks precede ranking, never loaded-page filtering.
-            tx.create_scalar_function(
-                "saved_facts_match",
-                3,
-                FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
-                move |ctx| {
-                    let sender = ctx.get::<String>(0)?;
-                    let badges = ctx.get::<String>(1)?;
-                    let today = ctx.get::<String>(2)?;
-                    Ok(facts_match(&filters, &sender, &badges, &today))
-                },
-            )
-            .map_err(error)?;
-            let search = ScopedSearch {
-                conn: tx,
-                account_id: "",
-                folder: &json,
-                eligibility: &eligibility,
-                messages: "messages m",
-                now,
-            };
-            let result = search
-                .execute(&query)
-                .and_then(|ids| crate::search::load_summaries(tx, &ids));
-            // INVARIANT: Private filter snapshots do not outlive this search in a SQL closure.
-            tx.remove_function("saved_facts_match", 3).map_err(error)?;
-            result
+            execute_view(tx, &view, embedding, (limit, offset), now)
         })
     }
+}
+
+pub(crate) fn execute_view(
+    tx: &Connection,
+    view: &SavedView,
+    embedding: Option<Vec<i8>>,
+    page: (usize, usize),
+    now: i64,
+) -> Result<Vec<MessageRowSummary>, StorageError> {
+    validate_accounts(tx, view)?;
+    let (limit, offset) = page;
+    let query = HybridQuery {
+        query_text: view.query.clone(),
+        mode: view.mode,
+        query_embedding_int8: embedding,
+        account_filter: None,
+        limit,
+        offset,
+    };
+    query.validate()?;
+    let mut value = serde_json::to_value(view).map_err(error)?;
+    let mut eligibility = ELIGIBILITY.to_string();
+    if view.filters.category.is_some() {
+        eligibility.push_str(&format!(
+            " AND {}=json_extract(?2,'$.filters.category')",
+            crate::search::CATEGORY_EFFECTIVE
+        ));
+    }
+    if let Some(crate::MailboxScope::AccountView {
+        account_id,
+        view: mailbox,
+    }) = &view.scope
+    {
+        value["resolved_folder"] =
+            crate::scoped_search::validate_scope(tx, account_id, mailbox)?.into();
+        eligibility
+            .push_str(" AND m.account_id=json_extract(?2,'$.scope.AccountView.account_id') AND (");
+        eligibility.push_str(
+            &crate::scoped_search::eligibility(mailbox)
+                .replace("?2", "json_extract(?2,'$.resolved_folder')"),
+        );
+        eligibility.push(')');
+    }
+    let json = serde_json::to_string(&value).map_err(error)?;
+    let filters = view.filters.clone();
+    // INVARIANT: The connection mutex encloses registration, all branches and hydration.
+    // Sender parsing and typed extraction checks precede ranking, never loaded-page filtering.
+    tx.create_scalar_function(
+        "saved_facts_match",
+        3,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        move |ctx| {
+            let sender = ctx.get::<String>(0)?;
+            let badges = ctx.get::<String>(1)?;
+            let today = ctx.get::<String>(2)?;
+            Ok(facts_match(&filters, &sender, &badges, &today))
+        },
+    )
+    .map_err(error)?;
+    let search = ScopedSearch {
+        conn: tx,
+        account_id: "",
+        folder: &json,
+        eligibility: &eligibility,
+        messages: "messages m",
+        now,
+    };
+    let result = search
+        .execute(&query)
+        .and_then(|ids| crate::search::load_summaries(tx, &ids));
+    // INVARIANT: Private filter snapshots do not outlive this search in a SQL closure.
+    tx.remove_function("saved_facts_match", 3).map_err(error)?;
+    result
 }
 
 const ELIGIBILITY: &str = "

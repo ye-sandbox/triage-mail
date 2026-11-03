@@ -1,4 +1,6 @@
 <script lang="ts">
+	import CategoryViews from '../categories/CategoryViews.svelte';
+	import CategoryActions from '../categories/CategoryActions.svelte';
 	import SavedViews from '../saved-views/SavedViews.svelte';
 	import { tick, untrack } from 'svelte';
 	import type { InboxController } from './controller.svelte';
@@ -175,7 +177,7 @@
 	>
 		<div class="h-full w-56">
 			<Sidebar
-				savedActive={!!inbox.savedView}
+				savedActive={!!inbox.savedView || !!inbox.category}
 				status={inbox.syncStatus}
 				{openSettings}
 				{openDueDates}
@@ -186,7 +188,8 @@
 				select={selectScope}
 				{avatarTransport}
 				{photoRevision}
-				dismiss={() => (sidebarOpen = false)}><SavedViews {inbox} {accounts} {connected} /></Sidebar
+				dismiss={() => (sidebarOpen = false)}
+				><CategoryViews {inbox} {connected} /><SavedViews {inbox} {accounts} {connected} /></Sidebar
 			>
 		</div>
 	</div>
@@ -242,6 +245,11 @@
 						folder={inbox.folderLabels[selected.id] || selected.folder}
 						tags={inbox.localTags[selected.id] ?? []}
 					/>{/if}
+				{#if selected}{#key selected.id}<CategoryActions
+							{inbox}
+							message={selected}
+							disabled={!connected || settingsOpen}
+						/>{/key}{/if}
 				<SelectionOverview message={selected} transport={readerTransport} />
 			</div>
 		</div>

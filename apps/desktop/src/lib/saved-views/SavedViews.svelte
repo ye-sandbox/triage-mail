@@ -67,6 +67,7 @@
 				view.filters.upcoming_days = 30;
 			}
 		}
+		if (starter === 'current' && inbox.category) view.filters.category = inbox.category;
 		edit(view);
 	}
 	function close() {

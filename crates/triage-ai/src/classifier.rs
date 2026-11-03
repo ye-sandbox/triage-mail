@@ -10,7 +10,7 @@
 use crate::{TriageBadge, TriageCategory};
 
 /// Determines the high-level category of an email based on badges, subject, sender, and text.
-pub fn classify_message(
+fn classify_inner(
     subject: &str,
     sender: &str,
     body: &str,
@@ -112,13 +112,201 @@ pub fn classify_message(
         return TriageCategory::Newsletter;
     }
 
+    // INVARIANT: Notifications follow stronger security/finance/purchase/newsletter signals.
+    if [
+        "notification",
+        "notificação",
+        "notificacao",
+        "activity update",
+        "atualização de atividade",
+        "commented on",
+        "comentou",
+        "service update",
+        "atualização do serviço",
+    ]
+    .iter()
+    .any(|signal| subj_lower.contains(signal))
+        || sender_lower.split('@').next().is_some_and(|local| {
+            matches!(
+                local,
+                "noreply" | "no-reply" | "notifications" | "notificacoes"
+            )
+        })
+    {
+        return TriageCategory::Notifications;
+    }
+
     // 5. Default: Personal
     TriageCategory::Personal
+}
+
+/// Versioned, explainable local classification. No confidence or sender authentication is inferred.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Classification {
+    pub category: TriageCategory,
+    pub reason: CategoryReason,
+    pub version: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum CategoryReason {
+    SecuritySignal,
+    FinancialSignal,
+    PurchaseSignal,
+    NewsletterSignal,
+    NotificationSignal,
+    Fallback,
+}
+
+pub const CLASSIFIER_VERSION: u32 = 1;
+
+fn bounded(value: &str, limit: usize) -> &str {
+    let mut end = value.len().min(limit);
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    &value[..end]
+}
+
+pub fn classify_with_reason(
+    subject: &str,
+    sender: &str,
+    body: &str,
+    badges: &[TriageBadge],
+    one_click: bool,
+) -> Classification {
+    // INVARIANT: Background classification has fixed input bounds and never fetches missing facts.
+    let sender = crate::rules::sender_address(bounded(sender, 4096)).unwrap_or_default();
+    let category = classify_inner(
+        bounded(subject, 8192),
+        &sender,
+        bounded(body, 65536),
+        &badges[..badges.len().min(64)],
+        one_click,
+    );
+    let reason = match category {
+        TriageCategory::Security => CategoryReason::SecuritySignal,
+        TriageCategory::Financial => CategoryReason::FinancialSignal,
+        TriageCategory::Shopping => CategoryReason::PurchaseSignal,
+        TriageCategory::Newsletter => CategoryReason::NewsletterSignal,
+        TriageCategory::Notifications => CategoryReason::NotificationSignal,
+        TriageCategory::Personal => CategoryReason::Fallback,
+    };
+    Classification {
+        category,
+        reason,
+        version: CLASSIFIER_VERSION,
+    }
+}
+
+pub fn classify_message(
+    subject: &str,
+    sender: &str,
+    body: &str,
+    badges: &[TriageBadge],
+    one_click: bool,
+) -> TriageCategory {
+    classify_with_reason(subject, sender, body, badges, one_click).category
+}
+
+impl TriageCategory {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Security => "Security",
+            Self::Financial => "Financial",
+            Self::Shopping => "Shopping",
+            Self::Newsletter => "Newsletter",
+            Self::Personal => "Personal",
+            Self::Notifications => "Notifications",
+        }
+    }
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "Security" => Some(Self::Security),
+            "Financial" => Some(Self::Financial),
+            "Shopping" => Some(Self::Shopping),
+            "Newsletter" => Some(Self::Newsletter),
+            "Personal" => Some(Self::Personal),
+            "Notifications" => Some(Self::Notifications),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notification_precedence_and_parsed_senders() {
+        for (subject, sender, body, one_click, expected) in [
+            (
+                "Notification",
+                "noreply@example.org",
+                "",
+                false,
+                TriageCategory::Notifications,
+            ),
+            (
+                "Notificação de atividade",
+                "sender@example.org",
+                "",
+                false,
+                TriageCategory::Notifications,
+            ),
+            (
+                "Password reset notification",
+                "noreply@example.org",
+                "",
+                true,
+                TriageCategory::Security,
+            ),
+            (
+                "Invoice notification",
+                "noreply@example.org",
+                "",
+                true,
+                TriageCategory::Financial,
+            ),
+            (
+                "Order confirmed notification",
+                "noreply@example.org",
+                "",
+                true,
+                TriageCategory::Shopping,
+            ),
+            (
+                "Notification",
+                "noreply@example.org",
+                "",
+                true,
+                TriageCategory::Newsletter,
+            ),
+            (
+                "Hello",
+                "Marketing News <friend@example.org>",
+                "Hello",
+                false,
+                TriageCategory::Personal,
+            ),
+            (
+                "Hello",
+                "broken sender",
+                "",
+                false,
+                TriageCategory::Personal,
+            ),
+        ] {
+            let result = classify_with_reason(subject, sender, body, &[], one_click);
+            assert_eq!(result.category, expected);
+            assert_eq!(result.version, CLASSIFIER_VERSION);
+        }
+        let long = format!("{}invoice", "é".repeat(8192));
+        assert_eq!(
+            classify_message(&long, "sender@example.org", "", &[], false),
+            TriageCategory::Personal
+        );
+    }
 
     #[test]
     fn classifies_otp_badge_as_security() {

@@ -1,6 +1,7 @@
 import type { MailboxScope, MessageRowDto, SearchMode } from '../inbox/types';
 export type ExtractionKind = 'Boleto' | 'Invoice' | 'Pix' | 'Tracking' | 'Otp' | 'Unsubscribe';
 export type ViewFilters = {
+	category?: import('../categories/types').Category | null;
 	is_read: boolean | null;
 	is_starred: boolean | null;
 	has_attachments: boolean | null;

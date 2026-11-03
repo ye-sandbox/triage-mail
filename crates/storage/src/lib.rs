@@ -13,6 +13,7 @@ use vault::VaultError;
 
 pub mod alerts;
 pub mod avatars;
+pub mod categories;
 pub mod connection;
 pub mod desktop;
 pub mod migrations;

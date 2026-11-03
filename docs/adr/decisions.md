@@ -363,3 +363,34 @@ type: architectural-decision-log
   performance guarantees. Preserve prior performance deviations/targets. The editor keeps
   a stable draft object through deferred input callbacks while parent teardown clears its
   reference; late read/save responses cannot restore disposed UI or another inbox scope.
+
+### [2026-11-02] ADR-017: Layered Local Categories and Durable Corrections
+
+- **Context:** [03.8] needs local category views and correctable deterministic estimates
+  without changes to canonical IMAP folders, automation eligibility or model consent.
+- **Decision:** Preserve existing category wire values and add Notifications. Pure bounded
+  EN/PT-BR classification in triage-ai exposes fixed reason codes and a version. Automatic
+  priority is Security > Financial > Shopping > Newsletter > Notifications > Personal.
+  Personal is a fallback, not proof of human correspondence. Exact parsed sender matching
+  reuses the shared rule helper; display names never become sender-override identities.
+- **Persistence:** Append-only migration v7 stores automatic metadata separately from
+  nullable revisioned message corrections and account/exact-sender overrides. Effective
+  priority is message > sender > automatic. Null resets retain revisions against stale
+  save/reset ABA. Corrections never suppress extraction badges. Provider ID, then valid
+  Message-ID plus received timestamp, supplies an account-bound hashed correction identity;
+  without either, record-only corrections are deleted with that cached record. Identity
+  freezes on first classification to survive canonical MOVE. Account deletion clears all.
+- **Execution:** Sync insertion/upsert refreshes automatic facts in the ingestion transaction.
+  SQL fact updates invalidate the classifier version. A bounded resumable runtime backfill
+  classifies cached history without fetching missing data or creating rule/reminder/alert
+  work. Incomplete history temporarily retains its legacy automatic badge until processed;
+  sender overrides apply once normalized metadata is available. No replay is implied.
+  A shared SQL effective-category expression precedes all category ranking windows and
+  hydrates final rows. Category search is additive; saved views gain a default-null typed
+  category predicate. Existing mailbox/search traits, DTO shapes and exact ranking remain.
+- **Consequences:** Categories are estimates, not authentication or payment status. Re-ingestion
+  with a changed/missing reliable identity cannot restore a previous correction. Sender
+  overrides affect existing/future cached mail only within their account. No automatic
+  learning, model downloads, endpoint calls, folder changes or artificial account limits.
+  Settings override pages are bounded to 200. Existing performance deviations remain;
+  synthetic category measurements do not establish native first-frame or 60fps behavior.

@@ -194,6 +194,65 @@ pub async fn cmd_local_alert_available(state: State<'_, RuntimeState>) -> Result
 }
 
 #[tauri::command]
+pub async fn cmd_category_metadata(
+    state: State<'_, RuntimeState>,
+    message_id: String,
+) -> Result<storage::categories::CategoryMetadata, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .category_metadata(message_id)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_correct_category(
+    state: State<'_, RuntimeState>,
+    message_id: String,
+    revision: u32,
+    category: Option<triage_ai::TriageCategory>,
+) -> Result<storage::categories::CategoryMetadata, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .correct_category(message_id, revision, category)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_list_category_overrides(
+    state: State<'_, RuntimeState>,
+    offset: Option<usize>,
+) -> Result<Vec<storage::categories::SenderOverride>, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .list_category_overrides(offset.unwrap_or(0))
+        .await
+}
+#[tauri::command]
+pub async fn cmd_save_category_override(
+    state: State<'_, RuntimeState>,
+    value: storage::categories::SenderOverride,
+) -> Result<storage::categories::SenderOverride, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .save_category_override(value)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_search_category(
+    state: State<'_, RuntimeState>,
+    query: crate::SearchQueryDto,
+    category: triage_ai::TriageCategory,
+) -> Result<Vec<MessageRowDto>, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .search_category(query, category)
+        .await
+}
+
+#[tauri::command]
 pub async fn cmd_list_saved_views(
     state: State<'_, RuntimeState>,
 ) -> Result<Vec<storage::saved_views::SavedView>, IpcError> {
@@ -637,6 +696,11 @@ pub fn run() {
             cmd_test_alert,
             cmd_replay_alert,
             cmd_local_alert_available,
+            cmd_category_metadata,
+            cmd_correct_category,
+            cmd_list_category_overrides,
+            cmd_save_category_override,
+            cmd_search_category,
             cmd_list_saved_views,
             cmd_save_saved_view,
             cmd_delete_saved_view,
@@ -762,6 +826,11 @@ mod tests {
                 cmd_test_alert,
                 cmd_replay_alert,
                 cmd_local_alert_available,
+                cmd_category_metadata,
+                cmd_correct_category,
+                cmd_list_category_overrides,
+                cmd_save_category_override,
+                cmd_search_category,
                 cmd_list_saved_views,
                 cmd_save_saved_view,
                 cmd_delete_saved_view,
@@ -800,6 +869,31 @@ mod tests {
         let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()
             .unwrap();
+        assert_eq!(
+            invoke(&window, "cmd_list_category_overrides", json!({"offset":0})).unwrap(),
+            json!([])
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_category_metadata",
+                json!({"messageId":"missing"})
+            )
+            .unwrap_err(),
+            json!("InvalidRequest")
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_correct_category",
+                json!({"messageId":"missing","revision":0,"category":"Personal"})
+            )
+            .unwrap_err(),
+            json!("InvalidRequest")
+        );
+        assert_eq!(invoke(&window,"cmd_search_category",json!({"query":{"query":"","mode":"Lexical","limit":200,"offset":0},"category":"Notifications"})).unwrap(),json!([]));
+        assert_eq!(invoke(&window,"cmd_search_category",json!({"query":{"query":"","mode":"Semantic","limit":200,"offset":0},"category":"Notifications"})).unwrap_err(),json!("InvalidRequest"));
+        assert_eq!(invoke(&window,"cmd_save_category_override",json!({"value":{"account_id":"missing","sender":"sender@example.org","revision":0,"category":"Financial"}})).unwrap_err(),json!("InvalidRequest"));
         let view = storage::saved_views::SavedView {
             version: 1,
             id: "saved".into(),
