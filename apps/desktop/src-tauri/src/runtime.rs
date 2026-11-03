@@ -234,6 +234,62 @@ pub async fn cmd_search_saved_view(
 }
 
 #[tauri::command]
+pub async fn cmd_list_due_date_items(
+    state: State<'_, RuntimeState>,
+    account_id: Option<String>,
+) -> Result<Vec<crate::DueDateItemDto>, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .list_due_date_items(account_id)
+        .await
+}
+
+#[tauri::command]
+pub async fn cmd_dismiss_due_date_item(
+    state: State<'_, RuntimeState>,
+    message_id: String,
+) -> Result<(), IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .dismiss_due_date_item(message_id)
+        .await
+}
+
+#[tauri::command]
+pub async fn cmd_list_reminder_configs(
+    state: State<'_, RuntimeState>,
+) -> Result<Vec<crate::ScheduledReminderConfigDto>, IpcError> {
+    state.initialize(None).await?.list_reminder_configs().await
+}
+
+#[tauri::command]
+pub async fn cmd_save_reminder_config(
+    state: State<'_, RuntimeState>,
+    config: crate::ScheduledReminderConfigDto,
+) -> Result<crate::ScheduledReminderConfigDto, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .save_reminder_config(config)
+        .await
+}
+
+#[tauri::command]
+pub async fn cmd_delete_reminder_config(
+    state: State<'_, RuntimeState>,
+    id: String,
+    revision: u32,
+) -> Result<(), IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .delete_reminder_config(id, revision)
+        .await
+}
+
+#[tauri::command]
 pub async fn cmd_list_rules(
     state: State<'_, RuntimeState>,
 ) -> Result<Vec<triage_ai::rules::Rule>, IpcError> {
@@ -585,6 +641,11 @@ pub fn run() {
             cmd_save_saved_view,
             cmd_delete_saved_view,
             cmd_search_saved_view,
+            cmd_list_due_date_items,
+            cmd_dismiss_due_date_item,
+            cmd_list_reminder_configs,
+            cmd_save_reminder_config,
+            cmd_delete_reminder_config,
             cmd_list_rules,
             cmd_save_rule,
             cmd_delete_rule,
@@ -705,6 +766,11 @@ mod tests {
                 cmd_save_saved_view,
                 cmd_delete_saved_view,
                 cmd_search_saved_view,
+                cmd_list_due_date_items,
+                cmd_dismiss_due_date_item,
+                cmd_list_reminder_configs,
+                cmd_save_reminder_config,
+                cmd_delete_reminder_config,
                 cmd_list_rules,
                 cmd_save_rule,
                 cmd_delete_rule,

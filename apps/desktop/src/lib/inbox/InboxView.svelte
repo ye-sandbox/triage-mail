@@ -25,6 +25,8 @@
 		connected,
 		readerTransport,
 		openSettings,
+		openDueDates,
+		dueCount = 0,
 		createRule,
 		settingsOpen = false,
 		accounts = [],
@@ -35,6 +37,8 @@
 		connected: boolean;
 		readerTransport?: ReaderTransport;
 		openSettings?: () => void;
+		openDueDates?: () => void;
+		dueCount?: number;
 		createRule?: (id: string) => void;
 		settingsOpen?: boolean;
 		accounts?: AccountConfig[];
@@ -174,6 +178,8 @@
 				savedActive={!!inbox.savedView}
 				status={inbox.syncStatus}
 				{openSettings}
+				{openDueDates}
+				{dueCount}
 				{accounts}
 				{mailboxes}
 				scope={inbox.scope}

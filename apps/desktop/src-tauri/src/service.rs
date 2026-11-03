@@ -492,6 +492,11 @@ impl DesktopService {
         self.store
             .apply_local_mutations(&changes)
             .map_err(storage_error)?;
+        if mutation.action == TriageActionDto::MarkRead {
+            self.store
+                .cancel_reminders_for_read_messages(&mutation.message_ids)
+                .map_err(storage_error)?;
+        }
         for account in accounts {
             self.events.publish(SyncProgressEvent {
                 account_id: account,

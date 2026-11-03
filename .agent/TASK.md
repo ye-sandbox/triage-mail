@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[04.11] Due-Date Dashboard & Scheduled Reminders — READY FOR PLANNING
+[03.8] Local Automatic Categories — READY FOR PLANNING
 
 ---
 
@@ -624,7 +624,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [04.11]: Due-Date Dashboard & Scheduled Reminders
 
-- **Status:** READY FOR PLANNING
+- **Status:** DONE
 - **Priority:** 5
 - **Depends On:** [03.5], [03.6]; [03.7] for Telegram/Discord destinations.
 - **Systems Involved:** Existing deterministic extractors, `crates/storage`, runtime
@@ -637,9 +637,61 @@ All tasks inherit the repository DoD when implemented.
   and explicit dismissal. Extraction never implies a bill was paid. Missed-reminder
   behavior is visible; no always-on delivery claim when all runners are stopped.
 
+#### Completion (2026-11-02)
+
+- **Commit:** `pending` (`feat(reminders): add due-date dashboard and scheduled reminders`).
+- **Validation:** `cargo check --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` passed with 0 warnings. `cargo fmt --all -- --check` passed. Rust core tests in `vault`, `mail-engine`, `triage-ai`, and `storage` (including new deterministic civil date math, migration v6 idempotency, duplicate suppression, unread cancellation, and explicit dismissal) passed 100% (237+ tests). Frontend checks: `pnpm --filter desktop check` (0 errors, 0 warnings), `pnpm --filter desktop test` (26 test files, 159 tests passed), `pnpm --filter desktop build` (SPA production build passed). Zero legacy Svelte syntax (`! grep -rn "export let" apps/desktop/src/`). `git diff --check` passed with 0 errors.
+- **Contracts:** Schema migration v6 added `reminder_configs`, `reminder_config_deleted_ids`, `reminder_jobs`, `due_date_dismissals`. Additive Tauri IPC commands: `cmd_list_due_date_items`, `cmd_dismiss_due_date_item`, `cmd_list_reminder_configs`, `cmd_save_reminder_config`, `cmd_delete_reminder_config`. Pure Gregorian civil date calculations using Howard Hinnant's algorithm. Non-payment disclaimer invariant enforced in both EN and PT-BR.
+- **Documentation:** Synchronized `README.md`, `README.pt-br.md`, and `.agent/NOTES.md`.
+- **Next:** `[03.8] Local Automatic Categories` promoted to `READY FOR PLANNING`.
+
+#### Proposed Implementation Plan (2026-11-02)
+
+1. `[04.11.1]` **Pure Domain Models & Civil Date Math (`crates/triage-ai` / `crates/storage`):**
+   - Define typed models for `DueDateItem` (`message_id`, `account_id`, `subject`, `sender`, `received_at_epoch_ms`, `is_read`, `digitable_line`, `amount_cents`, `due_date_iso`, `is_dismissed`).
+   - Define status categorization (`Overdue`, `DueToday`, `Upcoming`, `Dismissed`) relative to calendar reference dates.
+   - Define typed `ScheduledReminderConfig` (`DueDate` with `days_before`, `target_hour`, `min_amount_cents`; `UnreadInterval` with `interval_hours`, `min_amount_cents`; `destination_ids`, `account_id`).
+   - Pure civil date utilities with deterministic calendar arithmetic: leap years, month boundaries, timezone offsets, and target epoch calculation.
+   - Deterministic clock unit tests covering time zones, date-only deadlines, positive/negative UTC offsets, and leap years.
+
+2. `[04.11.2]` **Encrypted Persistence & Migration v6 (`crates/storage`):**
+   - Add append-only migration v6 for `reminder_configs`, `reminder_config_deleted_ids`, `reminder_jobs`, and `due_date_dismissals`.
+   - Unique index on `(message_id, trigger_type, due_epoch_ms)` for guaranteed duplicate suppression.
+   - CRUD for `reminder_configs` with optimistic revision checking.
+   - Due-date queries: `list_due_date_items` returning extracted boletos with amounts and due dates, left-joined with dismissals, ordered by due date ascending.
+   - Explicit dismissal: `dismiss_due_date_item` marking pending reminder jobs as `Dismissed` and persisting dismissal.
+   - Read-before-deadline cancellation: `cancel_reminders_for_read_messages` updating pending unread reminder jobs to `Canceled`.
+
+3. `[04.11.3]` **Runtime Scheduler & Alert Dispatching (`apps/desktop/src-tauri`):**
+   - Integrate reminder processing into `outbox_loop`: `service.process_reminders()`.
+   - Evaluate due reminder jobs: verify unread/dismissed status; enqueue deliveries into `alert_jobs` targeting the configured `destination_ids` (reusing existing vault, retry, rate limit, and notification/webhook transports).
+   - Visible missed-reminder behavior: annotate delayed reminders (> 15 min past due from sleeping/stopped runners) with a clear delayed notification note.
+   - Sync & triage hooks: schedule reminder jobs upon message ingestion for matching configs; cancel unread reminders immediately upon `MarkRead` triage mutations.
+
+4. `[04.11.4]` **Additive IPC Commands & DTOs (`apps/desktop/src-tauri`):**
+   - Add `cmd_list_due_date_items(accountId?)`, `cmd_dismiss_due_date_item(messageId)`, `cmd_list_reminder_configs()`, `cmd_save_reminder_config(config)`, `cmd_delete_reminder_config(id, revision)`.
+   - Register commands in `tauri::generate_handler!` in both runtime and test builder.
+   - Ensure zero credential leakage and bounded safe error variants.
+
+5. `[04.11.5]` **Due-Date Dashboard & Reminders UI (`apps/desktop`):**
+   - Due-Date Dashboard (`DueDateDashboard.svelte`): accessible from a new "Due Dates" / "Contas a Vencer" Sidebar item with an indicator badge for overdue/upcoming counts.
+   - Metrics summary: Overdue, Due Today, Upcoming counts & totals formatted in BRL currency (`R$ 1.234,56`).
+   - Filter tabs: All, Overdue, Due Today, Upcoming, Dismissed; account filter; search by sender/subject.
+   - Boleto card: formatted amount, due date with relative badge ("Vence hoje", "Venceu há X dias", "Vence em X dias"), 1-click "Copiar código" (linha digitável copy to clipboard), "Ver e-mail" (navigate to message in reader), and "Dispensar lembrete".
+   - Prominent non-payment disclaimer in EN and PT-BR: "Extracted from message receipts. Does not constitute banking confirmation of payment."
+   - Reminders Configuration (`RemindersModule.svelte` in Settings and accessible from Dashboard): configure due-date and unread reminder rules, amount thresholds, and alert destinations.
+   - Svelte 5 Runes strictly enforced, full bilingual EN / PT-BR parity in `translations.ts`.
+
+6. `[04.11.6]` **Comprehensive Verification & Definition of Done:**
+   - Pure clock unit tests (timezone offsets, civil date math, leap years, DST transitions).
+   - Storage tests: migration v6 idempotence, duplicate suppression, restart recovery, explicit dismissal, read cancellation.
+   - IPC service tests and frontend component tests (`*.svelte.test.ts`).
+   - Repository DoD commands: `cargo check`, `cargo test`, `cargo fmt`, `cargo clippy -D warnings`, `pnpm --filter desktop check`, `pnpm --filter desktop test`, `pnpm --filter desktop build`, Svelte 5 invariant, secret/PII scrub, and bilingual README perimeter synchronization.
+
+
 ### Task [03.8]: Local Automatic Categories
 
-- **Status:** BACKLOG
+- **Status:** READY FOR PLANNING
 - **Priority:** 6
 - **Depends On:** [03.5]
 - **Systems Involved:** `crates/triage-ai`, `crates/storage`, desktop inbox.

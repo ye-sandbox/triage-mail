@@ -17,6 +17,7 @@ pub mod llm;
 pub mod nfe;
 pub mod otp;
 pub mod pix;
+pub mod reminders;
 pub mod rules;
 pub mod tracking;
 
@@ -38,6 +39,11 @@ pub use llm::{
 pub use nfe::extract_nfe_keys;
 pub use otp::extract_otp;
 pub use pix::{compute_crc16_ccitt_false, extract_pix_payload};
+pub use reminders::{
+    add_days_iso, date_from_day_number, day_number, due_date_trigger_epoch_ms, sub_days_iso,
+    unread_interval_trigger_epoch_ms, DueDateItem, DueDateStatus, ReminderTrigger,
+    ScheduledReminderConfig, MAX_REMINDER_CONFIGS,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 pub use tracking::{extract_tracking_codes, TrackingDetails};

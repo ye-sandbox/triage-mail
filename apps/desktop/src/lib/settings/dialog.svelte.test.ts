@@ -123,7 +123,8 @@ describe('SettingsDialog and typed modules', () => {
 			'ai',
 			'privacy',
 			'rules',
-			'alerts'
+			'alerts',
+			'reminders'
 		]);
 	});
 

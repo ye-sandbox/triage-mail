@@ -12,6 +12,8 @@
 		savedActive = false,
 		status,
 		openSettings,
+		openDueDates,
+		dueCount = 0,
 		accounts = [],
 		mailboxes,
 		scope,
@@ -24,6 +26,8 @@
 		savedActive?: boolean;
 		status: string;
 		openSettings?: () => void;
+		openDueDates?: () => void;
+		dueCount?: number;
 		accounts?: AccountConfig[];
 		mailboxes?: Mailboxes;
 		scope?: MailboxScope;
@@ -56,6 +60,22 @@
 			class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium aria-[current=page]:bg-[var(--selection-soft)]"
 			><Icon name="inbox" size={18} />{t.allMail}</button
 		>
+		{#if openDueDates}
+			<button
+				type="button"
+				onclick={openDueDates}
+				class="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm font-medium text-[var(--foreground)] hover:bg-[var(--surface)] transition-colors"
+			>
+				<span class="flex items-center gap-2"><Icon name="calendar" size={18} />{t.dueDates}</span>
+				{#if dueCount > 0}
+					<span
+						class="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400"
+					>
+						{dueCount}
+					</span>
+				{/if}
+			</button>
+		{/if}
 		{#each accounts as account (account.account_id)}
 			<AccountMailbox
 				{account}

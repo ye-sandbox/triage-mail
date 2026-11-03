@@ -299,6 +299,14 @@ pub async fn sync_account_once(
                             status(&s, &state.account_id, SyncState::MutationFailed);
                         }
                     }
+                    let tz_offset = crate::reminders::local_tz_offset_seconds();
+                    for record in &records {
+                        let _ = s.store.schedule_reminders_for_message(
+                            &record.id,
+                            storage::now_epoch_ms(),
+                            tz_offset,
+                        );
+                    }
                     // Index only with an explicitly configured provider; missing models never trigger downloads.
                     if let Some(provider) = &s.embedding {
                         for record in &records {
@@ -424,6 +432,7 @@ async fn outbox_loop(service: Arc<DesktopService>) {
         if service.process_rules().await.is_err() {
             status(&service, "", SyncState::MutationFailed);
         }
+        let _ = service.process_reminders().await;
         let _ = service.process_alerts().await;
         let _ = process_outbox_once(&service).await;
         let _ = service.reconcile_snoozes().await;

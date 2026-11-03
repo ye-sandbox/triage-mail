@@ -262,3 +262,8 @@ pub struct SyncProgressEvent {
     #[serde(default)]
     pub embedding_errors_count: usize,
 }
+
+pub use triage_ai::{
+    DueDateItem as DueDateItemDto, DueDateStatus as DueDateStatusDto,
+    ReminderTrigger as ReminderTriggerDto, ScheduledReminderConfig as ScheduledReminderConfigDto,
+};

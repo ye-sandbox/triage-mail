@@ -39,6 +39,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 			unsubscribe: 'Send one-click unsubscribe request',
 			searchScope: 'Search this mailbox',
 			settings: 'Settings',
+			dueDates: 'Due Dates',
 			noActions: 'No matching actions.',
 			actionSearch: 'Find a message action',
 			saved: 'Saved locally. Server changes sync in the background.',
@@ -300,6 +301,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 			tabs: {
 				rules: 'Rules',
 				alerts: 'Alerts',
+				reminders: 'Reminders',
 				general: 'General',
 				accounts: 'Accounts',
 				search: 'Search',
@@ -350,6 +352,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 			unsubscribe: 'Enviar pedido de cancelamento da inscrição',
 			searchScope: 'Buscar nesta caixa',
 			settings: 'Configurações',
+			dueDates: 'Contas a Vencer',
 			noActions: 'Nenhuma ação encontrada.',
 			actionSearch: 'Buscar uma ação da mensagem',
 			saved: 'Salvo localmente. Alterações no servidor sincronizam em segundo plano.',
@@ -613,6 +616,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 			tabs: {
 				rules: 'Regras',
 				alerts: 'Alertas',
+				reminders: 'Lembretes',
 				general: 'Geral',
 				accounts: 'Contas',
 				search: 'Busca',
