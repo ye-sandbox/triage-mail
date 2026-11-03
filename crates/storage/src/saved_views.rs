@@ -126,7 +126,7 @@ fn validate_accounts(conn: &Connection, view: &SavedView) -> Result<(), StorageE
     Ok(())
 }
 
-fn read(conn: &Connection, id: &str, revision: u32) -> Result<SavedView, StorageError> {
+pub(crate) fn read(conn: &Connection, id: &str, revision: u32) -> Result<SavedView, StorageError> {
     let json: String = conn
         .query_row(
             "SELECT definition_json FROM saved_views WHERE id=?1 AND revision=?2",
@@ -234,6 +234,36 @@ pub(crate) fn execute_view(
     page: (usize, usize),
     now: i64,
 ) -> Result<Vec<MessageRowSummary>, StorageError> {
+    HybridQuery {
+        query_text: view.query.clone(),
+        mode: view.mode,
+        query_embedding_int8: embedding.clone(),
+        account_filter: None,
+        limit: page.0,
+        offset: page.1,
+    }
+    .validate()?;
+    execute_view_all(tx, view, embedding, page, now)
+}
+
+// INVARIANT: Only native grouped search supplies a full-result limit; IPC remains bounded.
+pub(crate) fn execute_view_all(
+    tx: &Connection,
+    view: &SavedView,
+    embedding: Option<Vec<i8>>,
+    page: (usize, usize),
+    now: i64,
+) -> Result<Vec<MessageRowSummary>, StorageError> {
+    crate::search::load_summaries(tx, &execute_view_ids(tx, view, embedding, page, now)?)
+}
+
+pub(crate) fn execute_view_ids(
+    tx: &Connection,
+    view: &SavedView,
+    embedding: Option<Vec<i8>>,
+    page: (usize, usize),
+    now: i64,
+) -> Result<Vec<String>, StorageError> {
     validate_accounts(tx, view)?;
     let (limit, offset) = page;
     let query = HybridQuery {
@@ -244,7 +274,6 @@ pub(crate) fn execute_view(
         limit,
         offset,
     };
-    query.validate()?;
     let mut value = serde_json::to_value(view).map_err(error)?;
     let mut eligibility = ELIGIBILITY.to_string();
     if view.filters.category.is_some() {
@@ -292,9 +321,7 @@ pub(crate) fn execute_view(
         messages: "messages m",
         now,
     };
-    let result = search
-        .execute(&query)
-        .and_then(|ids| crate::search::load_summaries(tx, &ids));
+    let result = search.execute(&query);
     // INVARIANT: Private filter snapshots do not outlive this search in a SQL closure.
     tx.remove_function("saved_facts_match", 3).map_err(error)?;
     result

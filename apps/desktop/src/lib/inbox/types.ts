@@ -47,6 +47,7 @@ export type SyncProgressEvent = {
 	embedding_errors_count?: number;
 };
 export interface InboxTransport {
+	conversations?: import('../conversations/types').ConversationTransport;
 	review?: import('../sender-review/types').ReviewTransport;
 	categories?: import('../categories/types').CategoryTransport;
 	savedViews?: import('../saved-views/types').SavedViewTransport;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { labels as conversationLabels } from '../conversations/labels';
 	import { labels as categoryLabels } from '../categories/labels';
 	import { categories, type Category } from '../categories/types';
 	import { i18n } from '../i18n/index.svelte';
@@ -79,8 +80,17 @@
 	<div
 		class="flex h-12 shrink-0 items-center justify-between border-b border-[var(--separator)] px-6 text-xs text-[var(--secondary)]"
 	>
-		<span>{inbox.query ? 'Search results' : 'All messages'}</span><span class="tabular-nums"
-			>{inbox.rows.length.toLocaleString()}{inbox.hasMore ? '+' : ''} messages</span
+		<span
+			>{inbox.conversations
+				? conversationLabels[i18n.locale].title
+				: inbox.query
+					? 'Search results'
+					: 'All messages'}</span
+		><span class="tabular-nums"
+			>{inbox.rows.length.toLocaleString()}{inbox.hasMore ? '+' : ''}
+			{inbox.conversations
+				? conversationLabels[i18n.locale].title
+				: conversationLabels[i18n.locale].messages}</span
 		>
 	</div>
 	<div
@@ -133,6 +143,14 @@
 							</div>
 							<p class="truncate text-sm leading-6">
 								{row.subject || '(No subject)'}
+								{#if inbox.conversations && inbox.conversationRows[row.id]}<span
+										class="tabular-nums text-xs"
+									>
+										· {inbox.conversationRows[row.id].matching_count}/{inbox.conversationRows[
+											row.id
+										].total_count} · {conversationLabels[i18n.locale].unread}: {inbox
+											.conversationRows[row.id].unread_count}</span
+									>{/if}
 							</p>
 							<div class="flex items-center gap-2 text-xs opacity-65">
 								<span class="truncate"

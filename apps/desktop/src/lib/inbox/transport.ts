@@ -1,3 +1,4 @@
+import { nativeConversations } from '../conversations/transport';
 import { nativeReview } from '../sender-review/transport';
 import { nativeCategories } from '../categories/transport';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
@@ -7,6 +8,7 @@ export function nativeAvailable() {
 	return isTauri();
 }
 export const nativeTransport: InboxTransport = {
+	conversations: nativeConversations,
 	categories: nativeCategories,
 	review: nativeReview,
 	savedViews: {

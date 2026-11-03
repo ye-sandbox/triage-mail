@@ -277,6 +277,11 @@ impl SqliteMailStore {
             rusqlite::params![message_id, vec_bytes],
         )
         .map_err(|e| StorageError::Query(e.to_string()))?;
+        tx.execute(
+            "UPDATE conversation_epoch SET generation=lower(hex(randomblob(16)))",
+            [],
+        )
+        .map_err(|e| StorageError::Query(e.to_string()))?;
         tx.commit()
             .map_err(|e| StorageError::Query(e.to_string()))?;
 

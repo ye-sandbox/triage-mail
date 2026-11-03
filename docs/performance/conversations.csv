@@ -1,0 +1,7 @@
+mode,workload,samples,p50_ms,p95_ms,max_ms
+Lexical,global,10,173.989,215.069,215.069
+Lexical,account-inbox,10,152.423,175.117,175.117
+Semantic,global,10,780.706,1029.961,1029.961
+Semantic,account-inbox,10,326.671,378.748,378.748
+Hybrid,global,10,971.814,1170.017,1170.017
+Hybrid,account-inbox,10,387.718,455.225,455.225

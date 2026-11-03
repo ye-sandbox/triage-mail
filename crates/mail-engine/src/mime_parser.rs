@@ -6,7 +6,7 @@
 //! RFC 8058 One-Click unsubscribe metadata, sender/recipient envelopes,
 //! body texts, and lazy attachment metadata without eagerly allocating binary payloads.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, VecDeque};
 
 use mail_parser::{AddressList, HeaderValue, Message, MessageParser, MessagePart};
 use serde::{Deserialize, Serialize};
@@ -413,81 +413,114 @@ pub struct ThreadNode {
 /// based on `Message-ID`, `In-Reply-To`, and `References`.
 #[must_use]
 pub fn build_thread_tree(messages: &[ParsedInboundMessage]) -> Vec<ThreadNode> {
-    let mut msg_map: HashMap<String, &ParsedInboundMessage> = HashMap::new();
-    let mut children_map: HashMap<String, Vec<String>> = HashMap::new();
-    let mut all_ids = HashSet::new();
-
-    for msg in messages {
-        if let Some(ref mid) = msg.message_id_header {
-            if !mid.is_empty() {
-                msg_map.insert(mid.clone(), msg);
-                all_ids.insert(mid.clone());
-            }
+    // INVARIANT: Ambiguous IDs never resolve parents; indices retain duplicate records.
+    let mut owners: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (index, message) in messages.iter().enumerate() {
+        if let Some(id) = message
+            .message_id_header
+            .as_deref()
+            .filter(|id| !id.is_empty())
+        {
+            owners.entry(id).or_default().push(index);
         }
     }
-
-    // Determine parent for each message
-    let mut root_ids = Vec::new();
-
-    for msg in messages {
-        let Some(ref mid) = msg.message_id_header else {
-            continue;
+    let mut parents = vec![None; messages.len()];
+    for (index, message) in messages.iter().enumerate() {
+        let resolve = |id: &String| {
+            owners
+                .get(id.as_str())
+                .filter(|rows| rows.len() == 1 && rows[0] != index)
+                .map(|rows| rows[0])
         };
-        if mid.is_empty() {
-            continue;
-        }
-
-        // Try direct in_reply_to first, then fallback to last reference
-        let parent_candidate = msg
+        parents[index] = message
             .in_reply_to
             .as_ref()
-            .filter(|p| all_ids.contains(*p))
-            .or_else(|| {
-                msg.references
-                    .iter()
-                    .rev()
-                    .find(|r| all_ids.contains(*r) && *r != mid)
-            });
-
-        match parent_candidate {
-            Some(parent_id) => {
-                children_map
-                    .entry(parent_id.clone())
-                    .or_default()
-                    .push(mid.clone());
+            .and_then(resolve)
+            .or_else(|| message.references.iter().rev().take(64).find_map(resolve));
+    }
+    // INVARIANT: Bound depth as well as cycles; tree serialization and destruction are recursive.
+    for index in 0..messages.len() {
+        let mut cursor = parents[index];
+        let mut depth = 0;
+        while let Some(parent) = cursor {
+            depth += 1;
+            if parent == index || depth >= 64 {
+                parents[index] = None;
+                break;
             }
-            None => {
-                root_ids.push(mid.clone());
-            }
+            cursor = parents[parent];
         }
     }
-
-    // Recursively assemble ThreadNode tree
-    fn assemble_node(id: &str, children_map: &HashMap<String, Vec<String>>) -> ThreadNode {
-        let children = children_map
-            .get(id)
-            .map(|kids| {
-                kids.iter()
-                    .map(|kid| assemble_node(kid, children_map))
-                    .collect()
+    let mut nodes: Vec<_> = messages
+        .iter()
+        .map(|message| {
+            Some(ThreadNode {
+                message_id: message.message_id_header.clone().unwrap_or_default(),
+                children: Vec::new(),
             })
-            .unwrap_or_default();
-
-        ThreadNode {
-            message_id: id.to_string(),
-            children,
+        })
+        .collect();
+    let mut remaining = vec![0; messages.len()];
+    for parent in parents.iter().flatten() {
+        remaining[*parent] += 1;
+    }
+    let mut leaves: VecDeque<_> = (0..messages.len()).filter(|i| remaining[*i] == 0).collect();
+    let mut roots = Vec::new();
+    while let Some(index) = leaves.pop_front() {
+        let Some(mut node) = nodes[index].take() else {
+            continue;
+        };
+        node.children
+            .sort_by(|a, b| a.message_id.cmp(&b.message_id));
+        if let Some(parent) = parents[index] {
+            if let Some(parent_node) = &mut nodes[parent] {
+                parent_node.children.push(node);
+            }
+            remaining[parent] -= 1;
+            if remaining[parent] == 0 {
+                leaves.push_back(parent);
+            }
+        } else {
+            roots.push(node);
         }
     }
-
-    root_ids
-        .into_iter()
-        .map(|root_id| assemble_node(&root_id, &children_map))
-        .collect()
+    roots.sort_by(|a, b| a.message_id.cmp(&b.message_id));
+    roots
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn threading_helper_retains_cycles_duplicates_and_long_chains_without_recursion() {
+        let parser = StalwartMimeParser::new();
+        let base = parser
+            .parse_with_uid_and_modseq(
+                b"From: sender@example.org\r\nMessage-ID: <root@example.org>\r\n\r\nBody",
+                1,
+                None,
+            )
+            .unwrap();
+        let messages: Vec<_> = (0..10000)
+            .map(|i| {
+                let mut message = base.clone();
+                message.message_id_header = Some(format!("{i}@example.org"));
+                message.in_reply_to =
+                    Some(format!("{}@example.org", if i == 0 { 9999 } else { i - 1 }));
+                message
+            })
+            .collect();
+        let mut roots = build_thread_tree(&messages);
+        let mut count = 0;
+        while let Some(node) = roots.pop() {
+            count += 1;
+            roots.extend(node.children);
+        }
+        assert_eq!(count, messages.len());
+        let roots = build_thread_tree(&[base.clone(), base]);
+        assert_eq!(roots.len(), 2);
+    }
 
     #[test]
     fn test_rfc5322_threading_and_tree_reconstruction() {

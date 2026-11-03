@@ -22,6 +22,7 @@ struct FakeRemote {
     mutations: Mutex<Vec<RemoteMutation>>,
     unsubscribes: AtomicUsize,
     fail: bool,
+    fail_message: Option<String>,
     sync_result: Mutex<Option<IncrementalSyncResult>>,
 }
 
@@ -44,7 +45,7 @@ impl RemoteMail for FakeRemote {
         mutation: &RemoteMutation,
     ) -> Result<MutationOutcome, IpcError> {
         self.mutations.lock().unwrap().push(mutation.clone());
-        if self.fail {
+        if self.fail || self.fail_message.as_ref() == Some(&mutation.message_id) {
             return Err(IpcError::RemoteUnavailable);
         }
         match mutation.action {
@@ -1651,4 +1652,127 @@ async fn saved_view_search_retains_semantic_consent_and_never_delivers_or_fetche
     assert_eq!(remote.attachments.load(Ordering::SeqCst), 0);
     assert_eq!(remote.unsubscribes.load(Ordering::SeqCst), 0);
     assert!(remote.mutations.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn conversation_snapshots_reject_stale_apply_and_report_remote_failure_without_fetches() {
+    use storage::conversations::{ConversationAction, ConversationQuery, ConversationSource};
+    let remote = Arc::new(FakeRemote {
+        fail: true,
+        ..Default::default()
+    });
+    let (service, store, _) = setup(remote.clone());
+    seed(&service, &store).await;
+    service.backfill_conversations().await.unwrap();
+    let mut context = ConversationQuery {
+        source: ConversationSource::Messages,
+        scope: None,
+        generation: None,
+    };
+    let page = service
+        .search_conversations(query(SearchMode::Lexical), context.clone())
+        .await
+        .unwrap();
+    assert_eq!(page.rows.len(), 1);
+    context.generation = Some(page.generation);
+    let id = page.rows[0].conversation_id.clone();
+    let preview = service
+        .preview_conversation(
+            query(SearchMode::Lexical),
+            context.clone(),
+            id.clone(),
+            false,
+            ConversationAction::MarkRead,
+        )
+        .await
+        .unwrap();
+    let mut changed = record();
+    changed.subject = "Changed invoice".into();
+    store.insert_message(&changed).unwrap();
+    assert!(service.apply_conversation(preview.token).await.is_err());
+    assert!(!store.get_message_by_id("m-1").unwrap().unwrap().is_read);
+    context.generation = None;
+    let page = service
+        .search_conversations(query(SearchMode::Lexical), context.clone())
+        .await
+        .unwrap();
+    context.generation = Some(page.generation);
+    let preview = service
+        .preview_conversation(
+            query(SearchMode::Lexical),
+            context,
+            id,
+            true,
+            ConversationAction::MarkRead,
+        )
+        .await
+        .unwrap();
+    let token = preview.token.clone();
+    assert_eq!(
+        service.apply_conversation(token.clone()).await.unwrap(),
+        vec!["m-1"]
+    );
+    assert!(service.apply_conversation(token).await.is_err());
+    assert!(store.get_message_by_id("m-1").unwrap().unwrap().is_read);
+    worker::process_outbox_once(&service).await.unwrap();
+    let status = service
+        .conversation_status(vec!["m-1".into()])
+        .await
+        .unwrap();
+    assert!(status[0].pending && status[0].failed);
+    assert_eq!(status[0].attempts, 1);
+    assert_eq!(remote.attachments.load(Ordering::SeqCst), 0);
+    assert_eq!(remote.unsubscribes.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn conversation_local_commit_survives_partial_remote_completion() {
+    use storage::conversations::{ConversationAction, ConversationQuery, ConversationSource};
+    let remote = Arc::new(FakeRemote {
+        fail_message: Some("m-2".into()),
+        ..Default::default()
+    });
+    let (service, store, _) = setup(remote);
+    seed(&service, &store).await;
+    let mut reply = record();
+    reply.id = "m-2".into();
+    reply.uid = 2;
+    reply.received_at_epoch_ms = 2;
+    reply.message_id_header = Some("reply@example.org".into());
+    reply.in_reply_to = Some("message@example.org".into());
+    reply.attachments.clear();
+    store.insert_message(&reply).unwrap();
+    service.backfill_conversations().await.unwrap();
+    let mut context = ConversationQuery {
+        source: ConversationSource::Messages,
+        scope: None,
+        generation: None,
+    };
+    let page = service
+        .search_conversations(query(SearchMode::Lexical), context.clone())
+        .await
+        .unwrap();
+    assert_eq!(page.rows[0].total_count, 2);
+    context.generation = Some(page.generation);
+    let preview = service
+        .preview_conversation(
+            query(SearchMode::Lexical),
+            context,
+            page.rows[0].conversation_id.clone(),
+            true,
+            ConversationAction::MarkRead,
+        )
+        .await
+        .unwrap();
+    service.apply_conversation(preview.token).await.unwrap();
+    for id in ["m-1", "m-2"] {
+        assert!(store.get_message_by_id(id).unwrap().unwrap().is_read);
+    }
+    worker::process_outbox_once(&service).await.unwrap();
+    let statuses = service
+        .conversation_status(vec!["m-1".into(), "m-2".into()])
+        .await
+        .unwrap();
+    assert!(!statuses[0].pending);
+    assert!(statuses[1].pending && statuses[1].failed);
 }

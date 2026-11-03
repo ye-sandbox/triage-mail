@@ -445,7 +445,8 @@ async fn category_loop(service: Arc<DesktopService>) {
         let delay = match async {
             let categories = service.backfill_categories().await?;
             let review = service.backfill_sender_review().await?;
-            Ok::<_, IpcError>(categories.max(review))
+            let conversations = service.backfill_conversations().await?;
+            Ok::<_, IpcError>(categories.max(review).max(conversations))
         }
         .await
         {
@@ -495,10 +496,18 @@ pub async fn process_outbox_once(service: &Arc<DesktopService>) -> Result<(), Ip
             if failed.contains(&mutation.account_id) {
                 continue;
             }
-            if process_remote_mutation(service, id, mutation.clone())
+            let failed_attempt = process_remote_mutation(service, id, mutation.clone())
                 .await
-                .is_err()
-            {
+                .is_err();
+            let message_id = mutation.message_id.clone();
+            service
+                .blocking(move |s| {
+                    s.store
+                        .record_conversation_attempt(&message_id, failed_attempt)
+                        .map_err(storage_error)
+                })
+                .await?;
+            if failed_attempt {
                 status(service, &mutation.account_id, SyncState::MutationFailed);
                 // INVARIANT: Preserve per-account ordering without starving other configured accounts.
                 failed.insert(mutation.account_id);

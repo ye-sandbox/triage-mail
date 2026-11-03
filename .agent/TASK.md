@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[04.13] Conversation Grouping & Thread Triage — READY FOR PLANNING
+[04.13] Conversation Grouping & Thread Triage — RUNNING
 
 ---
 
@@ -127,7 +127,7 @@ schemas, IPC and ranking remain unchanged; no ANN graphs, downloads or provider 
 
 ---
 
-## Definition of Done (DoD) Checklist — [04.12]
+## Definition of Done (DoD) Checklist — [04.13]
 
 A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
 - [x] Strict Typing: `cargo check --workspace` and `pnpm --filter desktop check` exit with code 0.
@@ -137,8 +137,8 @@ A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
 - [x] Secret & PII Scrubbing: Zero real email addresses, tokens, or secrets in tracked files; `git diff --check` exits with code 0.
 - [x] Documentation Perimeter: If CLI flags, `.env.example` variables, or validation commands changed, synchronize `README.md` and `README.pt-br.md` (following `readme-standard` skill).
 - [x] Knowledge Preservation: Document obscure platform/runtime gotchas or workarounds as an atomic card in `.agent/knowledge/` (if applicable).
-- [x] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
-- [x] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
+- [ ] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
+- [ ] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
 
 ---
 
@@ -904,7 +904,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [04.13]: Conversation Grouping & Thread Triage
 
-- **Status:** READY FOR PLANNING
+- **Status:** RUNNING
 - **Priority:** 8
 - **Systems Involved:** MIME/header ingestion, `crates/storage`, desktop inbox/reader.
 - **Scope:** Group related messages using Message-ID, In-Reply-To and References;
@@ -913,6 +913,78 @@ All tasks inherit the repository DoD when implemented.
 - **Acceptance:** Fixtures cover duplicate IDs, malformed references, subject collisions
   and cross-folder messages. Preserve per-message IMAP identity, lazy attachments,
   pagination and secure rendering; handle partial mutation failures visibly.
+
+#### Approved Implementation Plan (2026-11-02)
+
+1. `[04.13.1]` **Conservative account-local identity:** Build a bounded, iterative
+   header-threading implementation in the headless core using stored Message-ID,
+   In-Reply-To and References. Preserve case-sensitive opaque IDs after syntactic
+   normalization; reject malformed/oversized values. Never group by subject, sender,
+   provider aliases or across accounts. Messages without usable links remain singletons.
+   Unique valid In-Reply-To takes precedence; otherwise use the nearest unambiguous
+   References ancestor. Shared missing ancestors may connect replies through account-local
+   placeholder nodes. Duplicate Message-IDs are ambiguous: retain every canonical record,
+   do not merge duplicates by that ID or resolve inbound links through it. Discard
+   self-links, break cycles deterministically and bound reference processing. Grouping
+   is navigation, never authentication or a reason to deduplicate/delete mail. Harden
+   the existing public tree helper without changing its signature or losing records
+   from the new canonical-record conversation API.
+2. `[04.13.2]` **Encrypted membership and lifecycle:** Append migration v9 for indexed
+   account-local conversation membership and opaque generation/revision metadata;
+   preserve earlier schemas, message/IMAP identity and public trait contracts. Build
+   existing cached history in bounded resumable local batches, with no fetches or
+   automation. Keep grouping unavailable for an account until its initial index is
+   complete, displaying progress and retaining ordinary message navigation. Update
+   affected membership on ingestion, header changes and deletion; recompute affected
+   components when missing parents arrive or duplicate ambiguity changes. MOVE and
+   additional folder memberships must not duplicate a canonical record. Account removal
+   clears its index. Stale conversation handles fail and refresh rather than target a
+   different set after a merge/split. No durable user setting depends on a stable root ID.
+3. `[04.13.3]` **Native grouped search and pagination:** Add separate typed conversation
+   search/member APIs; leave current message DTOs, commands, search traits and default
+   message mode intact. Provide an opt-in Conversations toggle. Apply existing query,
+   mailbox/account, saved-view, category and sender-review eligibility before grouping
+   and pagination, preserving semantic consent and ranking. Rank groups by their best
+   eligible message with deterministic ties; return each conversation once per result
+   snapshot, with matching/total cached counts and aggregate unread state. Never group
+   only the already-paginated frontend rows. Use generation-checked pagination and
+   refresh on invalidation. Conversation expansion explicitly labels other cached
+   messages in the same account, including members outside the active filter/folder;
+   ordinary Inbox hiding must not be silently bypassed in result eligibility.
+4. `[04.13.4]` **Explicit snapshot actions:** Offer conversation Mark Read/Unread,
+   Archive and Tag only. Preview the exact cached canonical records, account, folders,
+   matching versus outside-view counts, and exclusions before confirmation. Default
+   action scope to matching messages; separately select all cached conversation members.
+   Bind confirmation to the native membership generation, selected IDs and action;
+   reject stale previews without applying any local changes. Reuse existing mutation,
+   reminder-cancellation and durable outbox behavior, with atomic local updates and
+   independent remote retries. Keep the existing 500-record batch limit: oversized
+   selections require narrowing, never silent truncation or partial chunk submission.
+   New arrivals after preview are excluded and require a fresh preview. Surface pending
+   and failed affected-message outcomes and retry status without promising atomic remote
+   IMAP success. No thread unsubscribe, trash, rule replay or implicit sender action.
+5. `[04.13.5]` **Inbox and reader integration:** Load `svelte-dev` before component
+   edits. Add EN/PT-BR grouped virtual rows, counts, keyboard selection and a paginated
+   chronological member list with per-message expansion. Fetch bodies only when opened
+   through existing lazy APIs; retain DOMPurify, sandbox/CSP and attachment-on-demand
+   boundaries. Preserve individual-message controls and focus. Invalidate late reads,
+   pagination and action previews on view/account/query/generation changes and teardown.
+   Keep mail facts and conversation state out of browser persistence. Do not change
+   automatic read behavior into an implicit whole-conversation action.
+6. `[04.13.6]` **Evidence and closure:** Offline synthetic fixtures cover malformed and
+   missing headers, duplicate IDs appearing/disappearing, case differences, shared absent
+   parents, cycles, long chains, subject collisions, cross-account/folder boundaries,
+   late parents, MOVE/deletion, encrypted restart/backfill and stale generation rejection.
+   Test filtering before group pagination, matching/all-member action scopes, the batch
+   limit, local rollback, remote partial failures, lazy body/attachment access and UI
+   invalidation. Measure grouped query/index costs on representative large fixtures;
+   retain existing performance budgets and disclose unmet targets. Run repository DoD,
+   SPA build, formatting and secret/PII scans offline. Record ADR-019, active contracts,
+   relevant knowledge and paired README usage via `readme-standard`. Make an atomic
+   Conventional Commit, log its hash and promote [03.9] to READY FOR PLANNING; do not push.
+
+- **Approval:** User approved the complete plan via `proceed` on 2026-11-02.
+  No new network-policy exception; development validation remains offline.
 
 ### Task [03.9]: Alert Digests & Quiet Hours
 
