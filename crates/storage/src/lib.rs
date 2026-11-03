@@ -24,6 +24,7 @@ pub mod rules;
 pub mod saved_views;
 mod scoped_search;
 pub mod search;
+pub mod sender_review;
 pub mod settings;
 pub mod vec_ext;
 

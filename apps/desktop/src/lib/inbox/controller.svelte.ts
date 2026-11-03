@@ -1,3 +1,4 @@
+import type { ReviewFilter } from '../sender-review/types';
 import type { Category } from '../categories/types';
 import type { SavedView } from '../saved-views/types';
 import type {
@@ -12,12 +13,27 @@ import { validTag, type TriageAction } from './triage';
 export const PAGE_SIZE = 200;
 
 export class InboxController {
+	review = $state<ReviewFilter | null>(null);
+	get reviewTransport() {
+		return this.transport.review;
+	}
+	async selectReview(state: ReviewFilter | null) {
+		this.review = state;
+		this.category = null;
+		this.savedView = null;
+		this.mutationError = '';
+		this.mutationNotice = '';
+		clearTimeout(this.refreshTimer);
+		await this.search(this.query, this.mode);
+	}
+
 	category = $state<Category | null>(null);
 	get categoryTransport() {
 		return this.transport.categories;
 	}
 	async selectCategory(category: Category | null) {
 		this.category = category;
+		this.review = null;
 		this.savedView = null;
 		this.mutationError = '';
 		this.mutationNotice = '';
@@ -61,6 +77,7 @@ export class InboxController {
 	async selectSavedView(view: SavedView) {
 		this.savedView = view;
 		this.category = null;
+		this.review = null;
 		this.scope = undefined;
 		this.mutationError = '';
 		this.mutationNotice = '';
@@ -91,10 +108,16 @@ export class InboxController {
 			: Promise.reject(new Error('Unavailable'));
 
 	async selectScope(scope?: MailboxScope) {
-		if (!this.category && !this.savedView && JSON.stringify(scope) === JSON.stringify(this.scope))
+		if (
+			!this.review &&
+			!this.category &&
+			!this.savedView &&
+			JSON.stringify(scope) === JSON.stringify(this.scope)
+		)
 			return;
 		this.savedView = null;
 		this.category = null;
+		this.review = null;
 		// INVARIANT: Scope changes invalidate all old reads, selection and mutation feedback.
 		this.scope = scope === 'GlobalAllMail' ? undefined : scope;
 		this.mutationError = '';
@@ -110,6 +133,10 @@ export class InboxController {
 		offset: number;
 		scope?: MailboxScope;
 	}) {
+		if (this.review)
+			return this.transport.review
+				? this.transport.review.search(page, this.review)
+				: Promise.reject('InvalidRequest');
 		const saved = this.savedView;
 		if (saved)
 			return this.transport.savedViews

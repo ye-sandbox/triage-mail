@@ -121,6 +121,14 @@ impl SqliteMailStore {
             .map_err(|e| StorageError::Query(format!("failed to start tx: {e}")))?;
 
         Self::insert_message_in_transaction(&tx, message)?;
+        let canonical: String = tx
+            .query_row(
+                "SELECT id FROM messages WHERE account_id=?1 AND folder=?2 AND uid=?3",
+                rusqlite::params![message.account_id, message.folder, message.uid],
+                |r| r.get(0),
+            )
+            .map_err(|_| StorageError::Query("sender identity unavailable".into()))?;
+        crate::sender_review::observe(&tx, &canonical, false)?;
 
         tx.commit()
             .map_err(|e| StorageError::Query(format!("failed to commit message tx: {e}")))?;

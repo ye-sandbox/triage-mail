@@ -394,3 +394,35 @@ type: architectural-decision-log
   learning, model downloads, endpoint calls, folder changes or artificial account limits.
   Settings override pages are bounded to 200. Existing performance deviations remain;
   synthetic category measurements do not establish native first-frame or 60fps behavior.
+
+### [2026-11-02] ADR-018: Account-Local Sender Familiarity and Inbox Visibility
+
+- **Context:** [04.12] needs optional review of unfamiliar senders without provider
+  blocking, retroactive history flooding or changes to mail/automation contracts.
+- **Decision:** Append migration v8 with account preferences, revisioned sender choices,
+  normalized message membership and folder frontiers. Reuse the single-mailbox parser
+  and ASCII-lowercase exact-address normalization; no alias/domain equivalence. Known
+  records historical observation separately from Pending, Accepted and Declined. Choices
+  survive cached-message removal and re-ingestion until account deletion. Invalid sender
+  identities stay visible, without address-wide controls; familiarity is unauthenticated.
+- **Seeding:** Default off. Enable/re-enable initializes cached history in bounded local
+  batches, retaining existing choices. Capture first post-enable folder UID frontiers
+  before ingestion and preserve them across batch interruption; reset/new-folder history
+  seeds Known. Missing UIDNEXT remains conservative until a usable frontier is captured.
+  Initial-window arrivals may become Known. After initialization, only new canonical
+  arrivals above established frontiers create Pending for unseen valid senders. Sender
+  observation inserts only, so late history cannot downgrade an existing review/choice.
+  Disabled observation seeds Known and never hides mail. Restart resumes local seeding.
+- **Visibility:** Default enabled mode is review-only. A separate preference hides Pending
+  and Declined in ordinary Inbox results, before ranking windows/pagination. Explicit
+  All Mail, folders, category/saved views and Pending/Declined review keep access. Search
+  retains exact ranking and model consent. Review search uses the selected account across
+  folders. Accept/decline/return-to-pending requires the displayed exact account/address
+  scope; preference and choice writes reject stale revisions. No automatic mail mutations,
+  authentication claims or new network activity; rules/reminders/alerts stay independent.
+- **Consequences:** Conservative seeding can miss a review opportunity, especially during
+  setup/rebuilds and when server frontiers are unknown. Disabling restores Inbox results
+  immediately; re-enabling retains pending reviews and decisions. Sender spoofing and
+  provider aliases are outside address familiarity. Headless storage composes through
+  existing desktop workers; no new runner or always-on claim. Existing performance
+  budgets are unchanged and fixture timing limitations remain explicit.

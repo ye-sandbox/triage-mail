@@ -1,4 +1,7 @@
 <script lang="ts">
+	import ReviewViews from '../sender-review/ReviewViews.svelte';
+	import ReviewActions from '../sender-review/ReviewActions.svelte';
+	import { labels as reviewLabels } from '../sender-review/labels';
 	import CategoryViews from '../categories/CategoryViews.svelte';
 	import CategoryActions from '../categories/CategoryActions.svelte';
 	import SavedViews from '../saved-views/SavedViews.svelte';
@@ -49,7 +52,10 @@
 	} = $props();
 	const mailboxes = new Mailboxes(untrack(() => inbox.listFolders));
 	const context = $derived(
-		inbox.savedView?.name ?? scopeLabel(inbox.scope, accounts, i18n.t.mailboxes, mailboxes.catalogs)
+		(inbox.review
+			? `${reviewLabels[i18n.locale].title} · ${reviewLabels[i18n.locale][inbox.review]}`
+			: inbox.savedView?.name) ??
+			scopeLabel(inbox.scope, accounts, i18n.t.mailboxes, mailboxes.catalogs)
 	);
 	let snoozing = $state(false);
 	function selectScope(scope?: MailboxScope) {
@@ -177,7 +183,7 @@
 	>
 		<div class="h-full w-56">
 			<Sidebar
-				savedActive={!!inbox.savedView || !!inbox.category}
+				savedActive={!!inbox.savedView || !!inbox.category || !!inbox.review}
 				status={inbox.syncStatus}
 				{openSettings}
 				{openDueDates}
@@ -189,7 +195,11 @@
 				{avatarTransport}
 				{photoRevision}
 				dismiss={() => (sidebarOpen = false)}
-				><CategoryViews {inbox} {connected} /><SavedViews {inbox} {accounts} {connected} /></Sidebar
+				><ReviewViews {inbox} {connected} /><CategoryViews {inbox} {connected} /><SavedViews
+					{inbox}
+					{accounts}
+					{connected}
+				/></Sidebar
 			>
 		</div>
 	</div>
@@ -245,7 +255,13 @@
 						folder={inbox.folderLabels[selected.id] || selected.folder}
 						tags={inbox.localTags[selected.id] ?? []}
 					/>{/if}
-				{#if selected}{#key selected.id}<CategoryActions
+				{#if selected}{#key selected.id}<ReviewActions
+							{inbox}
+							message={selected}
+							accountLabel={accounts.find((a) => a.account_id === selected.account_id)
+								?.email_display ?? selected.account_id}
+							disabled={!connected || settingsOpen}
+						/><CategoryActions
 							{inbox}
 							message={selected}
 							disabled={!connected || settingsOpen}

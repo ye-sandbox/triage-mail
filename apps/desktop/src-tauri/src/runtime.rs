@@ -194,6 +194,75 @@ pub async fn cmd_local_alert_available(state: State<'_, RuntimeState>) -> Result
 }
 
 #[tauri::command]
+pub async fn cmd_review_preferences(
+    state: State<'_, RuntimeState>,
+    account_id: String,
+) -> Result<storage::sender_review::ReviewPreferences, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .review_preferences(account_id)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_save_review_preferences(
+    state: State<'_, RuntimeState>,
+    value: storage::sender_review::ReviewPreferences,
+) -> Result<storage::sender_review::ReviewPreferences, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .save_review_preferences(value)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_review_metadata(
+    state: State<'_, RuntimeState>,
+    message_id: String,
+) -> Result<Option<storage::sender_review::SenderChoice>, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .review_metadata(message_id)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_list_sender_choices(
+    state: State<'_, RuntimeState>,
+    account_id: String,
+    offset: usize,
+) -> Result<Vec<storage::sender_review::SenderChoice>, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .list_sender_choices(account_id, offset)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_save_sender_choice(
+    state: State<'_, RuntimeState>,
+    value: storage::sender_review::SenderChoice,
+) -> Result<storage::sender_review::SenderChoice, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .save_sender_choice(value)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_search_sender_review(
+    state: State<'_, RuntimeState>,
+    query: SearchQueryDto,
+    review_state: storage::sender_review::ReviewState,
+) -> Result<Vec<MessageRowDto>, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .search_sender_review(query, review_state)
+        .await
+}
+
+#[tauri::command]
 pub async fn cmd_category_metadata(
     state: State<'_, RuntimeState>,
     message_id: String,
@@ -696,6 +765,12 @@ pub fn run() {
             cmd_test_alert,
             cmd_replay_alert,
             cmd_local_alert_available,
+            cmd_review_preferences,
+            cmd_save_review_preferences,
+            cmd_review_metadata,
+            cmd_list_sender_choices,
+            cmd_save_sender_choice,
+            cmd_search_sender_review,
             cmd_category_metadata,
             cmd_correct_category,
             cmd_list_category_overrides,
@@ -826,6 +901,12 @@ mod tests {
                 cmd_test_alert,
                 cmd_replay_alert,
                 cmd_local_alert_available,
+                cmd_review_preferences,
+                cmd_save_review_preferences,
+                cmd_review_metadata,
+                cmd_list_sender_choices,
+                cmd_save_sender_choice,
+                cmd_search_sender_review,
                 cmd_category_metadata,
                 cmd_correct_category,
                 cmd_list_category_overrides,
@@ -869,6 +950,37 @@ mod tests {
         let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()
             .unwrap();
+        assert_eq!(invoke(&window,"cmd_search_sender_review",json!({"query":{"query":"","mode":"Lexical","limit":200,"offset":0},"reviewState":"Pending"})).unwrap(),json!([]));
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_review_preferences",
+                json!({"accountId":"missing"})
+            )
+            .unwrap_err(),
+            json!("InvalidRequest")
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_list_sender_choices",
+                json!({"accountId":"missing","offset":0})
+            )
+            .unwrap_err(),
+            json!("InvalidRequest")
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_review_metadata",
+                json!({"messageId":"missing"})
+            )
+            .unwrap_err(),
+            json!("InvalidRequest")
+        );
+        assert_eq!(invoke(&window,"cmd_search_sender_review",json!({"query":{"query":"","mode":"Semantic","limit":200,"offset":0},"reviewState":"Pending"})).unwrap_err(),json!("InvalidRequest"));
+        assert_eq!(invoke(&window,"cmd_save_review_preferences",json!({"value":{"account_id":"missing","revision":0,"enabled":true,"hide_in_inbox":false,"initializing":false}})).unwrap_err(),json!("InvalidRequest"));
+        assert_eq!(invoke(&window,"cmd_save_sender_choice",json!({"value":{"account_id":"missing","sender":"sender@example.org","revision":1,"state":"Declined"}})).unwrap_err(),json!("InvalidRequest"));
         assert_eq!(
             invoke(&window, "cmd_list_category_overrides", json!({"offset":0})).unwrap(),
             json!([])

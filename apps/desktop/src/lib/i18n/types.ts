@@ -191,6 +191,7 @@ export interface Translations {
 			alerts: string;
 			reminders: string;
 			categories: string;
+			senderReview: string;
 			general: string;
 			accounts: string;
 			search: string;

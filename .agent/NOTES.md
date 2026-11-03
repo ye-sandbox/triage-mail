@@ -688,3 +688,37 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   automatic reasons and record-only limits. Settings manages sender removal; saved current
   search retains category. Scope/view changes invalidate late reads; no browser persistence.
   Categories never move mail, hide extraction badges, train models or execute automation.
+
+## New-Sender Review ([04.12] / ADR-018)
+
+- Append-only v8 adds sender_review_preferences, sender_review_choices,
+  sender_review_messages and sender_review_frontiers. All are SQLCipher-local and
+  account-bound; choices survive cache deletion until account removal. Existing core
+  traits, IPC DTOs and earlier migrations retain their contracts.
+- Shared rules::sender_address parses exactly one mailbox and ASCII-lowercases it;
+  display names/domains/provider aliases never substitute for exact identity. Invalid,
+  ambiguous or oversized identities remain visible without sender-wide actions.
+  Familiarity never authenticates the author. Known is history, not explicit acceptance.
+- Default disabled; enabled review-only is default. Cached history seeds in <=300-row
+  local batches before activation. First post-enable per-folder UIDVALIDITY/UIDNEXT
+  frontiers persist before ingestion; interrupted history, new folders and rebuilds
+  seed Known. Unknown UIDNEXT seeds conservatively until a usable frontier is captured.
+  New canonical arrivals above established frontiers insert Pending only while active.
+  Every observation is insert-only for sender choices; history cannot erase a decision.
+- Revision-checked Accepted/Declined/Pending choices affect existing/future exact-sender
+  mail in one account. Disable immediately bypasses filtering and new observations seed
+  Known; re-enable seeds intervening history, retaining existing choices and Pending.
+  Duplicate memberships, flags, hydration and MOVE cannot create another review choice.
+- Additive IPC: cmd_review_preferences(accountId), cmd_save_review_preferences(value),
+  cmd_review_metadata(messageId), cmd_list_sender_choices(accountId,offset),
+  cmd_save_sender_choice(value), cmd_search_sender_review(query,reviewState).
+  Review state is Pending/Declined for search; query scope supplies account only.
+  Native SQL eligibility precedes pagination and both hybrid windows in one snapshot.
+- Explicit per-account Inbox hiding excludes Pending/Declined only in ordinary Inbox
+  search. All Mail, other mailboxes, categories, saved searches and review bypass it.
+  Nothing blocks delivery, deletes/moves mail, changes categories, or gates independent
+  rules/reminders/alerts. Initialization never fetches data or executes automation.
+- EN/PT-BR navigation/actions/settings retain virtualization, sandboxed rendering,
+  request invalidation, exact-sender/account consent, dirty/busy guards and cleanup.
+  No review/mail facts enter browser persistence. Existing search/native budgets and
+  known deviations remain; synthetic timings are not a native 60fps claim.

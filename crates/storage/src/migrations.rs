@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use crate::{FtsTokenizerMode, StorageError};
 
 /// Current database schema version.
-pub const CURRENT_SCHEMA_VERSION: u32 = 7;
+pub const CURRENT_SCHEMA_VERSION: u32 = 8;
 
 /// Executes database schema migrations idempotently.
 pub struct SchemaMigrator {
@@ -82,6 +82,13 @@ impl SchemaMigrator {
             tx.execute_batch(include_str!("categories/schema.sql"))
                 .map_err(|_| StorageError::Migration("category migration failed".into()))?;
             self.record_migration(&tx, 7, "007_local_categories")?;
+            applied_count += 1;
+        }
+
+        if current_version < 8 {
+            tx.execute_batch(include_str!("sender_review/schema.sql"))
+                .map_err(|_| StorageError::Migration("sender review migration failed".into()))?;
+            self.record_migration(&tx, 8, "008_sender_review")?;
             applied_count += 1;
         }
 
@@ -482,7 +489,7 @@ mod tests {
                 VALUES ('old','a','INBOX',1,'Old','sender@example.org','reader@example.com',0,'',0)").unwrap();
             tx.commit().unwrap();
         }
-        assert_eq!(migrator.migrate(&mut conn).unwrap(), 5);
+        assert_eq!(migrator.migrate(&mut conn).unwrap(), 6);
         assert_eq!(migrator.migrate(&mut conn).unwrap(), 0);
         assert_eq!(
             conn.query_row("SELECT subject FROM messages WHERE id='old'", [], |r| {
@@ -500,7 +507,7 @@ mod tests {
             conn.query_row("SELECT max(version) FROM schema_migrations", [], |r| r
                 .get::<_, u32>(0))
                 .unwrap(),
-            7
+            8
         );
     }
 
@@ -511,7 +518,7 @@ mod tests {
 
         let migrator = SchemaMigrator::new(FtsTokenizerMode::Unicode61RemoveDiacritics);
         let applied_first = migrator.migrate(&mut conn).expect("first migration");
-        assert_eq!(applied_first, 7);
+        assert_eq!(applied_first, 8);
 
         let applied_second = migrator.migrate(&mut conn).expect("second migration");
         assert_eq!(applied_second, 0, "subsequent migration must be a no-op");
