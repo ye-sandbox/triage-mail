@@ -333,9 +333,18 @@ impl DesktopService {
         let request = self
             .blocking(|s| {
                 clean_secrets(&s)?;
+                s.store
+                    .process_alert_schedules(
+                        storage::now_epoch_ms(),
+                        &crate::alert_schedule::NativeCalendar,
+                    )
+                    .map_err(storage_error)?;
                 let job = s
                     .store
-                    .claim_alert(storage::now_epoch_ms())
+                    .claim_alert_with_calendar(
+                        storage::now_epoch_ms(),
+                        &crate::alert_schedule::NativeCalendar,
+                    )
                     .map_err(storage_error)?;
                 Ok(job)
             })

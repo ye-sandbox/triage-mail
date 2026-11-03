@@ -545,6 +545,10 @@ impl SqliteMailStore {
         now_epoch_ms: i64,
     ) -> Result<(), StorageError> {
         self.transaction(|tx| {
+            // INVARIANT: A read/dismiss/config cancellation can happen after the worker
+            // selected the job. Recheck in the same transaction as alert staging.
+            let eligible: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM reminder_jobs j JOIN messages m ON m.id=j.message_id WHERE j.id=?1 AND j.status='Pending' AND (j.trigger_type!='UnreadInterval' OR m.is_read=0) AND NOT EXISTS(SELECT 1 FROM due_date_dismissals x WHERE x.message_id=m.id))", [&job.id], |r| r.get(0)).map_err(error)?;
+            if !eligible { return Ok(()); }
             let mut facts = crate::rules::facts(tx, &job.message_id)?;
             if now_epoch_ms.saturating_sub(job.due_epoch_ms) > 15 * 60 * 1000 {
                 facts.subject = format!("[Delayed Reminder] {}", facts.subject);
@@ -554,11 +558,10 @@ impl SqliteMailStore {
                 if let Some(dest) = active_destinations.iter().find(|d| &d.id == dest_id && d.enabled) {
                     let event_id = format!("rem-{}-{}", job.id, dest.id);
                     let payload = triage_ai::alerts::payload(&event_id, now_epoch_ms, &dest.fields, &facts);
-                    tx.execute(
-                        "INSERT OR IGNORE INTO alert_jobs (id, destination_id, revision, account_id, message_id, payload, created, due)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
-                        params![event_id, dest.id, dest.revision, job.account_id, job.message_id, payload, now_epoch_ms],
-                    ).map_err(error)?;
+                    crate::alerts::schedule::enqueue(tx, dest, crate::alerts::schedule::ScheduledItem {
+                        event: &event_id, account: &job.account_id, message: &job.message_id,
+                        payload: &payload, created: now_epoch_ms, urgent: false, reminder: Some(&job.id),
+                    })?;
                 }
             }
             tx.execute(

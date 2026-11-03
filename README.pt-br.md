@@ -378,6 +378,27 @@ dados de verificação ou pagamento. O corpo limita-se a 6.000 bytes UTF-8, trec
 coleções a 16 itens e JSON a 64 KiB, com truncamento explícito. HTML, cabeçalhos brutos, anexos
 binários e valores brutos de OTP/Pix extraídos são excluídos. Conteúdo ausente nunca é buscado.
 
+Em **Resumos e horário de silêncio**, escolha entrega imediata, a cada hora (minuto da
+hora) ou diária (horário) por destino, no horário local do sistema ou UTC. Intervalos
+incluem o início e excluem o fim, podendo atravessar a meia-noite. Horários inexistentes
+no horário de verão avançam ao primeiro minuto válido; horários repetidos executam uma
+vez, na primeira ocorrência. A prévia mostra o próximo horário elegível sem enviar.
+
+Janelas perdidas são reunidas em um resumo; itens não enviados expiram após 24 horas.
+Resumos mantêm até 50 entradas detalhadas em 64 KiB, com contagens de total/omissões;
+limites de texto dos provedores podem truncar mais. A fila criptografada comporta até
+1.000 itens por destino e informa excedentes. Um resumo pendente mantém ID, payload e
+prazo de tentativa do item mais antigo. Remover um participante cancela o resumo inteiro
+não enviado, incluindo os demais itens. Ler uma mensagem com lembrete de não lida ou
+cancelar sua configuração de lembrete também cancela entregas pendentes afetadas.
+
+Ações de regra **Alerta urgente** ignoram resumos/silêncio somente com permissão separada
+na programação do destino. Sem ela seguem a programação normal; lembretes são sempre
+normais. Limites de taxa e consentimento de campos continuam valendo. Alterar a política
+cancela envios automáticos anteriores. Recuos de relógio/fuso expiram conservadoramente
+janelas civis já encerradas em vez de repeti-las. A confirmação de teste/reenvio informa
+que ignora a programação, sem liberar itens normais pendentes.
+
 **Testar entrega** envia um evento sintético somente após confirmação. **Reenviar mensagens
 selecionadas** exige seleção explícita de mensagens/destino e confirmação; envia os campos
 selecionados atuais sem aplicar ações nas mensagens. Simulação nunca envia. O histórico inicial

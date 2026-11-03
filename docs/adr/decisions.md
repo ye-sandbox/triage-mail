@@ -472,3 +472,49 @@ type: architectural-decision-log
   and conservative, so unrelated changes may require refreshing. Body/attachment access
   stays explicit and lazy; each opened member uses existing sanitized sandboxed rendering.
   All facts/settings remain local; EN/PT-BR UI and transient state preserve privacy.
+
+### [2026-11-03] ADR-020: Consent-Bound Digest Scheduling and Quiet Hours
+
+- **Context:** [03.9] batches routine rule/reminder alerts without expanding network
+  permissions, exported fields or delivery guarantees. Existing consumers keep their
+  destination DTOs, Alert(String), command signatures and DeliveryAdapter contract.
+- **Decision:** Append-only migration v10 adds revisioned per-destination scheduling,
+  SQLCipher pending items, constituent membership, a civil-slot watermark and a persisted
+  round-robin cursor. Defaults remain Immediate with no quiet hours. Hourly/daily schedules
+  support System Local and UTC; arbitrary named-zone selection is deferred. The pure
+  ScheduleCalendar boundary accepts injected clocks/calendar resolution; desktop uses chrono
+  and the OS timezone, without downloads. No Tauri types enter core crates.
+- **Civil time:** Quiet intervals are start-inclusive/end-exclusive and may cross midnight;
+  identical endpoints are invalid. Missing times resolve to the first valid minute;
+  overlapping schedule slots choose the earlier occurrence. Quiet hours remain effective
+  in a repeated hour even if its earlier end is past. Unsealed items recompute against the
+  current timezone. Persisted civil watermarks conservatively suppress closed or rolled-back
+  slots; these items count as expired rather than generating a duplicate summary. This may
+  suppress new work temporarily after a backward civil-clock/timezone change.
+- **Queue:** Rules snapshot schedule revisions alongside destination revisions at ingestion.
+  Policy edits cancel queued automatic work and invalidate old rule snapshots. Reminders
+  enter the same staging transaction when dispatched. One worker tick handles <=32 scheduled
+  destinations round-robin and <=1,000 items/destination; overflow increments a safe count.
+  All eligible missed slots coalesce into one immutable event, with <=50 detailed entries
+  and <=64 KiB JSON. One unresolved summary per destination prevents accumulating missed
+  windows behind an ambiguous retry. Its event ID, payload and oldest constituent creation
+  time remain stable through lease recovery. The existing eight-attempt/24-hour retry budget
+  applies; new summary creation never resets an item's age. Items older than 24 hours expire.
+- **Consent/urgency:** Additive UrgentAlert(String) only bypasses scheduling when the
+  destination policy explicitly permits it. The complete ordered/stop-filtered plan chooses
+  urgent over routine once per destination. Without permission it remains routine. No urgency
+  inference, rate-limit bypass or extra export field is introduced. Scheduled reminders remain
+  routine. Explicit confirmed test/replay bypass scheduling, disclose this in UI, and retain
+  existing destination revision/field consent and transport gates.
+- **Cancellation/privacy:** Every staged/sealed item retains message/account linkage.
+  Removal of any constituent cancels the entire unsent immutable summary; surviving items
+  are not replayed. Read/dismissal and reminder configuration changes cancel affected
+  reminder deliveries. Destination changes cancel pending work. Terminal jobs clear payloads
+  and constituents; history stays within existing bounds. Revisions/configuration and
+  dispatch share the desktop alert gate; an already-started request cannot be recalled.
+- **Consequences:** Native lease selection checks quiet hours for its actual candidate,
+  including retries, independently of round-robin staging progress. Provider cooldowns,
+  serial dispatch, field filtering and TLS/public-DNS restrictions remain authoritative.
+  The active unlocked runner is required. Clock/timezone changes may delay or expire work;
+  the feature promises neither exactly-once delivery nor human visibility. Offline tests
+  cover synthetic transitions and isolated OS timezone resolution, not live providers.

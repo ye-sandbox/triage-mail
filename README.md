@@ -369,6 +369,27 @@ or payment data. Body export is limited to 6,000 UTF-8 bytes, excerpts to 512 by
 collections to 16 entries and JSON to 64 KiB; truncation is explicit. HTML, raw headers,
 attachment bytes and raw OTP/Pix extraction values are excluded. Missing content is never fetched.
 
+In **Digests & quiet hours**, choose immediate, hourly (minute of the hour), or daily
+(time of day) delivery per destination, using system local time or UTC. Quiet intervals
+include their start and exclude their end, and may cross midnight. Missing DST times
+advance to the first valid minute; repeated schedule times run once at the earlier
+occurrence. The preview shows the next eligible time without sending.
+
+Missed windows merge into one catch-up summary; unsent items expire after 24 hours.
+Summaries retain at most 50 detailed entries within 64 KiB, with total/omitted counts;
+provider text limits can truncate further. The encrypted queue holds at most 1,000
+items per destination and reports overflow. A pending summary keeps its event ID,
+payload and oldest item's retry deadline. Removing a constituent cancels the whole
+unsent summary, including its surviving entries. Reading an unread reminder or
+canceling its reminder configuration also cancels affected queued deliveries.
+
+**Urgent alert** rule actions bypass digests/quiet hours only after separate permission
+in that destination's scheduling policy. Otherwise they follow the routine schedule;
+reminders are always routine. Rate limits and field consent still apply. Policy changes
+cancel prior automatic work. Backward clock/timezone changes conservatively expire
+already-closed civil slots rather than replaying them. Explicit test/replay confirmation
+discloses that it bypasses scheduling, without flushing queued routine items.
+
 **Test delivery** sends a synthetic event only after confirmation. **Replay selected messages**
 requires explicit message/destination selection and confirmation; it sends current selected
 fields without applying mail actions. Simulation never sends. Initial history never alerts.

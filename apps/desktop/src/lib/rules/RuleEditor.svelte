@@ -7,6 +7,7 @@
 	import type { Destination } from '../alerts/types';
 	import { labels as alertLabels } from '../alerts/labels';
 	import ConditionsEditor from './ConditionsEditor.svelte';
+	import { scheduleLabels } from '../alerts/schedule';
 	let {
 		draft,
 		busy,
@@ -36,13 +37,15 @@
 			actions: enabled ? [...draft.actions, action] : draft.actions.filter((a) => a !== action)
 		});
 	}
-	function toggleAlert(id: string, enabled: boolean) {
+	function toggleAlert(id: string, enabled: boolean, urgent = false) {
 		const actions = draft.actions.filter(
-			(a) => typeof a !== 'object' || !('Alert' in a) || a.Alert !== id
+			(a) =>
+				typeof a !== 'object' ||
+				('Alert' in a ? a.Alert !== id : 'UrgentAlert' in a ? a.UrgentAlert !== id : true)
 		);
 		change({
 			...draft,
-			actions: enabled ? [...actions, { Alert: id }] : actions
+			actions: enabled ? [...actions, urgent ? { UrgentAlert: id } : { Alert: id }] : actions
 		});
 	}
 
@@ -51,7 +54,7 @@
 		change({
 			...draft,
 			actions: [
-				...draft.actions.filter((a) => typeof a === 'string' || 'Alert' in a),
+				...draft.actions.filter((a) => typeof a === 'string' || 'Alert' in a || 'UrgentAlert' in a),
 				...value
 					.split('\n')
 					.filter((v) => v.trim())
@@ -131,13 +134,15 @@
 		<fieldset class="space-y-2">
 			<legend>{alertLabels[i18n.locale].title}</legend>
 			{#each draft.actions as action}
-				{#if typeof action === 'object' && 'Alert' in action && !destinations.some((d) => d.id === action.Alert)}
+				{#if typeof action === 'object' && ('Alert' in action || 'UrgentAlert' in action) && !destinations.some((d) => d.id === ('Alert' in action ? action.Alert : action.UrgentAlert))}
 					<label class="flex gap-2"
 						><input
 							type="checkbox"
 							checked
-							onchange={() => toggleAlert(action.Alert, false)}
-						/>{action.Alert} · {alertLabels[i18n.locale].status.Unavailable}</label
+							onchange={() =>
+								toggleAlert('Alert' in action ? action.Alert : action.UrgentAlert, false)}
+						/>{'Alert' in action ? action.Alert : action.UrgentAlert} · {alertLabels[i18n.locale]
+							.status.Unavailable}</label
 					>
 				{/if}
 			{/each}
@@ -146,13 +151,26 @@
 					><input
 						type="checkbox"
 						checked={draft.actions.some(
-							(a) => typeof a === 'object' && 'Alert' in a && a.Alert === destination.id
+							(a) =>
+								typeof a === 'object' &&
+								(('Alert' in a && a.Alert === destination.id) ||
+									('UrgentAlert' in a && a.UrgentAlert === destination.id))
 						)}
 						onchange={(e) => toggleAlert(destination.id, e.currentTarget.checked)}
 					/>{destination.name} · {destination.public_origin ??
 						alertLabels[i18n.locale].local}</label
 				>
+				<label class="flex gap-2"
+					><input
+						type="checkbox"
+						checked={draft.actions.some(
+							(a) => typeof a === 'object' && 'UrgentAlert' in a && a.UrgentAlert === destination.id
+						)}
+						onchange={(e) => toggleAlert(destination.id, true, e.currentTarget.checked)}
+					/>{scheduleLabels[i18n.locale].urgentRule}</label
+				>
 			{/each}
+			<p>{scheduleLabels[i18n.locale].urgentHelp}</p>
 		</fieldset>
 		<label class="flex gap-2"
 			><input

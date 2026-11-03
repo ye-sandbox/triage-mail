@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 pub mod connectors;
+pub mod schedule;
 
 pub const MAX_PAYLOAD_BYTES: usize = 65_536;
 pub const MAX_AGE_MS: i64 = 86_400_000;

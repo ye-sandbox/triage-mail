@@ -12,6 +12,9 @@
 	} from './types';
 	import { nativeAlertsTransport } from './transport';
 	import DestinationEditor from './DestinationEditor.svelte';
+	import ScheduleEditor from './ScheduleEditor.svelte';
+	import { scheduleLabels } from './schedule';
+	let scheduleId = $state<string | null>(null);
 	let {
 		guard,
 		selectedIds = [],
@@ -116,6 +119,15 @@
 				{save}
 				cancel={() => edit(null)}
 			/>{/key}
+	{:else if scheduleId}
+		{#key scheduleId}<ScheduleEditor
+				id={scheduleId}
+				{guard}
+				cancel={() => {
+					scheduleId = null;
+					guard.markDirty(false);
+				}}
+			/>{/key}
 	{:else}
 		<button type="button" disabled={busy} onclick={() => edit(newDestination())}>{t.add}</button>
 		{#if !destinations.length}<p>{t.empty}</p>{/if}
@@ -131,6 +143,14 @@
 						{t.preview}: {d.fields.map((f) => t.fieldNames[f]).join(', ') || '—'}
 					</p>
 					<div class="flex gap-4 flex-wrap">
+						<button
+							type="button"
+							disabled={busy}
+							onclick={() => {
+								pending = null;
+								scheduleId = d.id;
+							}}>{scheduleLabels[i18n.locale].title}</button
+						>
 						<button
 							type="button"
 							disabled={busy}
@@ -169,6 +189,7 @@
 				{pending.kind === 'test' ? t.confirmTest : t.confirmReplay}
 				{pending.destination.name} · {pending.destination.public_origin ?? t.local}
 			</p>
+			<p>{scheduleLabels[i18n.locale].bypass}</p>
 			<p>{pending.destination.fields.map((f) => t.fieldNames[f]).join(', ')}</p>
 			<button type="button" disabled={busy} onclick={() => void deliver()}>{t.send}</button>
 			<button type="button" disabled={busy} onclick={() => (pending = null)}>{t.cancel}</button>
