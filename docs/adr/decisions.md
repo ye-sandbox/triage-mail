@@ -426,3 +426,49 @@ type: architectural-decision-log
   provider aliases are outside address familiarity. Headless storage composes through
   existing desktop workers; no new runner or always-on claim. Existing performance
   budgets are unchanged and fixture timing limitations remain explicit.
+
+### [2026-11-03] ADR-019: Account-Local Header Conversations and Snapshot Triage
+
+- **Context:** [04.13] adds optional grouped navigation and explicit multi-message
+  actions without changing canonical IMAP identity, existing IPC or message search.
+- **Decision:** Append migration v9 for bounded normalized header inputs, indexed
+  canonical-record membership, dirty accounts, opaque generations, expiring action
+  previews and safe outbox attempt counters. `storage::conversations` remains headless;
+  desktop composes existing mutation/outbox paths. No new crate dependency or network
+  policy exception. Existing public tree-helper signature is retained and its depth,
+  duplicate handling and cycles are hardened; canonical navigation uses record IDs.
+- **Identity:** Conservative case-sensitive ASCII header IDs, <=998 bytes, exactly one
+  `@`, no whitespace/delimiters. Strip paired outer angle brackets only. Reject invalid
+  or oversized reference lists (>64 IDs/64KiB). Prefer an unambiguous direct reply ID,
+  otherwise the nearest usable reference. Missing ancestors are account-local placeholder
+  nodes. Duplicate header IDs cannot resolve links or merge their canonical records by
+  that ID. Iterative union/find forms components safely even with cycles; subjects and
+  senders never supply links. Headers are unauthenticated and may join unrelated mail.
+- **Index lifecycle:** Stage <=300 missing/changed headers per tick in encrypted storage;
+  resume after interruption. Once all inputs for a dirty account are staged, consolidate
+  that account's components and replace membership atomically. Consolidation is linear
+  account-wide work under the storage lock, not a <=300-record final operation. Later
+  parent arrivals, duplicate changes and deletions trigger account recomputation. This
+  prioritizes correctness over incremental graph complexity; large-account stalls remain
+  a measurement/optimization concern. Ready account-scoped reads can proceed independently
+  of other dirty accounts. Global grouping waits for all accounts. No automation runs.
+- **Search:** Additive conversation APIs reuse native lexical/cosine/RRF eligibility.
+  Filter first, rank the entire eligible message set, retain the best-ranked message
+  per group, then paginate groups. Hybrid conversation RRF uses complete eligible branch
+  rankings rather than the bounded message-mode candidate window. Existing message-mode
+  ranking is unchanged. Hydrate only final representative/member pages; matching/total
+  cached counts are distinct. Member expansion labels records outside the active view.
+- **Confirmation:** Default to matching cached records; all-cached is a separate choice.
+  A native preview binds immutable IDs/action to an opaque generation for <=5 minutes.
+  Database changes, vector writes, UTC date rollover and snooze expiry invalidate
+  generations. Confirmation consumption, generation check, local mutations, unread
+  reminder cancellation and outbox inserts share a transaction. >500 selected records
+  fail without truncation. New arrivals require another preview. Remote operations retain
+  independent completion/retry and safe per-message attempt/failure feedback; no remote
+  atomicity, automatic whole-thread read, unsubscribe, trash or rule replay is implied.
+- **Consequences:** Group IDs may change after a merge/split and are not durable user
+  identities. Conservative syntax can leave valid unusual header forms ungrouped. Rebuild
+  and full-result ranking costs scale with cached mail. Generation invalidation is global
+  and conservative, so unrelated changes may require refreshing. Body/attachment access
+  stays explicit and lazy; each opened member uses existing sanitized sandboxed rendering.
+  All facts/settings remain local; EN/PT-BR UI and transient state preserve privacy.

@@ -211,6 +211,34 @@ pnpm --filter desktop build
 cargo build --release --package triage-mail-desktop
 ```
 
+### Conversations and thread triage
+
+Select **Conversations** above the message list to group cached mail within each account.
+The default message view remains available. Grouping uses Message-ID, In-Reply-To and
+References only; identical subjects do not join messages. Missing or malformed headers
+can leave singletons, and ambiguous duplicate IDs never resolve links. Grouping does not
+verify an author. A preparation counter appears while local history is indexed.
+
+Rows show matching, cached and unread counts. Open a conversation to browse chronological
+member pages, including explicitly labeled messages outside the active view or folder.
+Open an individual member to load its body through the existing sanitized, sandboxed
+reader. Attachments still download only on explicit request.
+
+Conversation read/unread, archive and tag actions default to matching cached messages.
+Select **Include all cached members** separately to include other folders or messages
+outside the filter. Preview the exact account, folders and affected messages before
+confirming. Confirmations expire after five minutes; changed membership or filters require
+refreshing. New arrivals are excluded. Selections above 500 messages must be narrowed.
+Local updates commit together; remote operations can complete or fail independently.
+Pending/failed changes and attempt counts appear beside members while the active app
+retries them. No automatic whole-conversation read or conversation unsubscribe is added.
+
+Index consolidation and grouped ranking scan account/result metadata; large-mailbox
+latency and database-lock stalls remain limitations. Conversation hybrid ranking uses
+complete eligible branch rankings; existing message-mode ranking stays unchanged. Run
+`cargo run --offline --release -p storage --example conversation_performance` for the
+synthetic encrypted fixture. Measurements do not establish native 60fps behavior.
+
 ### New-sender review
 
 Enable **Settings → New senders** separately for each account. Review is disabled by

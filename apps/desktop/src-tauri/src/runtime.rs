@@ -250,6 +250,77 @@ pub async fn cmd_save_sender_choice(
         .await
 }
 #[tauri::command]
+pub async fn cmd_conversation_progress(
+    state: State<'_, RuntimeState>,
+    account_id: Option<String>,
+) -> Result<storage::conversations::ConversationProgress, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .conversation_progress(account_id)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_search_conversations(
+    state: State<'_, RuntimeState>,
+    query: SearchQueryDto,
+    context: storage::conversations::ConversationQuery,
+) -> Result<storage::conversations::ConversationPage, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .search_conversations(query, context)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_conversation_members(
+    state: State<'_, RuntimeState>,
+    query: SearchQueryDto,
+    context: storage::conversations::ConversationQuery,
+    id: String,
+    offset: usize,
+) -> Result<storage::conversations::ConversationMembers, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .conversation_members(query, context, id, offset)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_preview_conversation(
+    state: State<'_, RuntimeState>,
+    query: SearchQueryDto,
+    context: storage::conversations::ConversationQuery,
+    id: String,
+    all: bool,
+    action: storage::conversations::ConversationAction,
+) -> Result<storage::conversations::ConversationPreview, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .preview_conversation(query, context, id, all, action)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_apply_conversation(
+    state: State<'_, RuntimeState>,
+    token: String,
+) -> Result<Vec<String>, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .apply_conversation(token)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_conversation_status(
+    state: State<'_, RuntimeState>,
+    ids: Vec<String>,
+) -> Result<Vec<storage::conversations::MutationStatus>, IpcError> {
+    state.initialize(None).await?.conversation_status(ids).await
+}
+
+#[tauri::command]
 pub async fn cmd_search_sender_review(
     state: State<'_, RuntimeState>,
     query: SearchQueryDto,
@@ -770,6 +841,12 @@ pub fn run() {
             cmd_review_metadata,
             cmd_list_sender_choices,
             cmd_save_sender_choice,
+            cmd_conversation_progress,
+            cmd_search_conversations,
+            cmd_conversation_members,
+            cmd_preview_conversation,
+            cmd_apply_conversation,
+            cmd_conversation_status,
             cmd_search_sender_review,
             cmd_category_metadata,
             cmd_correct_category,
@@ -906,6 +983,12 @@ mod tests {
                 cmd_review_metadata,
                 cmd_list_sender_choices,
                 cmd_save_sender_choice,
+                cmd_conversation_progress,
+                cmd_search_conversations,
+                cmd_conversation_members,
+                cmd_preview_conversation,
+                cmd_apply_conversation,
+                cmd_conversation_status,
                 cmd_search_sender_review,
                 cmd_category_metadata,
                 cmd_correct_category,
@@ -1004,6 +1087,15 @@ mod tests {
             json!("InvalidRequest")
         );
         assert_eq!(invoke(&window,"cmd_search_category",json!({"query":{"query":"","mode":"Lexical","limit":200,"offset":0},"category":"Notifications"})).unwrap(),json!([]));
+        assert_eq!(
+            invoke(&window, "cmd_conversation_progress", json!({})).unwrap(),
+            json!({"indexed":0,"total":0,"ready":true})
+        );
+        let conversations=invoke(&window,"cmd_search_conversations",json!({"query":{"query":"","mode":"Lexical","limit":200,"offset":0},"context":{"source":"Messages","scope":null,"generation":null}})).unwrap();
+        assert_eq!(conversations["rows"], json!([]));
+        assert_eq!(conversations["generation"].as_str().unwrap().len(), 32);
+        assert_eq!(invoke(&window,"cmd_search_conversations",json!({"query":{"query":"","mode":"Semantic","limit":200,"offset":0},"context":{"source":"Messages","scope":null,"generation":null}})).unwrap_err(),json!("InvalidRequest"));
+
         assert_eq!(invoke(&window,"cmd_search_category",json!({"query":{"query":"","mode":"Semantic","limit":200,"offset":0},"category":"Notifications"})).unwrap_err(),json!("InvalidRequest"));
         assert_eq!(invoke(&window,"cmd_save_category_override",json!({"value":{"account_id":"missing","sender":"sender@example.org","revision":0,"category":"Financial"}})).unwrap_err(),json!("InvalidRequest"));
         let view = storage::saved_views::SavedView {

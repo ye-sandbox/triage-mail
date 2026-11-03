@@ -722,3 +722,37 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   request invalidation, exact-sender/account consent, dirty/busy guards and cleanup.
   No review/mail facts enter browser persistence. Existing search/native budgets and
   known deviations remain; synthetic timings are not a native 60fps claim.
+
+
+## Conversation Grouping and Snapshot Triage ([04.13] / ADR-019)
+
+- Migration v9 adds normalized conversation_inputs, indexed conversation_members,
+  dirty-account staging, opaque epoch, expiring conversation_previews and safe
+  conversation_attempts. Existing schemas/traits/message IPC remain unchanged.
+- Header IDs are case-sensitive conservative ASCII, <=998 bytes; references <=64/64KiB.
+  No subject/sender/account-crossing fallback. Duplicate IDs cannot resolve links;
+  missing ancestors are account-local placeholders. Iterative components retain every
+  canonical record, including cycles/singletons. Group IDs can merge/split/change.
+- Backfill stages <=300 headers per tick, then atomically consolidates one complete
+  dirty account using all compact inputs. Final consolidation is linear account-wide
+  work under the storage lock. Check progress.ready, not just a zero staging count.
+  Global grouping waits for all accounts; account views check relevant readiness.
+- Additive IPC: cmd_conversation_progress(accountId?), cmd_search_conversations(query,context),
+  cmd_conversation_members(query,context,id,offset), cmd_preview_conversation(query,context,id,all,action),
+  cmd_apply_conversation(token), cmd_conversation_status(ids). Context carries source,
+  scope and optional generation. Member pages <=100; group pages <=500. Saved definitions
+  resolve natively before embedding. Existing semantic opt-in gates remain authoritative.
+- Native filtering/ranking precedes group pagination. Best eligible message represents
+  each group; hybrid group RRF uses complete eligible branch rankings, while existing
+  message search retains its candidate windows. Hydrate final pages only; matching,
+  cached and unread counts remain distinct. Outside-view members are explicitly labeled.
+- Preview defaults to matching records, all-cached requires selection. Native immutable
+  IDs/action, five-minute expiration and generation checks reject stale confirmation.
+  Consumption/check/local mutations/unread-reminder cancellation/outbox inserts share
+  one transaction. >500 fails without truncation. Generations include UTC day and snooze
+  boundaries as well as database/vector changes. Unrelated writes can invalidate them.
+- EN/PT-BR optional grouped mode retains virtualization and per-message lazy sandboxed
+  readers. No automatic thread read or browser persistence. Only read/unread/archive/tag
+  conversation actions; no thread unsubscribe/trash/rule replay. Remote operations retry
+  independently; per-message failure/attempt metadata has no provider response details.
+  Existing performance targets/deviations remain; see k-031 for indexing and snapshot risks.

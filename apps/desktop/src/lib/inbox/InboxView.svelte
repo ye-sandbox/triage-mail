@@ -1,4 +1,6 @@
 <script lang="ts">
+	import ConversationToggle from '../conversations/ConversationToggle.svelte';
+	import ConversationReader from '../conversations/ConversationReader.svelte';
 	import ReviewViews from '../sender-review/ReviewViews.svelte';
 	import ReviewActions from '../sender-review/ReviewActions.svelte';
 	import { labels as reviewLabels } from '../sender-review/labels';
@@ -111,7 +113,15 @@
 		});
 	});
 	function openPalette(tag = false, snooze = false) {
-		if (settingsOpen || !connected || !selected || inbox.mutating || inbox.loading) return;
+		if (
+			inbox.conversations ||
+			settingsOpen ||
+			!connected ||
+			!selected ||
+			inbox.mutating ||
+			inbox.loading
+		)
+			return;
 		returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		actionTarget = { id: selected.id, subject: selected.subject };
 		tagging = tag;
@@ -136,7 +146,15 @@
 		if (actionTarget) void inbox.mutate(actionTarget.id, action);
 	}
 	function keyboard(event: KeyboardEvent) {
-		if (settingsOpen || paletteOpen || !connected || !selected || inbox.mutating || inbox.loading)
+		if (
+			inbox.conversations ||
+			settingsOpen ||
+			paletteOpen ||
+			!connected ||
+			!selected ||
+			inbox.mutating ||
+			inbox.loading
+		)
 			return;
 		const action = shortcut(event);
 		if (!action) return;
@@ -217,15 +235,18 @@
 			disabled={!connected || inbox.loading}
 			experimentalSemanticSearch={inbox.experimentalSemanticSearch}
 		/>
-		<MessageActions
-			{createRule}
-			{selected}
-			disabled={!connected || inbox.mutating || inbox.loading}
-			{openPalette}
-			mutate={(action) => {
-				if (selected) void inbox.mutate(selected.id, action);
-			}}
-		/>
+		<ConversationToggle {inbox} disabled={!connected || settingsOpen} />
+		{#if !inbox.conversations}
+			<MessageActions
+				{createRule}
+				{selected}
+				disabled={!connected || inbox.mutating || inbox.loading}
+				{openPalette}
+				mutate={(action) => {
+					if (selected) void inbox.mutate(selected.id, action);
+				}}
+			/>
+		{/if}
 		{#if !connected}<div
 				class="border-b border-[var(--separator)] bg-[var(--surface)] px-6 py-3 text-sm text-[var(--secondary)]"
 				role="status"
@@ -250,23 +271,33 @@
 						class="self-start px-6 py-3 text-sm text-[var(--accent)] md:hidden"
 						onclick={backToList}>‹ {context}</button
 					>{/if}
-				{#if selected}<MessageState
-						message={selected}
-						folder={inbox.folderLabels[selected.id] || selected.folder}
-						tags={inbox.localTags[selected.id] ?? []}
-					/>{/if}
-				{#if selected}{#key selected.id}<ReviewActions
+				{#if inbox.conversations && selected && inbox.conversationRows[selected.id]}
+					{#key selected.id}<ConversationReader
 							{inbox}
-							message={selected}
-							accountLabel={accounts.find((a) => a.account_id === selected.account_id)
-								?.email_display ?? selected.account_id}
+							row={inbox.conversationRows[selected.id]}
+							transport={readerTransport}
+							{accounts}
 							disabled={!connected || settingsOpen}
-						/><CategoryActions
-							{inbox}
+						/>{/key}
+				{:else}
+					{#if selected}<MessageState
 							message={selected}
-							disabled={!connected || settingsOpen}
-						/>{/key}{/if}
-				<SelectionOverview message={selected} transport={readerTransport} />
+							folder={inbox.folderLabels[selected.id] || selected.folder}
+							tags={inbox.localTags[selected.id] ?? []}
+						/>{/if}
+					{#if selected}{#key selected.id}<ReviewActions
+								{inbox}
+								message={selected}
+								accountLabel={accounts.find((a) => a.account_id === selected.account_id)
+									?.email_display ?? selected.account_id}
+								disabled={!connected || settingsOpen}
+							/><CategoryActions
+								{inbox}
+								message={selected}
+								disabled={!connected || settingsOpen}
+							/>{/key}{/if}
+					<SelectionOverview message={selected} transport={readerTransport} />
+				{/if}
 			</div>
 		</div>
 		{#if inbox.mutationError}<p

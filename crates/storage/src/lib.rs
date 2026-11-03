@@ -15,6 +15,7 @@ pub mod alerts;
 pub mod avatars;
 pub mod categories;
 pub mod connection;
+pub mod conversations;
 pub mod desktop;
 pub mod migrations;
 pub mod models;

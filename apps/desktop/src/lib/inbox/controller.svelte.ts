@@ -1,3 +1,5 @@
+import type { ConversationContext, ConversationRow } from '../conversations/types';
+import { labels as conversationLabels } from '../conversations/labels';
 import type { ReviewFilter } from '../sender-review/types';
 import type { Category } from '../categories/types';
 import type { SavedView } from '../saved-views/types';
@@ -13,6 +15,47 @@ import { validTag, type TriageAction } from './triage';
 export const PAGE_SIZE = 200;
 
 export class InboxController {
+	conversations = $state(false);
+	conversationGeneration = $state<string | null>(null);
+	conversationRows = $state.raw<Record<string, ConversationRow>>({});
+	get conversationTransport() {
+		return this.transport.conversations;
+	}
+	conversationContext(generation = this.conversationGeneration): ConversationContext {
+		return {
+			source: this.review
+				? { Review: this.review }
+				: this.savedView
+					? {
+							Saved: {
+								id: this.savedView.id,
+								revision: this.savedView.revision
+							}
+						}
+					: this.category
+						? { Category: this.category }
+						: 'Messages',
+			scope: this.scope ?? null,
+			generation
+		};
+	}
+	conversationQuery() {
+		return {
+			query: this.query,
+			mode: this.mode,
+			limit: PAGE_SIZE,
+			offset: 0,
+			...this.scopeField()
+		};
+	}
+	async toggleConversations() {
+		this.conversations = !this.conversations;
+		await this.search(this.query, this.mode);
+	}
+	async mutateMember(id: string, action: TriageAction) {
+		await this.updateCategory(() => this.transport.triage({ message_ids: [id], action }));
+	}
+
 	review = $state<ReviewFilter | null>(null);
 	get reviewTransport() {
 		return this.transport.review;
@@ -133,6 +176,24 @@ export class InboxController {
 		offset: number;
 		scope?: MailboxScope;
 	}) {
+		if (this.conversations) {
+			const generation = this.generation;
+			const context = this.conversationContext(
+				page.offset === 0 ? null : this.conversationGeneration
+			);
+			return this.transport.conversations
+				? this.transport.conversations.search(page, context).then((result) => {
+						if (generation === this.generation && !this.disposed) {
+							this.conversationGeneration = result.generation;
+							this.conversationRows = {
+								...(page.offset === 0 ? {} : this.conversationRows),
+								...Object.fromEntries(result.rows.map((row) => [row.representative.id, row]))
+							};
+						}
+						return result.rows.map((row) => row.representative);
+					})
+				: Promise.reject('InvalidRequest');
+		}
 		if (this.review)
 			return this.transport.review
 				? this.transport.review.search(page, this.review)
@@ -245,6 +306,8 @@ export class InboxController {
 		}
 		this.query = query;
 		this.mode = mode;
+		this.conversationGeneration = null;
+		this.conversationRows = {};
 		this.rows = [];
 		this.rehydrateFeedback();
 		this.selectedId = null;
@@ -392,6 +455,8 @@ export class InboxController {
 	}
 	private errorMessage(error: unknown) {
 		// INVARIANT: Never display arbitrary IPC errors that could contain private account data.
+		if (this.conversations && error === 'InvalidRequest')
+			return conversationLabels[i18n.locale].unavailable;
 		if (error === 'EmbeddingUnavailable')
 			return 'Experimental semantic search needs a local model. Choose Words to search without it.';
 		if (error === 'VaultUnavailable') return i18n.t.mailboxes.vaultError;

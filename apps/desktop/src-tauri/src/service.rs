@@ -443,6 +443,14 @@ impl DesktopService {
     }
 
     fn enqueue_mutation(&self, mutation: TriageMutationDto) -> Result<(), IpcError> {
+        self.enqueue_mutation_guarded(mutation, None)
+    }
+
+    pub(crate) fn enqueue_mutation_guarded(
+        &self,
+        mutation: TriageMutationDto,
+        snapshot: Option<(&str, &str)>,
+    ) -> Result<(), IpcError> {
         let mut accounts = HashSet::new();
         let mut changes = Vec::new();
         for id in &mutation.message_ids {
@@ -496,14 +504,13 @@ impl DesktopService {
             };
             changes.push((id.clone(), local, remote));
         }
-        self.store
-            .apply_local_mutations(&changes)
-            .map_err(storage_error)?;
-        if mutation.action == TriageActionDto::MarkRead {
-            self.store
-                .cancel_reminders_for_read_messages(&mutation.message_ids)
-                .map_err(storage_error)?;
+        match snapshot {
+            Some((generation, token)) => self
+                .store
+                .apply_preview_mutations(&changes, generation, token),
+            None => self.store.apply_local_mutations(&changes),
         }
+        .map_err(storage_error)?;
         for account in accounts {
             self.events.publish(SyncProgressEvent {
                 account_id: account,

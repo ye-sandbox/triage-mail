@@ -108,7 +108,38 @@ impl SqliteMailStore {
         &self,
         changes: &[(String, LocalMutation<'_>, Option<String>)],
     ) -> Result<(), StorageError> {
+        self.apply_local_mutations_guarded(changes, None)
+    }
+
+    /// INVARIANT: A confirmed conversation snapshot is checked inside the mutation transaction.
+    pub fn apply_local_mutations_guarded(
+        &self,
+        changes: &[(String, LocalMutation<'_>, Option<String>)],
+        generation: Option<&str>,
+    ) -> Result<(), StorageError> {
+        self.apply_mutations_snapshot(changes, generation, None)
+    }
+
+    pub fn apply_preview_mutations(
+        &self,
+        changes: &[(String, LocalMutation<'_>, Option<String>)],
+        generation: &str,
+        token: &str,
+    ) -> Result<(), StorageError> {
+        self.apply_mutations_snapshot(changes, Some(generation), Some(token))
+    }
+
+    fn apply_mutations_snapshot(
+        &self,
+        changes: &[(String, LocalMutation<'_>, Option<String>)],
+        generation: Option<&str>,
+        token: Option<&str>,
+    ) -> Result<(), StorageError> {
         self.transaction(|tx| {
+            if let Some(generation) = generation { crate::conversations::check_generation(tx, generation)?; }
+            if let (Some(token),Some(generation))=(token,generation) {
+                crate::conversations::actions::consume_preview(tx,token,generation,changes)?;
+            }
             for (id, action, remote_payload) in changes {
                 let exists: bool = tx
                     .query_row(
@@ -121,7 +152,11 @@ impl SqliteMailStore {
                     return Err(StorageError::Query("message not found".into()));
                 }
                 Self::apply_mutation_in_transaction(tx, id, action)?;
+                if matches!(action, LocalMutation::Read(true)) {
+                    tx.execute("UPDATE reminder_jobs SET status='Canceled' WHERE message_id=?1 AND trigger_type='UnreadInterval' AND status='Pending'", [id]).map_err(query_error)?;
+                }
                 if let Some(payload) = remote_payload {
+                    tx.execute("DELETE FROM conversation_attempts WHERE message_id=?1",[id]).map_err(query_error)?;
                     tx.execute(
                         "INSERT INTO pending_mutations(message_id,payload_json) VALUES (?1,?2)",
                         params![id, payload],

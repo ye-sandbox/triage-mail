@@ -213,6 +213,34 @@ pnpm --filter desktop build
 cargo build --release --package triage-mail-desktop
 ```
 
+### Conversas e triagem em grupo
+
+Selecione **Conversas** acima da lista para agrupar mensagens em cache dentro de cada conta.
+A visualização padrão por mensagem continua disponível. O agrupamento usa apenas Message-ID,
+In-Reply-To e References; assuntos iguais não unem mensagens. Cabeçalhos ausentes ou inválidos
+podem deixar mensagens isoladas, e IDs duplicados ambíguos não resolvem vínculos. O agrupamento
+não verifica autores. Um contador mostra a preparação do índice do histórico local.
+
+As linhas mostram contagens de correspondentes, mensagens em cache e não lidas. Abra uma
+conversa para percorrer páginas cronológicas, incluindo mensagens identificadas como fora da
+visualização ou pasta atual. Abra uma mensagem para carregar seu corpo pelo leitor existente,
+sanitizado e isolado. Anexos continuam sendo baixados apenas mediante solicitação explícita.
+
+As ações de leitura, não leitura, arquivamento e etiqueta afetam, por padrão, as mensagens
+correspondentes em cache. Selecione **Incluir todas as mensagens em cache** separadamente para
+incluir outras pastas ou mensagens fora do filtro. Revise conta, pastas e mensagens afetadas
+antes de confirmar. Confirmações expiram em cinco minutos; alterações de grupo ou filtros exigem
+atualização. Novas mensagens ficam de fora. Seleções acima de 500 mensagens devem ser reduzidas.
+As alterações locais são atômicas; as remotas podem concluir ou falhar separadamente.
+Pendências, falhas e contagens de tentativas aparecem junto às mensagens enquanto o aplicativo
+ativo repete as operações. Não há leitura automática nem cancelamento de inscrição em grupo.
+
+A consolidação do índice e a busca agrupada percorrem metadados da conta ou dos resultados;
+latência em caixas grandes e bloqueios do banco continuam sendo limitações. A busca híbrida
+por conversa usa rankings completos dos ramos elegíveis; o modo por mensagem não muda. Execute
+`cargo run --offline --release -p storage --example conversation_performance` para a massa
+sintética criptografada. As medições não comprovam comportamento nativo a 60fps.
+
 ### Revisão local de novos remetentes
 
 Ative **Configurações → Novos remetentes** separadamente para cada conta. A revisão vem

@@ -3,6 +3,7 @@
 pub mod alerts;
 pub mod avatars;
 pub mod categories;
+pub mod conversations;
 pub mod dto;
 pub mod events;
 pub mod model_download;
