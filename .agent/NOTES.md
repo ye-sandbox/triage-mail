@@ -648,3 +648,14 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - Synthetic large-fixture measurements are in `docs/performance/saved-views.md`; narrow
   starred workloads do not establish arbitrary-predicate latency or native 60fps. Existing
   [04.1.7] known deviations and budgets remain unchanged. See k-028 for lifecycle/SQL details.
+
+## Due-Date Dashboard & Scheduled Reminders ([04.11] / ADR-016)
+
+- Append-only migration v6 adds `reminder_configs`, `reminder_config_deleted_ids`, `reminder_jobs`, and `due_date_dismissals`.
+- Version-1 `ScheduledReminderConfig` models have revision optimistic locks, maximum 50 rules, trigger variant `DueDate` (`days_before` <= 365, `target_hour` 0..23, optional `min_amount_cents`) or `UnreadInterval` (`interval_hours` 1..8760, optional `min_amount_cents`), account filter, and 1..32 destination IDs matching configured alert destinations.
+- Civil date arithmetic uses Howard Hinnant's algorithm (`day_number` / `date_from_day_number`) without timezone or system clock dependencies for civil dates, and maps to target UTC seconds using local timezone offset (`local_tz_offset_seconds()`).
+- Invariant: Extraction never implies payment. Extracted dates from boletos and invoices categorize strictly as `Overdue`, `DueToday`, `Upcoming`, or `Dismissed`. Non-payment disclaimer is mandatory and prominent in both EN and PT-BR.
+- Reminders dispatch reuses the existing alert pipeline (`alert_jobs`), benefiting from rate-limiting, backoff, vault credential isolation, and configured destinations (Local, Webhook, Telegram, Discord). Reminders delayed > 15 minutes due to asleep runners are tagged `[Delayed Reminder]`.
+- Reading a message cancels all its pending `UnreadInterval` reminder jobs immediately (`cancel_reminders_for_read_messages`). Explicit dismissal records in `due_date_dismissals` and suppresses all pending reminder jobs for that message.
+- Additive IPC commands: `cmd_list_due_date_items(accountId)`, `cmd_dismiss_due_date_item(messageId)`, `cmd_list_reminder_configs`, `cmd_save_reminder_config(config)`, `cmd_delete_reminder_config(id, revision)`.
+- UI in `apps/desktop` provides Due-Date Dashboard modal, KPI summary cards (Overdue, Due Today, Upcoming), status filter tabs, 1-click clipboard barcode copy with feedback, direct navigation to email view, and Settings integration (`RemindersModule`) with full EN / PT-BR parity.

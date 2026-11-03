@@ -12,6 +12,7 @@
 	import AiModule from './modules/AiModule.svelte';
 	import AlertsModule from '../alerts/AlertsModule.svelte';
 	import RulesModule from '../rules/RulesModule.svelte';
+	import RemindersModule from '../reminders/RemindersModule.svelte';
 	import PrivacyModule from './modules/PrivacyModule.svelte';
 
 	let {
@@ -234,6 +235,8 @@
 						{/if}
 					{:else if activeTab === 'alerts'}
 						<AlertsModule {guard} selectedIds={selectedMessageIds} />
+					{:else if activeTab === 'reminders'}
+						<RemindersModule {guard} accounts={accountController?.accounts ?? []} />
 					{:else if activeTab === 'rules'}
 						<RulesModule
 							accounts={accountController?.accounts ?? []}

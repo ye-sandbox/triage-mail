@@ -17,6 +17,7 @@ pub mod connection;
 pub mod desktop;
 pub mod migrations;
 pub mod models;
+pub mod reminders;
 pub mod repository;
 pub mod rules;
 pub mod saved_views;
@@ -31,6 +32,7 @@ pub use models::{
     now_epoch_ms, AccountRecord, AttachmentRecord, FolderRecord, MessageFlagsDelta,
     MessageFolderMembershipRecord, MessageRecord,
 };
+pub use reminders::ReminderJobRecord;
 pub use repository::SqliteMailStore;
 pub use scoped_search::{MailboxScope, MailboxView};
 

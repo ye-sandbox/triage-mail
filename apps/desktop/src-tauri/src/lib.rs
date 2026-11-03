@@ -6,6 +6,7 @@ pub mod dto;
 pub mod events;
 pub mod model_download;
 pub mod onboarding;
+pub mod reminders;
 pub mod remote;
 pub mod rules;
 #[cfg(feature = "native-runtime")]

@@ -6,19 +6,25 @@
 	import type { AccountController } from './controller.svelte';
 	import InboxView from '$lib/inbox/InboxView.svelte';
 	import SettingsDialog from '$lib/settings/SettingsDialog.svelte';
+	import DueDateDashboard from '$lib/reminders/DueDateDashboard.svelte';
+	import { nativeRemindersTransport } from '$lib/reminders/transport';
+	import type { RemindersTransport } from '$lib/reminders/types';
 
 	let {
 		connected,
 		settingsTransport = nativeSettingsTransport,
+		remindersTransport = nativeRemindersTransport,
 		accountController
 	}: {
 		connected: boolean;
 		settingsTransport?: SettingsTransport;
+		remindersTransport?: RemindersTransport;
 		accountController?: AccountController;
 	} = $props();
 
 	const inbox = new InboxController(nativeTransport);
 	let settingsOpen = $state(false);
+	let dueDateDashboardOpen = $state(false);
 	let photoRevision = $state(0);
 	let settingsTab = $state<SettingsTab>('general');
 	let ruleSeedMessageId = $state<string | undefined>();
@@ -60,12 +66,30 @@
 		settingsTab = 'general';
 		settingsOpen = true;
 	}}
+	openDueDates={() => {
+		dueDateDashboardOpen = true;
+	}}
 	createRule={(id) => {
 		ruleSeedMessageId = id;
 		settingsTab = 'rules';
 		settingsOpen = true;
 	}}
 	{settingsOpen}
+/>
+<DueDateDashboard
+	open={dueDateDashboardOpen}
+	close={() => (dueDateDashboardOpen = false)}
+	transport={remindersTransport}
+	accounts={accountController?.accounts ?? []}
+	onSelectMessage={(msgId: string) => {
+		dueDateDashboardOpen = false;
+		inbox.selectedId = msgId;
+	}}
+	onConfigureReminders={() => {
+		dueDateDashboardOpen = false;
+		settingsTab = 'reminders';
+		settingsOpen = true;
+	}}
 />
 <SettingsDialog
 	open={settingsOpen}

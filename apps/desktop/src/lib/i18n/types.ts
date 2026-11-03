@@ -44,6 +44,7 @@ export interface Translations {
 		unsubscribe: string;
 		searchScope: string;
 		settings: string;
+		dueDates: string;
 		noActions: string;
 		actionSearch: string;
 		saved: string;
@@ -188,6 +189,7 @@ export interface Translations {
 		tabs: {
 			rules: string;
 			alerts: string;
+			reminders: string;
 			general: string;
 			accounts: string;
 			search: string;
