@@ -639,7 +639,7 @@ All tasks inherit the repository DoD when implemented.
 
 #### Completion (2026-11-02)
 
-- **Commit:** `pending` (`feat(reminders): add due-date dashboard and scheduled reminders`).
+- **Commit:** `25fa521` (`feat(reminders): add due-date dashboard and scheduled reminders`).
 - **Validation:** `cargo check --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` passed with 0 warnings. `cargo fmt --all -- --check` passed. Rust core tests in `vault`, `mail-engine`, `triage-ai`, and `storage` (including new deterministic civil date math, migration v6 idempotency, duplicate suppression, unread cancellation, and explicit dismissal) passed 100% (237+ tests). Frontend checks: `pnpm --filter desktop check` (0 errors, 0 warnings), `pnpm --filter desktop test` (26 test files, 159 tests passed), `pnpm --filter desktop build` (SPA production build passed). Zero legacy Svelte syntax (`! grep -rn "export let" apps/desktop/src/`). `git diff --check` passed with 0 errors.
 - **Contracts:** Schema migration v6 added `reminder_configs`, `reminder_config_deleted_ids`, `reminder_jobs`, `due_date_dismissals`. Additive Tauri IPC commands: `cmd_list_due_date_items`, `cmd_dismiss_due_date_item`, `cmd_list_reminder_configs`, `cmd_save_reminder_config`, `cmd_delete_reminder_config`. Pure Gregorian civil date calculations using Howard Hinnant's algorithm. Non-payment disclaimer invariant enforced in both EN and PT-BR.
 - **Documentation:** Synchronized `README.md`, `README.pt-br.md`, and `.agent/NOTES.md`.
