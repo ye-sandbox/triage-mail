@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[03.8] Local Automatic Categories — RUNNING
+[04.12] New-Sender Review — READY FOR PLANNING
 
 ---
 
@@ -137,8 +137,8 @@ A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
 - [x] Secret & PII Scrubbing: Zero real email addresses, tokens, or secrets in tracked files; `git diff --check` exits with code 0.
 - [x] Documentation Perimeter: If CLI flags, `.env.example` variables, or validation commands changed, synchronize `README.md` and `README.pt-br.md` (following `readme-standard` skill).
 - [x] Knowledge Preservation: Document obscure platform/runtime gotchas or workarounds as an atomic card in `.agent/knowledge/` (if applicable).
-- [ ] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
-- [ ] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
+- [x] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
+- [x] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
 
 ---
 
@@ -691,7 +691,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [03.8]: Local Automatic Categories
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Priority:** 6
 - **Depends On:** [03.5]
 - **Systems Involved:** `crates/triage-ai`, `crates/storage`, desktop inbox.
@@ -760,9 +760,39 @@ All tasks inherit the repository DoD when implemented.
 
 - **Approval:** User approved the recorded scope via `proceed` on 2026-11-02.
 
+#### Completion (2026-11-02)
+
+- **Commit:** `cf81280` (`feat(categories): add local classification and durable corrections`).
+- **Delivered:** Six deterministic local categories with fixed reasons/version, additive
+  Notifications wire value, encrypted append-only migration v7, revision-safe message
+  corrections and exact account/sender overrides. Message > sender > automatic precedence,
+  reset tombstones, canonical MOVE/re-ingestion identity handling, bounded resumable
+  history backfill and independent extraction badges. Additive native category search,
+  saved-view category predicates, EN/PT-BR controls and settings removal management retain
+  existing IPC shapes, core traits, mailbox identity and full-result pagination.
+- **Validation:** Offline workspace check/test/fmt/all-target Clippy pass (279 Rust tests).
+  Desktop check reports zero errors/warnings; all 163 frontend tests and SPA build pass.
+  Changed frontend files pass Prettier. Five policy regressions and a 324-text-file
+  tracked/new-file secret/PII scan pass with zero findings. Legacy syntax and diff checks
+  pass. Socket/child-process fixtures ran in the authorized local execution context;
+  all validation stayed offline without provider calls, downloads or deliveries.
+- **Performance:** 100k messages / 200k memberships, six workloads / 180 warm samples.
+  Local backfill tight-loop time is 4,721.357ms; desktop yields between <=300-row batches.
+  Broad Finance semantic p95 262.892ms and hybrid p95 451.471ms miss existing budgets.
+  Narrow category+starred semantic/hybrid and blank lexical workloads meet applicable
+  fixture budgets. Targets remain unchanged; existing mailbox/native deviations remain.
+  Evidence and limits: `docs/performance/categories.md` and aggregate CSV. No native
+  first-frame, 60fps or arbitrary-workload latency claim is made.
+- **Contracts:** ADR-017, active notes, k-029 and paired usage guides document precedence,
+  initial-history convergence, unauthenticated sender identity, Personal fallback and
+  record-only correction limits. Message-ID bracket normalization matches MIME ingestion.
+  Corrections never train models, mutate IMAP folders or execute rules/reminders/alerts.
+- **Next:** [04.12] promoted to READY FOR PLANNING. Its sender-history seeding and review
+  semantics need their own approved plan; no implementation started. Nothing pushed.
+
 ### Task [04.12]: New-Sender Review
 
-- **Status:** BACKLOG
+- **Status:** READY FOR PLANNING
 - **Priority:** 7
 - **Systems Involved:** `crates/storage`, desktop inbox/settings.
 - **Scope:** Offer an optional local review view for previously unseen senders, with
