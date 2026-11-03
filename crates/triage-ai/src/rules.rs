@@ -42,6 +42,7 @@ pub enum RuleAction {
     Star,
     Archive,
     Alert(String),
+    UrgentAlert(String),
 }
 
 /// Normalized facts are supplied by the ingestion/storage adapter, never by rule scripts.
@@ -143,7 +144,7 @@ impl Rule {
                 .all(Condition::validate)
             && self.actions.iter().all(|a| match a {
                 RuleAction::Tag(tag) => valid_text(tag, 80),
-                RuleAction::Alert(id) => crate::alerts::valid_id(id),
+                RuleAction::Alert(id) | RuleAction::UrgentAlert(id) => crate::alerts::valid_id(id),
                 _ => true,
             })
     }
@@ -280,7 +281,8 @@ pub fn evaluate(rules: &[Rule], facts: &MessageFacts) -> RulePlan {
         RuleAction::Tag(_) => 0,
         RuleAction::Star => 1,
         RuleAction::Archive => 2,
-        RuleAction::Alert(_) => 3,
+        RuleAction::UrgentAlert(_) => 3,
+        RuleAction::Alert(_) => 4,
     });
     plan
 }

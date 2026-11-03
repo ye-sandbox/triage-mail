@@ -756,3 +756,32 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   conversation actions; no thread unsubscribe/trash/rule replay. Remote operations retry
   independently; per-message failure/attempt metadata has no provider response details.
   Existing performance targets/deviations remain; see k-031 for indexing and snapshot risks.
+
+## Alert Digests and Quiet Hours ([03.9] / ADR-020)
+
+- Append-only v10 adds alert_schedule_policies/items/cursor; rule_jobs gains default-empty
+  schedule_revisions and alert_jobs gains nullable schedule_revision and default-false urgent.
+  Existing destination DTO, Alert(String), IPC commands and delivery trait stay compatible.
+- Pure alerts::schedule contracts accept ScheduleCalendar. Desktop resolves System Local
+  or UTC using chrono; no named-zone selector/dependency/download. Quiet hours are [start,end),
+  overnight allowed, equal endpoints invalid. DST gaps advance, overlaps choose earlier;
+  repeated-hour quiet boundaries still gate the later occurrence. Unsealed dates recompute.
+- Per-destination Immediate/Hourly/Daily policies use CAS for destination and policy revisions.
+  Ingestion snapshots policy revisions; policy edits cancel old automatic work and stale
+  rule jobs cannot enqueue. No history replay. Additive UrgentAlert(String) needs destination
+  urgent_bypass permission; otherwise routine. Ordered/stop-filtered urgent wins once.
+- Worker stages <=32 destinations round-robin and <=1,000 items each, with overflow counts.
+  Missed slots coalesce into one immutable summary; unresolved summaries block additional
+  sealing. <=50 entries/64 KiB from selected-field snapshots only, with omitted/total counts.
+  Age uses oldest constituent, never seal time; unsent items expire after 24h. Stable civil
+  watermarks suppress repeated/rolled-back slots, conservatively expiring those items.
+- Message/account removal cancels whole unsent summaries containing them, clearing payloads;
+  no surviving-item replay. Read/dismiss/reminder config edits cancel relevant staged/sealed
+  reminders. Test/replay bypass schedules with visible confirmation; rate/consent gates remain.
+- Additive IPC: cmd_alert_schedule(id), cmd_save_alert_schedule(policy,consent),
+  cmd_preview_alert_schedule(policy). Read returns policy and safe deferred/summarized/expired/
+  overflow counts. Preview performs no delivery. EN/PT-BR Alerts editor and urgent rule actions
+  retain guards and stale/unmount cleanup. No browser persistence. See k-032.
+- Native claim_alert_with_calendar gates actual retry candidates independently of staging
+  batches. Headless hosts must supply their calendar for local-zone policies; legacy
+  claim_alert uses the UTC adapter and fails closed for local-zone quiet hours. Existing network/privacy/lease/history limits remain.

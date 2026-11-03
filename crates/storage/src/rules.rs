@@ -95,7 +95,7 @@ impl SqliteMailStore {
                 }
             }
             for action in &rule.actions {
-                if let RuleAction::Alert(id) = action {
+                if let RuleAction::Alert(id) | RuleAction::UrgentAlert(id) = action {
                     if !crate::alerts::destinations(tx)?.iter().any(|d| d.id == *id) { return Err(invalid()); }
                 }
             }
@@ -295,8 +295,8 @@ pub(crate) fn enqueue(
         let rules = read_rules(tx)?;
         // INVARIANT: Freeze rule revisions at ingestion, so later edits cannot act on old mail.
         tx.execute(
-            "INSERT OR IGNORE INTO rule_jobs(message_id,rules_json,alert_revisions,event_key) VALUES (?1,?2,?3,?4)",
-            params![message.id, serde_json::to_string(&rules).map_err(error)?, crate::alerts::revisions(tx)?, key],
+            "INSERT OR IGNORE INTO rule_jobs(message_id,rules_json,alert_revisions,event_key,schedule_revisions) VALUES (?1,?2,?3,?4,?5)",
+            params![message.id, serde_json::to_string(&rules).map_err(error)?, crate::alerts::revisions(tx)?, key, crate::alerts::schedule::revisions(tx)?],
         )
         .map_err(error)?;
     }
@@ -311,15 +311,26 @@ fn apply_plan(
 ) -> Result<(), StorageError> {
     let (account,folder,uid,validity): (String,String,u32,u32) = tx.query_row("SELECT m.account_id,m.folder,m.uid,s.uidvalidity FROM messages m JOIN folder_sync_state s ON s.account_id=m.account_id AND s.folder_name=m.folder WHERE m.id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).map_err(error)?;
     for action in &plan.actions {
-        if let RuleAction::Alert(destination) = action {
-            crate::alerts::enqueue_auto(tx, id, destination, crate::now_epoch_ms())?;
+        if let RuleAction::Alert(destination) | RuleAction::UrgentAlert(destination) = action {
+            let urgent = matches!(action, RuleAction::UrgentAlert(_));
+            // INVARIANT: Evaluate the complete ordered plan before destination deduplication.
+            if !urgent
+                && plan
+                    .actions
+                    .contains(&RuleAction::UrgentAlert(destination.clone()))
+            {
+                continue;
+            }
+            crate::alerts::enqueue_auto(tx, id, destination, crate::now_epoch_ms(), urgent)?;
             continue;
         }
         let local = match action {
             RuleAction::Tag(t) => LocalMutation::Tag(t),
             RuleAction::Star => LocalMutation::Star(true),
             RuleAction::Archive => LocalMutation::Folder("Archive"),
-            RuleAction::Alert(_) => unreachable!("alert handled above"),
+            RuleAction::Alert(_) | RuleAction::UrgentAlert(_) => {
+                unreachable!("alert handled above")
+            }
         };
         SqliteMailStore::apply_mutation_in_transaction(tx, id, &local)?;
         if !matches!(action, RuleAction::Tag(_)) {
@@ -433,6 +444,42 @@ mod tests {
             public_origin: Some("https://example.com".into()),
             has_credentials: false,
         }
+    }
+    #[test]
+    fn urgent_rule_precedence_and_policy_snapshots_are_consent_bound() {
+        let s = store();
+        s.save_alert_destination(alert_destination(), None, 0)
+            .unwrap();
+        let mut p = s.alert_schedule("d").unwrap().policy;
+        p.urgent_bypass = true;
+        p.cadence = triage_ai::alerts::schedule::Cadence::Daily { minute: 540 };
+        s.save_alert_schedule(p, true, 0).unwrap();
+        let mut r = rule();
+        r.actions = vec![
+            RuleAction::Alert("d".into()),
+            RuleAction::UrgentAlert("d".into()),
+        ];
+        s.save_rule(r).unwrap();
+        s.establish_rule_baseline("a", "INBOX", 7, 1).unwrap();
+        s.commit_sync_batch(&[message("one", 1)], &[], &state(2), false)
+            .unwrap();
+        s.process_rule_jobs(100, payload).unwrap();
+        assert_eq!(count(&s, "alert_jobs"), 1);
+        assert_eq!(count(&s, "alert_schedule_items"), 0);
+        let urgent: bool = s
+            .conn
+            .lock()
+            .unwrap()
+            .query_row("SELECT urgent FROM alert_jobs", [], |r| r.get(0))
+            .unwrap();
+        assert!(urgent);
+        s.commit_sync_batch(&[message("two", 2)], &[], &state(3), false)
+            .unwrap();
+        let p = s.alert_schedule("d").unwrap().policy;
+        s.save_alert_schedule(p, true, 0).unwrap();
+        s.process_rule_jobs(100, payload).unwrap();
+        assert_eq!(s.alert_history().unwrap().len(), 1);
+        assert_eq!(s.alert_history().unwrap()[0].status, "Canceled");
     }
     #[test]
     fn alerts_share_atomic_rule_completion_and_never_replay_history() {

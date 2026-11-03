@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[03.9] Alert Digests & Quiet Hours — READY FOR PLANNING
+[01.4] Encrypted Backup & Portable Rule Export — READY FOR PLANNING
 
 ---
 
@@ -127,18 +127,18 @@ schemas, IPC and ranking remain unchanged; no ANN graphs, downloads or provider 
 
 ---
 
-## Definition of Done (DoD) Checklist — [04.13]
+## Definition of Done (DoD) Checklist — [03.9]
 
 A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
-- [x] Strict Typing: `cargo check --workspace` and `pnpm --filter desktop check` exit with code 0.
-- [x] Automated Tests: `cargo test --workspace` and `pnpm --filter desktop test` exit with code 0.
-- [x] Linters: `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` exit with code 0.
-- [x] Svelte 5 Invariant: `! grep -rn "export let" apps/desktop/src/` exits with code 0.
-- [x] Secret & PII Scrubbing: Zero real email addresses, tokens, or secrets in tracked files; `git diff --check` exits with code 0.
-- [x] Documentation Perimeter: If CLI flags, `.env.example` variables, or validation commands changed, synchronize `README.md` and `README.pt-br.md` (following `readme-standard` skill).
-- [x] Knowledge Preservation: Document obscure platform/runtime gotchas or workarounds as an atomic card in `.agent/knowledge/` (if applicable).
-- [x] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
-- [x] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
+- [ ] Strict Typing: `cargo check --workspace` and `pnpm --filter desktop check` exit with code 0.
+- [ ] Automated Tests: `cargo test --workspace` and `pnpm --filter desktop test` exit with code 0.
+- [ ] Linters: `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` exit with code 0.
+- [ ] Svelte 5 Invariant: `! grep -rn "export let" apps/desktop/src/` exits with code 0.
+- [ ] Secret & PII Scrubbing: Zero real email addresses, tokens, or secrets in tracked files; `git diff --check` exits with code 0.
+- [ ] Documentation Perimeter: If CLI flags, `.env.example` variables, or validation commands changed, synchronize `README.md` and `README.pt-br.md` (following `readme-standard` skill).
+- [ ] Knowledge Preservation: Document obscure platform/runtime gotchas or workarounds as an atomic card in `.agent/knowledge/` (if applicable).
+- [ ] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
+- [ ] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
 
 ---
 
@@ -1033,7 +1033,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [03.9]: Alert Digests & Quiet Hours
 
-- **Status:** READY FOR PLANNING
+- **Status:** DONE
 - **Priority:** 9
 - **Depends On:** [03.6], [04.11]; [03.7] for Telegram/Discord destinations.
 - **Systems Involved:** Rule scheduler/delivery queue, `crates/storage`, desktop settings.
@@ -1044,9 +1044,91 @@ All tasks inherit the repository DoD when implemented.
   restart and digest duplication. Avoid a burst of deferred notifications on resume;
   define missed-window and urgency precedence behavior during planning.
 
+#### Approved Implementation Plan (2026-11-03)
+
+1. `[03.9.1]` **Additive scheduling contracts:** Keep existing destinations, rule
+   actions, IPC and delivery traits compatible. Add a separate revision-checked
+   per-destination scheduling policy: Immediate (default), Hourly (selected minute),
+   or Daily (selected hour/minute), optional daily quiet interval, and explicit
+   permission for urgent-rule bypass. Scheduling uses either System Local or UTC;
+   arbitrary named-zone selection is outside this task. Existing destinations retain
+   immediate delivery with no quiet hours. Pure headless calculations take injected
+   time/calendar resolution; the desktop supplies OS-local timezone resolution.
+2. `[03.9.2]` **Time and urgency semantics:** Quiet hours use start-inclusive,
+   end-exclusive civil times, including overnight windows; equal endpoints are
+   rejected. Spring-forward missing slots run at the first valid instant after the
+   gap; repeated fall-back slots run once, at the earlier occurrence. Durable slot
+   identities prevent repeated hours/restarts/clock rollback from creating another
+   summary. Recompute future unsealed slots on OS timezone changes without replaying
+   closed slots. Add an explicit urgent alert action, leaving Alert(String) unchanged.
+   Urgent bypass requires both that action and destination opt-in; it bypasses digest
+   and quiet hours, never consent, rate limits, retry gates or expiration. When both
+   ordinary and urgent actions target one destination, an eligible urgent action wins
+   once, preserving rule order/stop semantics. Reminders are routine and respect the
+   destination policy; urgency is never inferred from subjects, badges or amounts.
+3. `[03.9.3]` **Encrypted queue and missed windows:** Add append-only migration v10
+   for policies, bounded pending items, sealed summary membership and slot identities.
+   Enqueue in the existing rule/reminder transaction with destination and policy
+   revisions. Retain per-message/account linkage for deletion and reminder cancellation.
+   At a due slot, atomically seal one summary and enqueue through existing alert_jobs;
+   retries reuse its immutable payload/event ID. During quiet hours defer routine work
+   until quiet end. Immediate-mode quiet deferrals are also coalesced. On resume, merge
+   all missed eligible slots into at most one catch-up summary per destination; never
+   replay individual missed windows. Keep the existing 24-hour event retention bound:
+   older unsent items expire visibly, and retry age never resets when summarizing.
+   Cap pending items at 1,000/destination with safe overflow counts, not extra deliveries.
+   Process bounded batches without holding SQL locks during network I/O. Existing
+   eight-attempt limits, provider cooldowns and globally serial dispatch remain.
+4. `[03.9.4]` **Privacy and lifecycle:** Serialize summaries only from existing
+   consent-filtered snapshots; export no new mail fields and fetch nothing. Bound each
+   summary to 64 KiB and 50 detailed entries with explicit total/omitted/truncated
+   counts. Preserve provider text ceilings and visible truncation; local notices remain
+   generic. Account/message removal and unread-reminder cancellation remove affected
+   pending items; invalidate unsent sealed summaries containing removed items, without
+   resending surviving entries automatically. Policy/destination edits or disable/delete
+   cancel prior pending revisions; re-enable never replays them. Serialize configuration
+   with dispatch and retain existing in-flight recall limits. Clear terminal payloads
+   and bound safe history; compact slot/dedup markers cannot resurrect expired work.
+5. `[03.9.5]` **IPC and EN/PT-BR settings:** Add typed policy read/save and side-effect-free
+   schedule preview commands. Alerts settings provides delivery cadence, quiet times,
+   displayed timezone/next eligible delivery, urgent-bypass consent and safe deferred/
+   summarized/expired counts. Rules expose explicit urgent actions and simulation
+   explanations. Explicit test/replay remains immediate only after confirmation clearly
+   discloses bypassing scheduling; it still obeys consent and transport limits and
+   does not flush pending automatic work. Preserve stale-revision checks, dirty/busy
+   guards, mounted inbox and input cleanup. Load svelte-dev before UI implementation.
+6. `[03.9.6]` **Evidence and closure:** Offline injected-clock/calendar/adapter tests
+   cover UTC/local offsets, DST gaps/repeats, overnight boundaries, timezone changes,
+   rollback, suspend/restart, catch-up coalescing, concurrent sealing, retry identity,
+   urgency precedence, reminders, cancellation, encrypted reopen, upgrades, consent
+   field bounds and overflow. No live provider requests or dependency downloads.
+   Run the repository DoD, SPA build, relevant formatting and tracked-file secret/PII
+   scans. Record ADR-020, active contracts and applicable knowledge cards; load
+   readme-standard for paired documentation. Make an atomic Conventional Commit,
+   log its hash and promote [01.4] to READY FOR PLANNING. Do not push.
+
+- **Approval:** User approved via `proceed` on 2026-11-03, including System Local/UTC,
+  24-hour expiration, coalesced catch-up and dual-consent urgency. No additional
+  network-policy exception was requested.
+
+#### Completion (2026-11-03)
+
+- **Commit:** see `git log` (`feat(alerts): add digests and quiet hours`).
+- **Validation:** Workspace check, fmt and all-target Clippy (`-D warnings`) exit 0. Core
+  crate tests and desktop crate tests pass (33 + 27 desktop tests). Desktop svelte-check
+  reports 0 errors/0 warnings; all 174 frontend tests and the SPA build pass. Policy scan
+  reports zero findings; Svelte `export let` invariant and `git diff --check` pass.
+- **Environment:** Desktop linking used a disposable temp sysroot (GTK/WebKit runtime
+  packages extracted with `dpkg-deb`, user-authorized for build tooling only; no system
+  install). No live provider requests, deliveries or model downloads.
+- **Gap:** Prettier is not installed in the local dependency tree, so the formatter check
+  on changed frontend files was NOT run in this session; run it before release.
+- **Contracts/documentation:** ADR-020, active notes, k-032 and paired README guides.
+- **Next:** [01.4] promoted to READY FOR PLANNING; no implementation started. Nothing pushed.
+
 ### Task [01.4]: Encrypted Backup & Portable Rule Export
 
-- **Status:** BACKLOG
+- **Status:** READY FOR PLANNING
 - **Priority:** 10
 - **Depends On:** [03.5], [04.10] for rule and saved-view formats.
 - **Systems Involved:** `crates/storage`, `crates/vault`, desktop import/export UI.

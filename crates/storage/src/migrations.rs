@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use crate::{FtsTokenizerMode, StorageError};
 
 /// Current database schema version.
-pub const CURRENT_SCHEMA_VERSION: u32 = 9;
+pub const CURRENT_SCHEMA_VERSION: u32 = 10;
 
 /// Executes database schema migrations idempotently.
 pub struct SchemaMigrator {
@@ -99,10 +99,21 @@ impl SchemaMigrator {
             applied_count += 1;
         }
 
+        if current_version < 10 {
+            self.apply_v10(&tx)?;
+            applied_count += 1;
+        }
+
         tx.commit()
             .map_err(|e| StorageError::Migration(format!("failed to commit migration tx: {e}")))?;
 
         Ok(applied_count)
+    }
+
+    fn apply_v10(&self, tx: &rusqlite::Transaction<'_>) -> Result<(), StorageError> {
+        tx.execute_batch(include_str!("alerts/schedule.sql"))
+            .map_err(|_| StorageError::Migration("alert schedule migration failed".into()))?;
+        self.record_migration(tx, 10, "010_alert_schedules")
     }
 
     fn record_migration(
@@ -496,7 +507,7 @@ mod tests {
                 VALUES ('old','a','INBOX',1,'Old','sender@example.org','reader@example.com',0,'',0)").unwrap();
             tx.commit().unwrap();
         }
-        assert_eq!(migrator.migrate(&mut conn).unwrap(), 7);
+        assert_eq!(migrator.migrate(&mut conn).unwrap(), 8);
         assert_eq!(migrator.migrate(&mut conn).unwrap(), 0);
         assert_eq!(
             conn.query_row("SELECT subject FROM messages WHERE id='old'", [], |r| {
@@ -519,13 +530,60 @@ mod tests {
     }
 
     #[test]
+    fn scheduling_upgrade_preserves_old_queue_payloads_and_marks_only_automatic_jobs() {
+        let key = DatabaseKey::from_bytes([74; 32]);
+        let mut conn = open_in_memory_connection(&key).unwrap();
+        let migrator = SchemaMigrator::new(FtsTokenizerMode::Unicode61RemoveDiacritics);
+        let tx = conn.transaction().unwrap();
+        tx.execute_batch("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at_epoch_ms INTEGER NOT NULL)").unwrap();
+        migrator.apply_v1(&tx).unwrap();
+        migrator.apply_v3(&tx).unwrap();
+        migrator.apply_v4(&tx).unwrap();
+        migrator.apply_v6(&tx).unwrap();
+        tx.execute_batch("INSERT INTO alert_destinations(id,revision,definition_json) VALUES ('d',1,'{}');
+            INSERT INTO alert_jobs(id,destination_id,revision,payload,created,due) VALUES
+            ('auto-old','d',1,'{\"synthetic\":true}',1,1),('rem-old','d',1,'{}',1,1),('test-old','d',1,'{}',1,1);").unwrap();
+        migrator.apply_v10(&tx).unwrap();
+        let count: u32 = tx
+            .query_row(
+                "SELECT count(*) FROM alert_jobs WHERE schedule_revision=0",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 2);
+        let manual: Option<u32> = tx
+            .query_row(
+                "SELECT schedule_revision FROM alert_jobs WHERE id='test-old'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(manual, None);
+        let payload: String = tx
+            .query_row(
+                "SELECT payload FROM alert_jobs WHERE id='auto-old'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(payload, "{\"synthetic\":true}");
+        assert_eq!(
+            tx.query_row("SELECT count(*) FROM alert_schedule_items", [], |r| r
+                .get::<_, u32>(0))
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
     fn executes_migrations_idempotently() {
         let key = DatabaseKey::from_bytes([77u8; 32]);
         let mut conn = open_in_memory_connection(&key).expect("open conn");
 
         let migrator = SchemaMigrator::new(FtsTokenizerMode::Unicode61RemoveDiacritics);
         let applied_first = migrator.migrate(&mut conn).expect("first migration");
-        assert_eq!(applied_first, 9);
+        assert_eq!(applied_first, 10);
 
         let applied_second = migrator.migrate(&mut conn).expect("second migration");
         assert_eq!(applied_second, 0, "subsequent migration must be a no-op");

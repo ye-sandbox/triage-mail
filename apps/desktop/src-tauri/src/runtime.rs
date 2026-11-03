@@ -125,6 +125,34 @@ fn bootstrap(
 }
 
 #[tauri::command]
+pub async fn cmd_alert_schedule(
+    state: State<'_, RuntimeState>,
+    id: String,
+) -> Result<storage::alerts::schedule::ScheduleState, IpcError> {
+    state.initialize(None).await?.alert_schedule(id).await
+}
+#[tauri::command]
+pub async fn cmd_save_alert_schedule(
+    state: State<'_, RuntimeState>,
+    policy: triage_ai::alerts::schedule::SchedulePolicy,
+    consent: bool,
+) -> Result<triage_ai::alerts::schedule::SchedulePolicy, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .save_alert_schedule(policy, consent)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_preview_alert_schedule(
+    state: State<'_, RuntimeState>,
+    policy: triage_ai::alerts::schedule::SchedulePolicy,
+) -> Result<crate::alert_schedule::SchedulePreview, IpcError> {
+    state.initialize(None).await?;
+    DesktopService::preview_alert_schedule(policy)
+}
+
+#[tauri::command]
 pub async fn cmd_list_alert_destinations(
     state: State<'_, RuntimeState>,
 ) -> Result<Vec<triage_ai::alerts::Destination>, IpcError> {
@@ -829,6 +857,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            cmd_alert_schedule,
+            cmd_save_alert_schedule,
+            cmd_preview_alert_schedule,
             cmd_list_alert_destinations,
             cmd_save_alert_destination,
             cmd_delete_alert_destination,
@@ -971,6 +1002,9 @@ mod tests {
         let app = mock_builder()
             .manage(state)
             .invoke_handler(tauri::generate_handler![
+                cmd_alert_schedule,
+                cmd_save_alert_schedule,
+                cmd_preview_alert_schedule,
                 cmd_list_alert_destinations,
                 cmd_save_alert_destination,
                 cmd_delete_alert_destination,

@@ -6,6 +6,7 @@
 	import { labels } from './labels';
 	import { newRule, type Rule, type Plan, type RulesTransport, type Field } from './types';
 	import { nativeRulesTransport } from './transport';
+	import { scheduleLabels } from '../alerts/schedule';
 	import { nativeAlertsTransport } from '../alerts/transport';
 	import type { AlertsTransport, Destination } from '../alerts/types';
 	import { labels as alertLabels } from '../alerts/labels';
@@ -102,7 +103,7 @@
 		return typeof action === 'object'
 			? 'Tag' in action
 				? action.Tag
-				: `${alertLabels[i18n.locale].title}: ${destinations.find((d) => d.id === action.Alert)?.name ?? action.Alert}`
+				: `${'UrgentAlert' in action ? scheduleLabels[i18n.locale].urgentRule : alertLabels[i18n.locale].title}: ${destinations.find((d) => d.id === ('Alert' in action ? action.Alert : action.UrgentAlert))?.name ?? ('Alert' in action ? action.Alert : action.UrgentAlert)}`
 			: action === 'Star'
 				? t.star
 				: t.archive;

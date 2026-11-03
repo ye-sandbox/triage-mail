@@ -1,4 +1,5 @@
 //! SQLCipher delivery queue. Secrets and network I/O never enter this module.
+pub mod schedule;
 use crate::{SqliteMailStore, StorageError};
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};
@@ -170,10 +171,17 @@ impl SqliteMailStore {
     }
     /// Transactional lease and persistent rate gate; request I/O occurs after this commits.
     pub fn claim_alert(&self, now: i64) -> Result<Option<DeliveryJob>, StorageError> {
+        self.claim_alert_with_calendar(now, &triage_ai::alerts::schedule::UtcCalendar)
+    }
+    pub fn claim_alert_with_calendar(
+        &self,
+        now: i64,
+        calendar: &dyn triage_ai::alerts::schedule::ScheduleCalendar,
+    ) -> Result<Option<DeliveryJob>, StorageError> {
         self.transaction(|tx| {
             tx.execute("UPDATE alert_jobs SET status='Expired',payload='',finished=?1,lease_until=0 WHERE status='Pending' AND (created<=?2 OR (attempts>=8 AND lease_until<=?1))",params![now,now.saturating_sub(MAX_AGE_MS)]).map_err(error)?;
             prune(tx,now)?;
-            let id:Option<String>=tx.query_row("SELECT j.id FROM alert_jobs j JOIN alert_destinations d ON d.id=j.destination_id AND d.revision=j.revision WHERE j.status='Pending' AND j.due<=?1 AND j.lease_until<=?1 AND d.next_start<=?1 AND NOT EXISTS(SELECT 1 FROM alert_jobs other WHERE other.destination_id=j.destination_id AND other.status='Pending' AND other.lease_until>?1) ORDER BY j.due,j.id LIMIT 1",[now],|r|r.get(0)).optional().map_err(error)?;
+            let id = eligible_job(tx, now, calendar)?;
             let Some(id)=id else {return Ok(None)};
             let (json,key,payload,attempts,created):(String,Option<String>,String,u32,i64)=tx.query_row("SELECT d.definition_json,d.secret_key,j.payload,j.attempts,j.created FROM alert_jobs j JOIN alert_destinations d ON d.id=j.destination_id WHERE j.id=?1",[&id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).map_err(error)?;
             let destination:Destination=serde_json::from_str(&json).map_err(error)?;
@@ -209,6 +217,37 @@ impl SqliteMailStore {
         })
     }
 }
+// INVARIANT: Gate the actual lease candidate even if a bounded scheduling batch
+// has not visited its destination. All headless callers supply their calendar.
+fn eligible_job(
+    tx: &Transaction<'_>,
+    now: i64,
+    calendar: &dyn triage_ai::alerts::schedule::ScheduleCalendar,
+) -> Result<Option<String>, StorageError> {
+    for _ in 0..32 {
+        let id:Option<String>=tx.query_row("SELECT j.id FROM alert_jobs j JOIN alert_destinations d ON d.id=j.destination_id AND d.revision=j.revision WHERE j.status='Pending' AND j.due<=?1 AND j.lease_until<=?1 AND d.next_start<=?1 AND NOT EXISTS(SELECT 1 FROM alert_jobs other WHERE other.destination_id=j.destination_id AND other.status='Pending' AND other.lease_until>?1) ORDER BY j.due,j.id LIMIT 1",[now],|r|r.get(0)).optional().map_err(error)?;
+        let Some(id) = id else {
+            return Ok(None);
+        };
+        let (json,scheduled,urgent): (String,Option<u32>,bool) = tx.query_row("SELECT d.definition_json,j.schedule_revision,j.urgent FROM alert_jobs j JOIN alert_destinations d ON d.id=j.destination_id WHERE j.id=?1", [&id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).map_err(error)?;
+        if scheduled.is_some() && !urgent {
+            let d: Destination = serde_json::from_str(&json).map_err(error)?;
+            let policy = schedule::read_policy(tx, &d)?;
+            let end = triage_ai::alerts::schedule::quiet_end(&policy, now, calendar)
+                .ok_or_else(|| error("calendar"))?;
+            if end > now {
+                tx.execute(
+                    "UPDATE alert_jobs SET due=max(due,?2) WHERE id=?1",
+                    params![id, end],
+                )
+                .map_err(error)?;
+                continue;
+            }
+        }
+        return Ok(Some(id));
+    }
+    Ok(None)
+}
 fn prune(tx: &Transaction<'_>, now: i64) -> Result<(), StorageError> {
     tx.execute(
         "DELETE FROM alert_jobs WHERE status!='Pending' AND finished<?1",
@@ -218,7 +257,7 @@ fn prune(tx: &Transaction<'_>, now: i64) -> Result<(), StorageError> {
     tx.execute("DELETE FROM alert_jobs WHERE status!='Pending' AND id NOT IN (SELECT id FROM (SELECT id,row_number() OVER (PARTITION BY destination_id ORDER BY created DESC,id) AS n FROM alert_jobs WHERE status!='Pending') WHERE n<=1000)",[]).map_err(error)?;
     Ok(())
 }
-fn insert_job(
+pub(crate) fn insert_job(
     tx: &Transaction<'_>,
     d: &Destination,
     event: &str,
@@ -235,6 +274,7 @@ pub(crate) fn enqueue_auto(
     id: &str,
     destination: &str,
     now: i64,
+    urgent: bool,
 ) -> Result<(), StorageError> {
     let (snapshot, key): (String, String) = tx
         .query_row(
@@ -254,6 +294,19 @@ pub(crate) fn enqueue_auto(
     if key.is_empty() {
         return Ok(());
     }
+    let policy = schedule::read_policy(tx, &d)?;
+    let saved: String = tx
+        .query_row(
+            "SELECT schedule_revisions FROM rule_jobs WHERE message_id=?1",
+            [id],
+            |r| r.get(0),
+        )
+        .map_err(error)?;
+    let saved: std::collections::BTreeMap<String, u32> =
+        serde_json::from_str(&saved).map_err(error)?;
+    if saved.get(destination).copied().unwrap_or(0) != policy.revision {
+        return Ok(());
+    }
     let facts = crate::rules::facts(tx, id)?;
     if tx
         .execute(
@@ -271,14 +324,18 @@ pub(crate) fn enqueue_auto(
         Sha256::digest(serde_json::to_vec(&(&facts.account_id, &d.id, &key)).map_err(error)?)
     );
     let payload = triage_ai::alerts::payload(&event, now, &d.fields, &facts);
-    insert_job(
+    schedule::enqueue(
         tx,
         &d,
-        &event,
-        Some(&facts.account_id),
-        Some(id),
-        &payload,
-        now,
+        schedule::ScheduledItem {
+            event: &event,
+            account: &facts.account_id,
+            message: id,
+            payload: &payload,
+            created: now,
+            urgent,
+            reminder: None,
+        },
     )
 }
 
