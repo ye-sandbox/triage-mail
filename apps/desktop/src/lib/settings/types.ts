@@ -30,7 +30,8 @@ export type SettingsTab =
 	| 'rules'
 	| 'alerts'
 	| 'reminders'
-	| 'categories';
+	| 'categories'
+	| 'senderReview';
 
 export interface SettingsTabItem {
 	id: SettingsTab;
@@ -46,7 +47,8 @@ export const SETTINGS_TABS: readonly SettingsTabItem[] = [
 	{ id: 'rules', label: 'Rules' },
 	{ id: 'alerts', label: 'Alerts' },
 	{ id: 'reminders', label: 'Reminders' },
-	{ id: 'categories', label: 'Local categories' }
+	{ id: 'categories', label: 'Local categories' },
+	{ id: 'senderReview', label: 'New senders' }
 ] as const;
 
 export interface SettingsModuleProps {

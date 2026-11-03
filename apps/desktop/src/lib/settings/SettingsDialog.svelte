@@ -13,6 +13,7 @@
 	import AlertsModule from '../alerts/AlertsModule.svelte';
 	import RulesModule from '../rules/RulesModule.svelte';
 	import RemindersModule from '../reminders/RemindersModule.svelte';
+	import ReviewModule from '../sender-review/ReviewModule.svelte';
 	import CategoriesModule from '../categories/CategoriesModule.svelte';
 	import PrivacyModule from './modules/PrivacyModule.svelte';
 
@@ -236,6 +237,8 @@
 						{/if}
 					{:else if activeTab === 'alerts'}
 						<AlertsModule {guard} selectedIds={selectedMessageIds} />
+					{:else if activeTab === 'senderReview'}
+						<ReviewModule {guard} accounts={accountController?.accounts ?? []} />
 					{:else if activeTab === 'categories'}
 						<CategoriesModule {guard} accounts={accountController?.accounts ?? []} />
 					{:else if activeTab === 'reminders'}

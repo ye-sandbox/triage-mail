@@ -58,11 +58,20 @@ impl SqliteMailStore {
         // INVARIANT: Scope validation, both ranking branches, and hydration share one snapshot.
         let tx = conn.transaction().map_err(query_error)?;
         let folder = validate_scope(&tx, account_id, view)?;
+        let predicate = if matches!(view, MailboxView::Inbox) {
+            format!(
+                "({}) AND ({})",
+                eligibility(view),
+                crate::sender_review::INBOX_VISIBLE
+            )
+        } else {
+            eligibility(view).to_string()
+        };
         let search = ScopedSearch {
             conn: &tx,
             account_id,
             folder: &folder,
-            eligibility: eligibility(view),
+            eligibility: &predicate,
             messages: messages_source(&tx, account_id, view, now)?,
             now,
         };

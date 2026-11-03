@@ -213,6 +213,38 @@ pnpm --filter desktop build
 cargo build --release --package triage-mail-desktop
 ```
 
+### Revisão local de novos remetentes
+
+Ative **Configurações → Novos remetentes** separadamente para cada conta. A revisão vem
+desativada. O histórico em cache e da primeira sincronização registra remetentes como
+**Conhecidos**; isso não significa aceitação. A inicialização usa lotes locais. A primeira
+sincronização de uma pasta, reconstruções de UIDVALIDITY e UIDNEXT desconhecido adotam
+uma política conservadora: mensagens recebidas nessas janelas podem ser conhecidas em
+vez de pendentes. Escolhas anteriores são preservadas.
+
+Selecione **Novos remetentes → Revisão pendente** ou **Recusados** para inspecionar as
+mensagens no leitor e nos modos de busca habituais. A seleção de conta atual vale para
+todas as suas pastas. Aceite, recuse ou volte a pendente após confirmar o endereço exato
+e a conta. A escolha vale para mensagens em cache existentes e futuras e sobrevive à
+ressincronização e remoção do cache até excluir a conta. As configurações listam até
+200 remetentes por página. Identidades ausentes ou ambíguas permanecem visíveis e não
+permitem escolhas por remetente. A comparação usa o parser compartilhado de uma única
+caixa postal, endereços em minúsculas ASCII e nenhuma unificação de aliases do provedor.
+Familiaridade não autentica o autor.
+
+A ativação padrão permite apenas revisão. A opção separada **Ocultar pendentes e
+recusados apenas na Caixa de entrada** altera os resultados locais dessa caixa; Todas
+as mensagens, outras pastas, categorias, buscas salvas e revisão mantêm o acesso.
+Recusar nunca exclui mensagens nem bloqueia a entrega no provedor. Regras, lembretes e
+alertas continuam independentes. Desativar restaura a visibilidade imediatamente;
+reativar registra o histórico intermediário e mantém escolhas e revisões pendentes.
+Não requer modelo, download de anexo nem requisição de rede. Evidências e limites de
+desempenho estão em [`docs/performance/sender-review.md`](docs/performance/sender-review.md).
+
+```bash
+cargo run --offline --release -p storage --example sender_review_performance
+```
+
 ### Categorias automáticas locais
 
 Use **Categorias locais** na barra lateral para filtrar a caixa atual em todo o conjunto

@@ -1,0 +1,7 @@
+mode,workload,eligible,samples,p50_ms,p95_ms,max_ms
+Lexical,all-review,75000,30,0.627,0.772,0.791
+Lexical,account-review,25000,30,36.875,38.857,43.689
+Semantic,all-review,75000,30,374.787,390.544,405.376
+Semantic,account-review,25000,30,130.117,133.568,133.719
+Hybrid,all-review,75000,30,497.476,524.779,537.956
+Hybrid,account-review,25000,30,186.189,197.102,251.057

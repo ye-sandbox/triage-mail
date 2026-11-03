@@ -211,6 +211,37 @@ pnpm --filter desktop build
 cargo build --release --package triage-mail-desktop
 ```
 
+### New-sender review
+
+Enable **Settings → New senders** separately for each account. Review is disabled by
+default. Cached history and first-sync history seed **Known** senders; Known is not
+user acceptance. Initialization runs in local batches. First synchronization of a
+folder, UIDVALIDITY rebuilds and unknown UIDNEXT are conservative: arrivals during
+those windows may become Known rather than Pending. Existing decisions are preserved.
+
+Choose **New senders → Pending review** or **Declined** to inspect messages using the
+normal reader and search modes. The current account selection applies across its
+folders. Accept, decline or return a sender to pending after confirming the exact
+address and account. Choices affect existing and future cached messages and survive
+re-sync and cache removal until the account is deleted. Settings lists decisions in
+pages of at most 200 senders. Missing or ambiguous sender identities stay visible and
+cannot receive sender-wide choices. Matching uses the shared single-mailbox parser,
+ASCII-lowercased addresses and no provider alias folding. Familiarity does not
+authenticate the author.
+
+Review-only is the default enabled mode. The separate **Hide pending and declined
+senders in Inbox only** option changes local Inbox results; All Mail, other mailboxes,
+categories, saved searches and review retain access. Declining never deletes mail or
+blocks delivery at the provider. Rules, reminders and alerts continue independently.
+Disabling immediately restores Inbox visibility; re-enabling seeds intervening history
+and retains earlier decisions and pending reviews. No model, attachment fetch or network
+request is needed. Search performance evidence and limitations are recorded in
+[`docs/performance/sender-review.md`](docs/performance/sender-review.md).
+
+```bash
+cargo run --offline --release -p storage --example sender_review_performance
+```
+
 ### Local automatic categories
 
 Use **Local categories** in the sidebar to filter the current mailbox across the full

@@ -248,6 +248,14 @@ pub async fn sync_account_once(
                             result.server_uidnext,
                         )
                         .map_err(storage_error)?;
+                    s.store
+                        .establish_review_frontier(
+                            &state.account_id,
+                            &state.folder_name,
+                            state.uidvalidity,
+                            result.server_uidnext,
+                        )
+                        .map_err(storage_error)?;
                     let records = result
                         .new_messages
                         .into_iter()
@@ -434,7 +442,13 @@ fn message_record(
 async fn category_loop(service: Arc<DesktopService>) {
     loop {
         // INVARIANT: Yield between local batches; backfill cannot stall alert/outbox scheduling.
-        let delay = match service.backfill_categories().await {
+        let delay = match async {
+            let categories = service.backfill_categories().await?;
+            let review = service.backfill_sender_review().await?;
+            Ok::<_, IpcError>(categories.max(review))
+        }
+        .await
+        {
             Ok(300) => Duration::from_millis(25),
             Ok(_) => Duration::from_secs(5),
             Err(_) => {

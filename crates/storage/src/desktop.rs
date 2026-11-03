@@ -367,6 +367,7 @@ impl SqliteMailStore {
                     )
                     .map_err(query_error)?;
 
+                    crate::sender_review::observe(tx, &id, false)?;
                     let mut deduped_message = message;
                     deduped_message.id = id;
                     persisted.push(deduped_message);
@@ -380,6 +381,7 @@ impl SqliteMailStore {
                         params![message.account_id, message.folder, message.uid, message.id, now_ms],
                     )
                     .map_err(query_error)?;
+                    crate::sender_review::arrival(tx, &message.id, state)?;
                     crate::rules::enqueue(tx, &message, state)?;
                     persisted.push(message);
                 }

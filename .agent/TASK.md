@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[04.12] New-Sender Review — READY FOR PLANNING
+[04.12] New-Sender Review — RUNNING
 
 ---
 
@@ -792,7 +792,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [04.12]: New-Sender Review
 
-- **Status:** READY FOR PLANNING
+- **Status:** RUNNING
 - **Priority:** 7
 - **Systems Involved:** `crates/storage`, desktop inbox/settings.
 - **Scope:** Offer an optional local review view for previously unseen senders, with
@@ -801,6 +801,72 @@ All tasks inherit the repository DoD when implemented.
   planning. Persist review choices across re-sync; never auto-delete messages. Clearly
   distinguish local inbox filtering from blocking delivery at the provider, and never
   present a familiar sender address as proof of authenticated identity.
+
+#### Proposed Implementation Plan (2026-11-02)
+
+1. `[04.12.1]` **Sender identity and explicit local choices:** Reuse
+   `triage_ai::rules::sender_address`: exactly one parsed mailbox, ASCII-lowercased
+   address, account-bound exact matching, no display-name/domain matching or provider
+   alias folding. Model Known (history), Pending, Accepted and Declined separately;
+   Known is not user acceptance. Accept/decline applies to existing and future cached
+   messages from that exact sender in that account, with reversible revision-safe
+   choices. Malformed/missing/ambiguous senders remain visible with an unavailable
+   identity explanation and cannot receive sender-wide decisions. Address familiarity
+   never implies authentication. No automatic archive, trash, unsubscribe or rule action.
+2. `[04.12.2]` **Encrypted persistence and conservative history seeding:** Add
+   append-only migration v8 for per-account preferences, revisioned sender choices,
+   normalized message membership and resumable seeding/frontiers. Default disabled;
+   enabling seeds cached history locally in bounded batches before activating review.
+   Capture per-folder UIDVALIDITY/UIDNEXT frontiers for first post-enable synchronization;
+   initial/history imports, newly discovered folders and rebuild history seed Known
+   rather than flood Pending. Persist frontiers before ingestion and retain them across
+   interrupted batches; missing UIDNEXT treats arrivals conservatively as history until
+   a usable frontier is established. New canonical messages above established frontiers
+   create Pending only for unseen valid senders. History never overwrites an existing
+   Pending/Accepted/Declined choice. Show initialization status and explain conservative
+   seeding, including arrivals during initial setup and unobserved pre-enable mail.
+3. `[04.12.3]` **Ingestion, restart and preference lifecycle:** Update sender state
+   atomically with ingestion/checkpoints, preserving choices across duplicate memberships,
+   re-sync, canonical MOVE, body hydration, restart and cache deletion/re-ingestion.
+   Choices persist until account removal; account deletion cleans all related state.
+   Disabled accounts never hide mail or create Pending; newly observed senders while
+   disabled seed Known. Re-enabling seeds intervening history without erasing existing
+   decisions or pending reviews. Initialization/backfill never fetches missing data,
+   mutates IMAP, runs rules, schedules reminders or delivers alerts. Keep storage
+   headless and existing repository/observer/IPC contracts compatible.
+4. `[04.12.4]` **Native views and additive IPC:** Add bounded typed preference,
+   sender-list/decision and review-search commands with native account validation,
+   optimistic revision checks and fixed errors. Provide Pending and Declined review
+   views. Default enabled mode is review-only; a separate explicit per-account option
+   hides Pending/Declined senders from Inbox views only. Known/Accepted and unresolved
+   identities remain visible. All Mail, other mailboxes, category views, saved searches
+   and explicit review views retain access to those messages. Apply review membership
+   and any Inbox exclusion before pagination and both hybrid candidate windows in one
+   read snapshot, preserving exact ranking and semantic consent. Disabling immediately
+   removes Inbox exclusions. Existing rules/reminders/alerts continue independently;
+   review is not an automation or provider-delivery gate.
+5. `[04.12.5]` **EN/PT-BR desktop controls:** Load svelte-dev before UI edits.
+   Add New Senders navigation using existing virtualized rows, account scope and search
+   modes, with Pending/Declined filters and message access. Accept/decline confirms the
+   account and exact sender scope; allow changing either decision and returning to
+   Pending. Add per-account enablement, initialization status, optional Inbox filtering
+   and paginated decision management in Settings. Explain local visibility, independent
+   automation and unauthenticated sender identity beside the relevant controls. Preserve
+   extraction badges, secure rendering, modal dirty/busy guards, request invalidation,
+   selection/reader refresh and teardown safety. No browser persistence of mail facts.
+6. `[04.12.6]` **Verification and closure:** Cover parsing/case/account isolation,
+   history/frontier races, interrupted seed/restart, unknown UIDNEXT, UIDVALIDITY reset,
+   duplicate membership/MOVE, decisions surviving re-ingestion, stale writes and
+   disable/re-enable. Verify native complete-result membership/pagination for lexical,
+   semantic and hybrid modes, Inbox-only exclusion, accessible declined mail, and stale
+   UI responses. Use synthetic reserved-domain fixtures and offline adapters. Run the
+   full repository DoD plus SPA build, changed-file formatting and secret/PII scans;
+   record representative large-fixture timings without weakening existing budgets or
+   claiming native 60fps. Update active contracts, ADR and applicable knowledge cards;
+   load readme-standard for paired usage docs. Commit atomically, log its hash and
+   promote [04.13] to READY FOR PLANNING. Do not push or implement conversation grouping.
+
+- **Approval:** User approved the recorded plan and defaults via `proceed` on 2026-11-02.
 
 ### Task [04.13]: Conversation Grouping & Thread Triage
 
