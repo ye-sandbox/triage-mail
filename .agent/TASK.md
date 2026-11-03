@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[04.13] Conversation Grouping & Thread Triage — RUNNING
+[03.9] Alert Digests & Quiet Hours — READY FOR PLANNING
 
 ---
 
@@ -137,8 +137,8 @@ A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
 - [x] Secret & PII Scrubbing: Zero real email addresses, tokens, or secrets in tracked files; `git diff --check` exits with code 0.
 - [x] Documentation Perimeter: If CLI flags, `.env.example` variables, or validation commands changed, synchronize `README.md` and `README.pt-br.md` (following `readme-standard` skill).
 - [x] Knowledge Preservation: Document obscure platform/runtime gotchas or workarounds as an atomic card in `.agent/knowledge/` (if applicable).
-- [ ] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
-- [ ] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
+- [x] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
+- [x] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
 
 ---
 
@@ -904,7 +904,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [04.13]: Conversation Grouping & Thread Triage
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Priority:** 8
 - **Systems Involved:** MIME/header ingestion, `crates/storage`, desktop inbox/reader.
 - **Scope:** Group related messages using Message-ID, In-Reply-To and References;
@@ -986,9 +986,54 @@ All tasks inherit the repository DoD when implemented.
 - **Approval:** User approved the complete plan via `proceed` on 2026-11-02.
   No new network-policy exception; development validation remains offline.
 
+#### Completion (2026-11-03)
+
+- **Commit:** `c9b3253` (`feat(conversations): add local grouping and snapshot triage`).
+- **Delivered:** Account-local header grouping with conservative ID validation, ambiguous
+  duplicate handling, missing-ancestor placeholders and iterative cycle-safe components;
+  append-only SQLCipher migration v9, resumable header staging and account readiness.
+  Additive native grouped search/member/preview/apply/status APIs preserve message DTOs,
+  canonical IMAP identities, existing traits and message-mode search. Optional EN/PT-BR
+  grouped virtual rows, chronological paginated members and lazy sandboxed readers expose
+  matching/cached/unread counts and explicitly label outside-view messages.
+- **Actions:** Read/unread/archive/tag previews default to matching cached records;
+  all-cached requires separate selection. Immutable native IDs/action, five-minute expiry,
+  generation validation and one-use confirmation consumption prevent scope substitution
+  and stale applies, including headless callers. Local updates, unread-reminder cancellation
+  and outbox enqueue commit atomically. Per-message attempts/failures expose independent
+  remote retries and partial success. >500 records fail without truncation. No automatic
+  whole-thread read, unsubscribe/trash, history replay or attachment download is added.
+- **Validation:** Offline workspace check/test/fmt/all-target Clippy pass: 295 Rust tests.
+  Desktop check reports zero errors/warnings; 171 frontend tests and SPA build pass.
+  Changed frontend files pass Prettier; all five policy regressions pass. Canonical scan
+  covers 358 tracked text files with zero findings; Svelte invariant/diff checks pass.
+  Fixtures cover encrypted restart/backfill, malformed/duplicate/cyclic headers, long
+  chains, account/folder boundaries, saved/category/review/semantic eligibility, pagination,
+  stale/forged previews, >500 selections, atomic rollback and partial remote failure.
+- **Environment:** A session reset removed the temporary native sysroot and validation
+  artifacts. User explicitly authorized isolated Linux build-package downloads on
+  2026-11-03; restored dependencies live only in ignored project scratch, with no system
+  package installation. Existing loopback fixtures/policy child-process tests ran outside
+  the restrictive sandbox. No live provider requests, credentials, model downloads or
+  external deliveries were used. Development runtime/delivery validation remained offline.
+- **Contracts/documentation:** ADR-019, active notes, k-031 and paired README usage record
+  identity, lifecycle, complete-branch grouped hybrid ranking, action scope and limitations.
+  No new runtime network-policy exception, crate dependency or public trait change.
+- **Performance limits:** Disposable encrypted 100k-message/four-account release fixture:
+  staging/publication 15,463.904ms over 337 ticks; slowest tick 297.980ms. Grouped p95
+  global/account-Inbox: lexical 215.069/175.117ms, exact semantic 1029.961/378.748ms,
+  hybrid 1170.017/455.225ms. These exceed unchanged existing search budgets. Final
+  consolidation is account-wide under the database lock; late parents/duplicates/deletion
+  may require rebuilding a dirty account. Complete eligible branch rankings and metadata
+  scans scale with cached mail. Aggregate evidence/limits are in
+  `docs/performance/conversations.md` and CSV; no native 60fps claim is made.
+- **Next:** [03.9] promoted to READY FOR PLANNING. Digests, quiet-hour scheduling,
+  missed-window behavior and urgency precedence require a separately approved plan.
+  No digest/quiet-hour implementation started. Nothing pushed.
+
 ### Task [03.9]: Alert Digests & Quiet Hours
 
-- **Status:** BACKLOG
+- **Status:** READY FOR PLANNING
 - **Priority:** 9
 - **Depends On:** [03.6], [04.11]; [03.7] for Telegram/Discord destinations.
 - **Systems Involved:** Rule scheduler/delivery queue, `crates/storage`, desktop settings.
