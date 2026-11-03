@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[04.12] New-Sender Review — RUNNING
+[04.13] Conversation Grouping & Thread Triage — READY FOR PLANNING
 
 ---
 
@@ -127,7 +127,7 @@ schemas, IPC and ranking remain unchanged; no ANN graphs, downloads or provider 
 
 ---
 
-## Definition of Done (DoD) Checklist — [03.8]
+## Definition of Done (DoD) Checklist — [04.12]
 
 A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
 - [x] Strict Typing: `cargo check --workspace` and `pnpm --filter desktop check` exit with code 0.
@@ -792,7 +792,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [04.12]: New-Sender Review
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Priority:** 7
 - **Systems Involved:** `crates/storage`, desktop inbox/settings.
 - **Scope:** Offer an optional local review view for previously unseen senders, with
@@ -868,9 +868,43 @@ All tasks inherit the repository DoD when implemented.
 
 - **Approval:** User approved the recorded plan and defaults via `proceed` on 2026-11-02.
 
+#### Completion (2026-11-02)
+
+- **Commit:** `dd74e10` (`feat(review): add durable local sender review and inbox filtering`).
+- **Delivered:** Default-off, account-specific local sender review with exact parsed
+  addresses, separate Known/Pending/Accepted/Declined states and reversible revision-safe
+  decisions. Append-only migration v8, conservative persistent history frontiers,
+  bounded resumable initialization and atomic ingestion preserve choices through restart,
+  re-sync, duplicate memberships, canonical MOVE and cache deletion/re-ingestion.
+  Additive IPC/native search, EN/PT-BR Pending/Declined navigation, explicit sender/account
+  confirmation and guarded per-account settings retain existing traits and DTO contracts.
+- **Visibility:** Optional Inbox-only exclusion; explicit All Mail, folders, categories,
+  saved searches and review retain access. Unresolved identities remain visible. Nothing
+  deletes/moves mail, blocks provider delivery, authenticates a sender or gates independent
+  rules/reminders/alerts. No network requests, downloads or attachment fetches were added.
+- **Validation:** Offline workspace check/test/fmt/all-target Clippy pass (285 Rust tests).
+  Desktop check has zero errors/warnings; all 167 frontend tests and SPA build pass.
+  Changed frontend files pass Prettier with existing tabs/single quotes/100-column style.
+  Five policy regressions and a 340-text-file tracked/new-file scan pass with zero findings.
+  Legacy Svelte syntax, README perimeter and diff whitespace checks pass. Existing
+  loopback/child-process fixtures ran in the authorized local execution context; all
+  validation remained offline. Existing native sysroot/toolchain from k-001/k-006 reused.
+- **Performance:** Shared 100k-message/200k-membership fixture, six workloads/180 warm
+  samples. Tight-loop sender backfill: 4,115.029ms; desktop yields between <=300-row
+  batches. Blank lexical p95: 0.772ms global / 38.857ms account, within 40ms. Semantic
+  p95: 390.544ms global / 133.568ms account; hybrid p95: 524.779ms / 197.102ms. Existing
+  semantic/hybrid targets remain unmet and unchanged. Evidence/measurement limits are
+  in `docs/performance/sender-review.md` and aggregate CSV; no native frame/60fps claim.
+- **Contracts:** ADR-018, active notes, k-030 and paired README usage guides document
+  conservative initial-window/unknown-frontier seeding, history versus acceptance,
+  unauthenticated exact-sender identity, disabled/re-enable behavior and visibility.
+- **Next:** [04.13] promoted to READY FOR PLANNING. Conversation identity, fallback
+  grouping and multi-message action semantics require a separately approved plan.
+  No conversation-grouping implementation started. Nothing pushed.
+
 ### Task [04.13]: Conversation Grouping & Thread Triage
 
-- **Status:** BACKLOG
+- **Status:** READY FOR PLANNING
 - **Priority:** 8
 - **Systems Involved:** MIME/header ingestion, `crates/storage`, desktop inbox/reader.
 - **Scope:** Group related messages using Message-ID, In-Reply-To and References;
