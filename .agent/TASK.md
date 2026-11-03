@@ -1113,7 +1113,7 @@ All tasks inherit the repository DoD when implemented.
 
 #### Completion (2026-11-03)
 
-- **Commit:** see `git log` (`feat(alerts): add digests and quiet hours`).
+- **Commit:** `be65f15` (`feat(alerts): add consent-bound digests and quiet hours`).
 - **Validation:** Workspace check, fmt and all-target Clippy (`-D warnings`) exit 0. Core
   crate tests and desktop crate tests pass (33 + 27 desktop tests). Desktop svelte-check
   reports 0 errors/0 warnings; all 174 frontend tests and the SPA build pass. Policy scan
