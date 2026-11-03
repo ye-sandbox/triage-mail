@@ -28,7 +28,7 @@ export type MessageDetailDto = {
 	text_plain: string | null;
 	html_raw: string | null;
 	triage_result: {
-		category: 'Security' | 'Financial' | 'Shopping' | 'Newsletter' | 'Personal';
+		category: 'Security' | 'Financial' | 'Shopping' | 'Newsletter' | 'Personal' | 'Notifications';
 		badges: TriageBadge[];
 	};
 	triage_badges: TriageBadge[];

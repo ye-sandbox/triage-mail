@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { labels as categoryLabels } from '../categories/labels';
+	import { categories, type Category } from '../categories/types';
 	import { i18n } from '../i18n/index.svelte';
 	import { tick, untrack } from 'svelte';
 	import Icon from './Icon.svelte';
@@ -134,7 +136,11 @@
 							</p>
 							<div class="flex items-center gap-2 text-xs opacity-65">
 								<span class="truncate"
-									>{inbox.folderLabels[row.id] || row.category_badge || row.folder}</span
+									>{inbox.folderLabels[row.id] ||
+										(row.category_badge && categories.includes(row.category_badge as Category)
+											? categoryLabels[i18n.locale].category[row.category_badge as Category]
+											: row.category_badge) ||
+										row.folder}</span
 								>{#if row.has_attachments}<Icon name="paperclip" size={12} />{/if}
 								{#if row.triage_badges && row.triage_badges.length > 0}
 									<TriageBadges badges={row.triage_badges} />

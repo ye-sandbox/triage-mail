@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { categories, type Category } from '../categories/types';
+	import { labels as categoryLabels } from '../categories/labels';
 	import { untrack } from 'svelte';
 	import { i18n } from '../i18n/index.svelte';
 	import { labels } from './labels';
@@ -90,6 +92,17 @@
 					></select
 				></label
 			>{/each}
+		<label class="block"
+			>{categoryLabels[i18n.locale].title}<select
+				class="field"
+				value={draft.filters.category ?? ''}
+				onchange={(e) =>
+					(draft.filters.category = (e.currentTarget.value || null) as Category | null)}
+				><option value="">{t.either}</option>{#each categories as category}<option value={category}
+						>{categoryLabels[i18n.locale].category[category]}</option
+					>{/each}</select
+			></label
+		>
 		<label class="block"
 			>{t.tags}<textarea
 				value={draft.filters.tags.join('\n')}

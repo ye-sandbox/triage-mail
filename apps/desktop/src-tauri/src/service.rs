@@ -296,7 +296,8 @@ impl DesktopService {
                 .get_message_by_id(&id)
                 .map_err(storage_error)?
                 .ok_or(IpcError::NotFound)?;
-            let triage = if !record.triage_badges.is_empty() || record.category_badge.is_some() {
+            let mut triage = if !record.triage_badges.is_empty() || record.category_badge.is_some()
+            {
                 let category = record
                     .category_badge
                     .as_deref()
@@ -306,6 +307,7 @@ impl DesktopService {
                         "Shopping" => Some(TriageCategory::Shopping),
                         "Newsletter" => Some(TriageCategory::Newsletter),
                         "Personal" => Some(TriageCategory::Personal),
+                        "Notifications" => Some(TriageCategory::Notifications),
                         _ => None,
                     })
                     .unwrap_or(TriageCategory::Personal);
@@ -321,6 +323,11 @@ impl DesktopService {
                     record.one_click_unsubscribe_supported,
                 )
             };
+            triage.category = s
+                .store
+                .category_metadata(&id)
+                .map_err(storage_error)?
+                .effective;
             let attachments = record
                 .attachments
                 .into_iter()

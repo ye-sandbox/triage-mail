@@ -2,6 +2,7 @@
 //! Desktop-only orchestration. Core crates remain independent of Tauri.
 pub mod alerts;
 pub mod avatars;
+pub mod categories;
 pub mod dto;
 pub mod events;
 pub mod model_download;

@@ -213,6 +213,32 @@ pnpm --filter desktop build
 cargo build --release --package triage-mail-desktop
 ```
 
+### Categorias automáticas locais
+
+Use **Categorias locais** na barra lateral para filtrar a caixa atual em todo o conjunto
+de resultados nativos. As seis categorias locais são Pessoas, Finanças, Compras, Boletins,
+Notificações e Segurança. A prioridade determinística é Segurança, Finanças, Compras,
+Boletins, Notificações e, por padrão, Pessoas. Pessoas não comprova um remetente humano;
+endereços de remetentes não são autenticados. Nenhum modelo é baixado ou serviço de nuvem consultado.
+
+Expanda **Categorias locais** na mensagem selecionada para consultar a classificação
+automática, o motivo e a origem efetiva. Corrija apenas essa mensagem ou confirme,
+separadamente, uma preferência para o endereço exato nas mensagens existentes e futuras
+daquela conta no cache. Correções individuais têm prioridade sobre preferências do
+remetente, que têm prioridade sobre a classificação automática. Redefina cada camada
+para usar a próxima. **Configurações → Categorias locais** lista as preferências ativas
+para remoção. Alterações preservam os indicadores de extração e nunca movem mensagens
+nem executam regras, lembretes ou entregas. Salvar a busca atual mantém o filtro de categoria.
+
+Os metadados ficam no SQLCipher. O histórico é classificado em lotes retomáveis enquanto
+o aplicativo está ativo e desbloqueado; as visualizações convergem durante esse processo.
+Correções resistem à sincronização comum, reinicialização e movimentações canônicas.
+Após excluir o cache, a restauração requer o mesmo ID do provedor vinculado à conta ou
+um Message-ID válido com a data de recebimento. Sem eles, a correção dura apenas enquanto
+o registro estiver no cache; os controles da mensagem informam esse limite. Remover a
+conta exclui seus metadados. Os controles não treinam modelos. Medições offline e limites:
+[`docs/performance/categories.md`](docs/performance/categories.md).
+
 ### Buscas salvas e pastas virtuais
 
 Use **Buscas salvas** na barra lateral para criar uma visualização nomeada, salvar a busca

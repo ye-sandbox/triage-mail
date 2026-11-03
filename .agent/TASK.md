@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[03.8] Local Automatic Categories — READY FOR PLANNING
+[03.8] Local Automatic Categories — RUNNING
 
 ---
 
@@ -127,7 +127,7 @@ schemas, IPC and ranking remain unchanged; no ANN graphs, downloads or provider 
 
 ---
 
-## Definition of Done (DoD) Checklist — [03.7]
+## Definition of Done (DoD) Checklist — [03.8]
 
 A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
 - [x] Strict Typing: `cargo check --workspace` and `pnpm --filter desktop check` exit with code 0.
@@ -137,8 +137,8 @@ A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
 - [x] Secret & PII Scrubbing: Zero real email addresses, tokens, or secrets in tracked files; `git diff --check` exits with code 0.
 - [x] Documentation Perimeter: If CLI flags, `.env.example` variables, or validation commands changed, synchronize `README.md` and `README.pt-br.md` (following `readme-standard` skill).
 - [x] Knowledge Preservation: Document obscure platform/runtime gotchas or workarounds as an atomic card in `.agent/knowledge/` (if applicable).
-- [x] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
-- [x] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
+- [ ] Atomic Commit: Conventional Commits in English (`feat(scope): ...`).
+- [ ] Task Log: Active task logged in `.agent/TASK.md` with commit hash; next task promoted.
 
 ---
 
@@ -691,7 +691,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [03.8]: Local Automatic Categories
 
-- **Status:** READY FOR PLANNING
+- **Status:** RUNNING
 - **Priority:** 6
 - **Depends On:** [03.5]
 - **Systems Involved:** `crates/triage-ai`, `crates/storage`, desktop inbox.
@@ -701,6 +701,64 @@ All tasks inherit the repository DoD when implemented.
 - **Acceptance:** Synthetic fixtures cover classification and override precedence;
   re-sync preserves corrections. No cloud endpoint or model download is required.
   Learned classification remains separately scoped behind explicit model consent.
+
+#### Approved Implementation Plan (2026-11-02)
+
+1. `[03.8.1]` **Pure deterministic classification:** Extend the existing classifier
+   in `triage-ai`, preserving Security, Financial, Shopping, Newsletter and Personal
+   wire values and adding Notifications. UI labels map to Security, Finance, Purchases,
+   Newsletters, People and Notifications. Define automatic precedence as Security >
+   Financial > Shopping > Newsletter > Notifications > Personal fallback. Use bounded
+   local facts, existing extracted badges and explicit EN/PT-BR contextual signals;
+   expose fixed reason codes and classifier version, never probabilistic confidence.
+   Personal is a fallback, not evidence of a human or authenticated sender. Preserve
+   extraction badges independently of category corrections. No model or network calls.
+2. `[03.8.2]` **Encrypted correction persistence:** Add append-only migration v7
+   for classifier metadata, per-message corrections and account-scoped exact-sender
+   overrides with optimistic revisions. Effective precedence is explicit message
+   correction > sender override > automatic result. Resetting a correction falls back
+   to the next layer. Reuse the existing parsed single-mailbox normalization; malformed
+   or ambiguous senders cannot create sender overrides, and display names never match.
+   Sender overrides affect existing and future cached mail in that account only.
+   Store all metadata in SQLCipher, with no browser persistence or IMAP writes.
+3. `[03.8.3]` **Ingestion and lifecycle:** Keep automatic results separate from
+   corrections so sync upserts, flag changes, body hydration and classifier upgrades
+   cannot overwrite user choices. Preserve corrections across duplicate memberships,
+   restart and canonical MOVE. For cache deletion/re-ingestion, use account-bound
+   provider identity, then Message-ID plus timestamp; retain correction identities
+   until account removal. Without a reliable identity, retain only canonical-record
+   corrections and disclose that limitation rather than transfer a correction to an
+   unrelated message. Backfill automatic classifications for existing cached mail in
+   bounded resumable local batches without fetching bodies/attachments, running rules,
+   scheduling reminders or delivering alerts. Recheck identity/revision on batch writes.
+4. `[03.8.4]` **Native search and additive IPC:** Add typed category metadata,
+   correction/reset and sender-override list/save/delete commands with bounded inputs,
+   revision checks and fixed errors. Add category search through the existing private
+   SQL eligibility/ranking machinery, preserving established search/trait/scope shapes.
+   Apply effective category before pagination and both hybrid candidate windows in
+   one snapshot; preserve exact cosine/tie behavior and canonical IMAP identity.
+   Add an optional effective-category predicate to saved-view filters with a compatible
+   default. Existing saved definitions remain valid; semantic consent gates still apply.
+5. `[03.8.5]` **EN/PT-BR inbox controls:** Load svelte-dev before UI edits. Add local
+   category views using existing virtualized rows, account scope and search modes.
+   Show localized effective category and automatic/manual/sender provenance. Provide
+   explicit separate actions for correcting a selected message, resetting it, and
+   applying/removing an account-specific sender override; explain its existing/future
+   scope before saving. Keep extraction/security badges visible regardless of category.
+   Provide override management in settings. Refresh membership after changes and sync;
+   invalidate stale requests and preserve modal guards, selection and teardown safety.
+6. `[03.8.6]` **Evidence and closure:** Cover mixed signals, missing facts, precedence,
+   malformed/display-name senders, account isolation, revision conflicts, reset behavior,
+   migration/reopen, interrupted backfill, re-sync/MOVE and correction identity limits.
+   Verify full-result category page membership, semantic/hybrid eligibility, saved-view
+   compatibility, and stale UI responses using synthetic offline fixtures. Run the full
+   repository DoD plus SPA build, formatting and secret/PII scans. Measure representative
+   large-fixture category queries without weakening existing performance targets or
+   hiding known deviations. Update active contracts/ADR and applicable knowledge cards;
+   load readme-standard for paired usage documentation. Commit atomically, log the hash
+   and promote [04.12] to READY FOR PLANNING. Do not push or begin new-sender review.
+
+- **Approval:** User approved the recorded scope via `proceed` on 2026-11-02.
 
 ### Task [04.12]: New-Sender Review
 

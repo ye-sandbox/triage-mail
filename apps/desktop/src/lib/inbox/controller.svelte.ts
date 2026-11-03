@@ -1,3 +1,4 @@
+import type { Category } from '../categories/types';
 import type { SavedView } from '../saved-views/types';
 import type {
 	InboxTransport,
@@ -11,6 +12,40 @@ import { validTag, type TriageAction } from './triage';
 export const PAGE_SIZE = 200;
 
 export class InboxController {
+	category = $state<Category | null>(null);
+	get categoryTransport() {
+		return this.transport.categories;
+	}
+	async selectCategory(category: Category | null) {
+		this.category = category;
+		this.savedView = null;
+		this.mutationError = '';
+		this.mutationNotice = '';
+		clearTimeout(this.refreshTimer);
+		await this.search(this.query, this.mode);
+	}
+	async updateCategory(write: () => Promise<unknown>) {
+		if (this.disposed || this.mutating || this.loading) return;
+		const generation = ++this.generation;
+		this.mutating = true;
+		this.mutationError = '';
+		this.mutationNotice = '';
+		try {
+			await write();
+			if (!this.disposed && generation === this.generation)
+				this.mutationNotice = i18n.t.mailboxes.localSaved;
+		} catch {
+			if (!this.disposed && generation === this.generation)
+				this.mutationError = i18n.t.mailboxes.saveError;
+		} finally {
+			this.mutating = false;
+			if (!this.disposed) {
+				this.badgeRevision++;
+				this.scheduleRefresh();
+			}
+		}
+	}
+
 	rows = $state.raw<MessageRowDto[]>([]);
 	selectedId = $state<string | null>(null);
 	loading = $state(false);
@@ -25,6 +60,7 @@ export class InboxController {
 	}
 	async selectSavedView(view: SavedView) {
 		this.savedView = view;
+		this.category = null;
 		this.scope = undefined;
 		this.mutationError = '';
 		this.mutationNotice = '';
@@ -55,8 +91,10 @@ export class InboxController {
 			: Promise.reject(new Error('Unavailable'));
 
 	async selectScope(scope?: MailboxScope) {
-		if (!this.savedView && JSON.stringify(scope) === JSON.stringify(this.scope)) return;
+		if (!this.category && !this.savedView && JSON.stringify(scope) === JSON.stringify(this.scope))
+			return;
 		this.savedView = null;
+		this.category = null;
 		// INVARIANT: Scope changes invalidate all old reads, selection and mutation feedback.
 		this.scope = scope === 'GlobalAllMail' ? undefined : scope;
 		this.mutationError = '';
@@ -76,6 +114,10 @@ export class InboxController {
 		if (saved)
 			return this.transport.savedViews
 				? this.transport.savedViews.search(saved.id, saved.revision, page.limit, page.offset)
+				: Promise.reject('InvalidRequest');
+		if (this.category)
+			return this.transport.categories
+				? this.transport.categories.search(page, this.category)
 				: Promise.reject('InvalidRequest');
 		return this.transport.search(page);
 	}

@@ -4,6 +4,13 @@ use rusqlite::Connection;
 
 use crate::{HybridQuery, MessageRowSummary, StorageError};
 
+// INVARIANT: Eligibility and hydration resolve exactly the same correction precedence.
+pub(crate) const CATEGORY_EFFECTIVE: &str = "COALESCE((
+    SELECT COALESCE(c.category,s.category,a.automatic) FROM message_categories a
+    LEFT JOIN category_corrections c ON c.account_id=a.account_id AND c.correction_key=a.correction_key
+    LEFT JOIN category_sender_overrides s ON s.account_id=a.account_id AND s.sender_key=a.sender_key
+    WHERE a.message_id=m.id),m.category_badge,'Personal')";
+
 /// Converts an int8 slice into a byte vector for sqlite-vec.
 pub fn int8_slice_to_bytes(slice: &[i8]) -> Vec<u8> {
     slice.iter().map(|&b| b as u8).collect()
@@ -318,7 +325,8 @@ pub(crate) fn load_summaries(
     for chunk in ids.chunks(500) {
         let sql = format!(
             "SELECT id, account_id, folder, uid, subject, sender, received_at_epoch_ms,
-             is_read, has_attachments, category_badge, triage_badges, is_starred, snooze_until_epoch_ms FROM messages WHERE id IN ({})",
+             is_read, has_attachments, {}, triage_badges, is_starred, snooze_until_epoch_ms FROM messages m WHERE id IN ({})",
+            CATEGORY_EFFECTIVE,
             vec!["?"; chunk.len()].join(",")
         );
         let mut stmt = conn.prepare_cached(&sql).map_err(query_error)?;

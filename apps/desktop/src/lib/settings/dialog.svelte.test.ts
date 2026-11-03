@@ -124,7 +124,8 @@ describe('SettingsDialog and typed modules', () => {
 			'privacy',
 			'rules',
 			'alerts',
-			'reminders'
+			'reminders',
+			'categories'
 		]);
 	});
 

@@ -659,3 +659,32 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - Reading a message cancels all its pending `UnreadInterval` reminder jobs immediately (`cancel_reminders_for_read_messages`). Explicit dismissal records in `due_date_dismissals` and suppresses all pending reminder jobs for that message.
 - Additive IPC commands: `cmd_list_due_date_items(accountId)`, `cmd_dismiss_due_date_item(messageId)`, `cmd_list_reminder_configs`, `cmd_save_reminder_config(config)`, `cmd_delete_reminder_config(id, revision)`.
 - UI in `apps/desktop` provides Due-Date Dashboard modal, KPI summary cards (Overdue, Due Today, Upcoming), status filter tabs, 1-click clipboard barcode copy with feedback, direct navigation to email view, and Settings integration (`RemindersModule`) with full EN / PT-BR parity.
+
+## Local Automatic Categories ([03.8] / ADR-017)
+
+- Existing category wire values remain; Notifications is additive. Pure bounded local
+  classification returns version/reason. Priority: Security > Financial > Shopping >
+  Newsletter > Notifications > Personal fallback. Personal does not imply a human sender.
+- Append-only v7 stores message_categories, category_corrections and category_sender_overrides.
+  Effective priority is message correction > account/exact-sender override > automatic.
+  Nullable resets keep revisions against ABA; sender normalization reuses rules::sender_address.
+  Badges remain independent. Canonical IMAP identity and existing traits/DTO shapes remain.
+- Corrections use account-bound hashed provider ID, else valid Message-ID + received time.
+  Record-only fallback corrections are removed with the message; reliable identities survive
+  cache deletion until account removal. First assignment stays stable through MOVE/hydration.
+  Missing/changed identities after re-ingestion cannot recover prior corrections. See k-029.
+- Ingestion refreshes automatic metadata atomically; fact changes invalidate its version.
+  Active unlocked desktop backfills <=300 cached rows per local batch, yielding between batches independently
+  of the outbox cadence, resumably, without
+  rules/reminders/delivery/network work. Until processed, history uses legacy automatic
+  badges and sender overrides await normalized metadata. Errors emit MutationFailed.
+- Additive IPC: cmd_category_metadata(messageId), cmd_correct_category(messageId,revision,category?),
+  cmd_list_category_overrides(offset?) (<=200 active rows), cmd_save_category_override(value)
+  (null category removes), cmd_search_category(query,category). Native revisions reject stale
+  writes. Category SQL eligibility precedes pagination/both hybrid windows, shares snapshots
+  with hydration, and respects existing semantic opt-in. Saved filters add default-null category.
+- EN/PT-BR category controls use native result membership and existing virtualization.
+  Per-message corrections and separately consented sender overrides disclose provenance,
+  automatic reasons and record-only limits. Settings manages sender removal; saved current
+  search retains category. Scope/view changes invalidate late reads; no browser persistence.
+  Categories never move mail, hide extraction badges, train models or execute automation.

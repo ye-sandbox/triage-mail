@@ -211,6 +211,31 @@ pnpm --filter desktop build
 cargo build --release --package triage-mail-desktop
 ```
 
+### Local automatic categories
+
+Use **Local categories** in the sidebar to filter the current mailbox across the full
+native result set. The six local categories are People, Finance, Purchases, Newsletters,
+Notifications and Security. Deterministic precedence is Security, Finance, Purchases,
+Newsletters, Notifications, then People as the fallback. People does not prove a human
+sender; sender addresses are unauthenticated. No model download or cloud request is used.
+
+Expand **Local categories** in the selected message to inspect the automatic result,
+reason and effective source. Correct only that message, or separately confirm an exact
+sender override for its account's existing and future cached mail. Message corrections
+win over sender overrides, which win over automatic classification. Reset either layer
+to use the next one. **Settings → Local categories** lists active sender overrides for
+removal. Category changes preserve extraction badges and never move mail or run rules,
+reminders or deliveries. Save current search retains the category filter.
+
+All category metadata stays in SQLCipher. Automatic history backfill runs in resumable
+batches while the unlocked app is active; views converge as that backfill completes.
+Corrections survive ordinary re-sync, restart and canonical moves. After cache deletion,
+restoration requires the same account-bound provider ID, or a valid Message-ID and
+received timestamp. Without those, corrections last only for the cached record; the
+message controls disclose this limit. Account removal deletes its category metadata.
+These controls do not train a model. Offline timing and limits are recorded in
+[`docs/performance/categories.md`](docs/performance/categories.md).
+
 ### Saved searches and virtual folders
 
 Use **Saved searches** in the sidebar to create a named view, save the current search
