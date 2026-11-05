@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[01.4] Encrypted Backup & Portable Rule Export — RUNNING
+No active task — [01.4] completed. No prioritized successor remains; select and plan the next backlog item.
 
 ---
 
@@ -1128,7 +1128,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [01.4]: Encrypted Backup & Portable Rule Export
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Priority:** 10
 - **Depends On:** [03.5], [04.10] for rule and saved-view formats.
 - **Systems Involved:** `crates/storage`, `crates/vault`, desktop import/export UI.
@@ -1183,6 +1183,48 @@ All tasks inherit the repository DoD when implemented.
 - **Approval boundary:** This plan proposes fresh-target recovery and the explicit
   supported-data perimeter above. Implementation authorized by the user. Execute only [01.4]; halt for unapproved dependencies or
   material changes to the recovery/security contract.
+
+#### Completion (2026-11-04)
+
+- **Commit:** `8f2fbab` (`feat(backup): add encrypted recovery and portable definitions`).
+- **Delivered:** Headless authenticated streaming backups from one consistent committed
+  SQLite/WAL snapshot; bounded credential-free portable rule/view JSON, full native
+  preview/reference mapping and atomic disabled imports; startup-only isolated-vault
+  fresh-target restore with a fresh database key, integrity/reference checks and inert
+  staging recovery. Cached-only accounts reconnect by exact email without replacing
+  connected accounts. EN/PT-BR controls disclose content, omissions and recovery limits.
+  Imported saved views reload from native storage without browser persistence.
+- **Validation:** `cargo check --workspace`, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
+  `pnpm --filter desktop check`, `pnpm --filter desktop test` (181 tests), and
+  `pnpm --filter desktop build` passed. Typecheck reports zero errors/warnings.
+  Changed frontend files pass Prettier with repository tab/single-quote conventions.
+  All five policy-scanner regressions pass; the full 383 tracked-text-file secret/PII/
+  legacy-Svelte scan reports zero findings. Legacy-prop and diff checks pass.
+- **Coverage:** Wrong passphrase, tampering/truncation/order/version rejection, WAL-only
+  commits/concurrent-write consistency, queue/secret-reference exclusion, disabled
+  restored automation, occupied/symlink/traversal targets, failed-stage cleanup and
+  reopened fresh vault/database, account reconnect, reference rejection/import rollback,
+  changed-preview/consent guards, credential cleanup, teardown and independent form guards.
+- **Environment:** Offline validation used the existing toolchain/sysroot from k-001/k-006.
+  Existing synthetic loopback Rust tests and Node policy subprocess checks ran outside
+  the restrictive sandbox. No dependency downloads, provider calls, model downloads or
+  real credentials were used. Native desktop-portal interoperability and large-backup
+  responsiveness were not established; the implementation/documentation makes no claim.
+- **Contracts:** ADR-021, k-033 and NOTES record format, limits, restore/reconnect and
+  empty-host cached-only account semantics. Existing migrations, traits and command
+  signatures remain unchanged; commands are additive. README EN/PT-BR stays synchronized.
+- **Next:** No prioritized task follows [01.4]. Future backlog requires selection and
+  planning; no unapproved task was started. Nothing pushed.
+
+#### Closing Checklist — [01.4]
+
+- [x] Rust/frontend strict typing, automated tests, formatting and Clippy.
+- [x] Svelte 5 invariant, full tracked-file secret/PII scan and clean diff.
+- [x] SPA build, EN/PT-BR usage documentation and supported-data disclosure.
+- [x] ADR-021, active contracts and k-033 knowledge preservation.
+- [x] Atomic conventional feature commit; hash recorded above.
+- [x] Task closed; no prioritized successor available to promote.
 
 ---
 
