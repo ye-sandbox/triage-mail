@@ -146,6 +146,17 @@ pub fn restore(
     target: &Path,
     passphrase: Zeroizing<String>,
 ) -> Result<(), IpcError> {
+    let ownership = crate::ownership::acquire(target)?;
+    restore_owned(source, target, passphrase, ownership)
+}
+
+/// The caller retains the same ownership across recovery and subsequent bootstrap.
+pub(crate) fn restore_owned(
+    source: &Path,
+    target: &Path,
+    passphrase: Zeroizing<String>,
+    _ownership: Arc<sync_runtime::ownership::WriterOwnership>,
+) -> Result<(), IpcError> {
     if target.exists() || std::fs::symlink_metadata(target).is_ok() {
         return Err(IpcError::InvalidRequest);
     }

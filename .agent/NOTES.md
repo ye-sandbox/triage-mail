@@ -921,3 +921,25 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   may continue. Neither the entire pass nor host storage/discovery is newly bounded.
   No active CLI/daemon, process ownership or writable container contract is added.
   See k-038 for ordering and cancellation limits; offline CLI contracts remain intact.
+
+## Exclusive Runtime Writer Ownership ([00.6] / ADR-025)
+
+- Additive sync_runtime::ownership::WriterOwnership uses safe std nonblocking locks.
+  Unix only; unsupported hosts fail closed. Absolute no-traversal installation path,
+  canonical parent plus literal final name determine the persistent empty sibling
+  `.triage-mail-writer-<name>.lock`. Parent creation is allowed; installation creation
+  is not. Refuse symlink/nonregular/nonempty/multilink/non-0600 lock files and direct
+  symlink/non-directory installations. Never repair, annotate or unlink the lock.
+- Desktop RuntimeState acquires before bootstrap and retains across failed unlocks.
+  Service Arcs retain ownership through workers/storage closures; the vault wrapper
+  retains it through detached credential operations. Existing injected constructors
+  do not automatically acquire ownership. Acquisition maps to StorageUnavailable;
+  IPC/schema/traits remain compatible. No new network action or dependency is added.
+- Public backup restore acquires before target checks/staging. Runtime restore shares
+  retained ownership with bootstrap. Order: owned in-process recovery gate, then
+  process guard. Blocking bootstrap/restore retain the recovery gate on cancellation
+  to prevent overlapping retries; running writes can continue after caller teardown.
+- CLI cached readers ignore the guard and retain read-only committed-WAL behavior.
+  Cooperative local-filesystem protection only: older binaries, direct core writers,
+  hostile replacement, bind aliases and network filesystems are outside the contract.
+  Existing-installation writers also need parent write access. See k-039 and ADR-025.

@@ -21,6 +21,11 @@ installation. It reads the existing `application/database-key` vault entry. With
 `--unlock-stdin` it uses the OS keyring; local keyring IPC may be required. It never
 creates a key or changes a keyring entry.
 
+The desktop coordinates active writers through a persistent empty sibling
+`.triage-mail-writer-<installation-name>.lock` file. The offline CLI ignores this
+advisory lock and can read committed WAL data while the desktop owns it. Do not
+delete a live writer's lock file. Existing WAL/SHM access requirements still apply.
+
 With `--unlock-stdin`, only the existing `vault.enc` is used. Supply the passphrase
 through a trusted password-manager pipe or private file descriptor, followed by EOF.
 No secret value is accepted through arguments or environment variables. Interactive

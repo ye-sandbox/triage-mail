@@ -65,6 +65,41 @@ fn invoke(path: &Path, arguments: &[&str], phrase: &[u8]) -> Output {
     child.wait_with_output().unwrap()
 }
 
+#[cfg(unix)]
+#[test]
+fn cached_cli_reads_committed_wal_while_another_process_owns_the_installation() {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let fixture = fixture();
+    let path = fixture.dir.path();
+    let mut name = std::ffi::OsString::from(".triage-mail-writer-");
+    name.push(path.file_name().unwrap());
+    name.push(".lock");
+    let lock_path = path.parent().unwrap().join(name);
+    // INVARIANT: Match the sibling ownership protocol without introducing a
+    // runtime dependency into the offline reader. The native guard has separate
+    // subprocess coverage; this checks the actual CLI against a held OS lock.
+    let ownership = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&lock_path)
+        .unwrap();
+    ownership.try_lock().unwrap();
+    let vault = std::fs::read(path.join("vault.enc")).unwrap();
+    let output = invoke(path, &["search", "--query", "boleto"], PHRASE);
+    assert!(output.status.success(), "{output:?}");
+    let rows: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 2);
+    assert_eq!(vault, std::fs::read(path.join("vault.enc")).unwrap());
+    assert!(std::fs::read(&lock_path).unwrap().is_empty());
+    assert_eq!(fixture.store.pending_mutations().unwrap().len(), 1);
+    drop(ownership);
+    // Test-only teardown, after every possible owner has exited.
+    std::fs::remove_file(lock_path).unwrap();
+}
+
 #[test]
 fn executable_reads_encrypted_cache_without_processing_or_changing_it() {
     let fixture = fixture();

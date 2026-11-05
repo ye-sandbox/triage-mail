@@ -1,16 +1,15 @@
 //! Tauri-specific command registration and native lifecycle. No core crate depends on this module.
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use tauri::{ipc::Channel, Manager, State};
 use tokio::sync::OnceCell;
-use vault::{SecretStore, VaultKey};
 use zeroize::Zeroizing;
 
 use crate::dto::*;
 use crate::onboarding::{self, AuthorizationSessions, IncomingAuthorization, NativeTokenExchange};
-use crate::remote::NativeRemoteMail;
+use crate::ownership::bootstrap;
 use crate::service::{DesktopService, IncomingCredentials, IpcError};
 use crate::worker::WorkerSupervisor;
 
@@ -20,7 +19,8 @@ pub struct RuntimeState {
     workers: OnceCell<Arc<WorkerSupervisor>>,
     subscriptions: Mutex<HashMap<String, tokio::task::JoinHandle<()>>>,
     authorizations: AuthorizationSessions,
-    recovery_gate: tokio::sync::Mutex<()>,
+    recovery_gate: Arc<tokio::sync::Mutex<()>>,
+    ownership: OnceCell<Arc<sync_runtime::ownership::WriterOwnership>>,
 }
 
 impl RuntimeState {
@@ -31,7 +31,8 @@ impl RuntimeState {
             workers: OnceCell::new(),
             subscriptions: Mutex::new(HashMap::new()),
             authorizations: AuthorizationSessions::default(),
-            recovery_gate: tokio::sync::Mutex::new(()),
+            recovery_gate: Arc::new(tokio::sync::Mutex::new(())),
+            ownership: OnceCell::new(),
         }
     }
 
@@ -39,14 +40,23 @@ impl RuntimeState {
         &self,
         passphrase: Option<Zeroizing<String>>,
     ) -> Result<Arc<DesktopService>, IpcError> {
-        let _recovery = self.recovery_gate.lock().await;
+        let recovery = Arc::new(self.recovery_gate.clone().lock_owned().await);
+        // INVARIANT: Always acquire recovery_gate before ownership. Retain the
+        // guard through failed unlock/retry; cancellation cannot unlock active work.
+        let ownership = self.ownership().await?;
         let service = self
             .service
             .get_or_try_init(|| async {
                 let path = self.data_dir.clone();
-                tokio::task::spawn_blocking(move || bootstrap(&path, passphrase))
-                    .await
-                    .map_err(|_| IpcError::Internal)?
+                let recovery = recovery.clone();
+                tokio::task::spawn_blocking(move || {
+                    // INVARIANT: A canceled caller cannot release the in-process
+                    // gate while its uncancelable bootstrap is still writing.
+                    let _recovery = recovery;
+                    bootstrap(&path, passphrase, ownership)
+                })
+                .await
+                .map_err(|_| IpcError::Internal)?
             })
             .await?
             .clone();
@@ -59,72 +69,18 @@ impl RuntimeState {
             .await?;
         Ok(service)
     }
-}
 
-fn bootstrap(
-    path: &Path,
-    passphrase: Option<Zeroizing<String>>,
-) -> Result<Arc<DesktopService>, IpcError> {
-    if path.join("recovered-local-vault").exists() && passphrase.is_none() {
-        return Err(IpcError::VaultUnavailable);
+    async fn ownership(&self) -> Result<Arc<sync_runtime::ownership::WriterOwnership>, IpcError> {
+        self.ownership
+            .get_or_try_init(|| async {
+                let path = self.data_dir.clone();
+                tokio::task::spawn_blocking(move || crate::ownership::acquire(&path))
+                    .await
+                    .map_err(|_| IpcError::Internal)?
+            })
+            .await
+            .cloned()
     }
-    std::fs::create_dir_all(path).map_err(|_| IpcError::StorageUnavailable)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
-            .map_err(|_| IpcError::StorageUnavailable)?;
-    }
-    let vault: Arc<dyn SecretStore> = match passphrase {
-        Some(passphrase) => {
-            if passphrase.is_empty() {
-                return Err(IpcError::InvalidRequest);
-            }
-            let cipher = Arc::new(vault::Argon2AesGcmCipher::from_passphrase(
-                passphrase.as_bytes(),
-            ));
-            let fallback =
-                vault::EncryptedFallbackStore::file_backed(path.join("vault.enc"), cipher)
-                    .map_err(|_| IpcError::VaultUnavailable)?;
-            if path.join("recovered-local-vault").exists() {
-                Arc::new(fallback)
-            } else {
-                Arc::new(vault::AutoSecretStore::new(Arc::new(fallback)))
-            }
-        }
-        None => Arc::new(vault::KeyringStore::new()),
-    };
-    let key_id =
-        VaultKey::for_account("application", "database-key").map_err(|_| IpcError::Internal)?;
-    let db = path.join("mail.db");
-    let raw = match vault.get_secret(&key_id) {
-        Ok(bytes) => Zeroizing::new(bytes),
-        Err(vault::VaultError::NotFound(_)) if !db.exists() => {
-            let mut raw = Zeroizing::new(vec![0u8; 32]);
-            getrandom::getrandom(&mut raw).map_err(|_| IpcError::Internal)?;
-            vault
-                .set_secret(&key_id, &raw)
-                .map_err(|_| IpcError::VaultUnavailable)?;
-            raw
-        }
-        _ => return Err(IpcError::VaultUnavailable),
-    };
-    let bytes: [u8; 32] = raw
-        .as_slice()
-        .try_into()
-        .map_err(|_| IpcError::VaultUnavailable)?;
-    let store = storage::SqliteMailStore::open(
-        db,
-        &storage::DatabaseKey::from_bytes(bytes),
-        Default::default(),
-    )
-    .map_err(|_| IpcError::StorageUnavailable)?;
-    let remote = Arc::new(NativeRemoteMail::new(vault.clone()));
-    let provider = crate::model_download::model_config()
-        .ok()
-        .map(triage_ai::onnx::OnnxEmbeddingProvider::new)
-        .map(Arc::new);
-    DesktopService::new_learned(Arc::new(store), vault, remote, provider)
 }
 
 #[tauri::command]
@@ -909,14 +865,18 @@ pub async fn cmd_restore_backup(
     passphrase: crate::settings::IncomingApiKey,
     consent: bool,
 ) -> Result<(), IpcError> {
-    let _guard = state.recovery_gate.lock().await;
+    let recovery = state.recovery_gate.clone().lock_owned().await;
     if !consent || state.service.get().is_some() {
         return Err(IpcError::InvalidRequest);
     }
     let target = state.data_dir.clone();
-    tokio::task::spawn_blocking(move || crate::backup::restore(&path, &target, passphrase.0))
-        .await
-        .map_err(|_| IpcError::Internal)?
+    let ownership = state.ownership().await?;
+    tokio::task::spawn_blocking(move || {
+        let _recovery = recovery;
+        crate::backup::restore_owned(&path, &target, passphrase.0, ownership)
+    })
+    .await
+    .map_err(|_| IpcError::Internal)?
 }
 
 pub fn run() {
@@ -1027,8 +987,36 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::remote::NativeRemoteMail;
     use serde_json::{json, Value};
     use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
+
+    #[tokio::test]
+    async fn runtime_retains_ownership_after_failed_unlock_and_reuses_it_on_retry() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("installation");
+        std::fs::create_dir(&path).unwrap();
+        std::fs::write(path.join("recovered-local-vault"), b"recovered").unwrap();
+        let state = RuntimeState::new(path.clone());
+        assert!(matches!(
+            state.initialize(None).await,
+            Err(IpcError::VaultUnavailable)
+        ));
+        assert!(matches!(
+            sync_runtime::ownership::WriterOwnership::acquire(&path),
+            Err(sync_runtime::ownership::OwnershipError::Busy)
+        ));
+        let first = state.ownership().await.unwrap();
+        let service = state
+            .initialize(Some(Zeroizing::new(
+                "synthetic runtime ownership fixture phrase".into(),
+            )))
+            .await
+            .unwrap();
+        assert!(Arc::ptr_eq(&first, service._ownership.as_ref().unwrap()));
+        state.workers.get().unwrap().shutdown();
+    }
+    use vault::SecretStore;
 
     fn invoke(
         window: &tauri::WebviewWindow<MockRuntime>,
@@ -1074,7 +1062,8 @@ mod tests {
             Arc::new(NativeRemoteMail::new(vault)),
             None,
         );
-        let state = RuntimeState::new(PathBuf::new());
+        let directory = tempfile::tempdir().unwrap();
+        let state = RuntimeState::new(directory.path().join("installation"));
         assert!(state.service.set(service.clone()).is_ok());
         // No worker starts in this fixture; all network operations remain unreachable.
         assert!(state.workers.set(WorkerSupervisor::new(service)).is_ok());

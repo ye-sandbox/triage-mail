@@ -7,8 +7,74 @@
 
 ## Active Task
 
-No active task — [00.5] completed. Active headless sync/daemon and writable
-container deployment remain unprioritized and require a separate plan.
+### Task [00.6]: Exclusive Runtime Writer Ownership
+
+- **Status:** RUNNING
+- **Selection:** Proposed after the user's `proceed` on 2026-11-05. [00.5] remains
+  complete. Establish ownership before introducing an active headless writer.
+- **Systems Involved:** Pure Rust runtime ownership helper, desktop bootstrap and
+  backup recovery, offline process integration tests and architecture documentation.
+- **Problem:** Desktop recovery_gate serializes only one RuntimeState. Independent
+  processes can still provision/open the same installation and start duplicate workers.
+  SQLite transactions alone do not serialize vault changes or remote side effects.
+- **Scope:** Cooperative, nonblocking, process-exclusive ownership for an installation.
+  Preserve offline CLI/container readers and existing schemas, traits and IPC shapes.
+  No active CLI command, daemon, writable container or delivery behavior change.
+
+#### Approved Implementation Plan (2026-11-05)
+
+1. Record an ADR for an additive GUI-independent ownership guard in sync-runtime.
+   Use safe OS-backed advisory file locking through the installed standard library
+   if available; no dependency downloads or unsafe code. Verify cached toolchain
+   support before implementation; a new dependency or toolchain requirement returns
+   to planning. Lock contention fails immediately with a fixed, non-private error.
+2. Define one stable private sibling lock location derived from the canonical parent
+   and installation name, usable while the installation directory is absent. Reject
+   symlink/nonregular lock targets and unsupported paths/platforms conservatively.
+   Keep the lock file free of credentials, mail, paths and PID metadata. Never unlink
+   it on release or infer ownership from file existence/PIDs; retain the open locked
+   handle for the owner's lifetime. Document cooperative/local-filesystem limits and
+   avoid claims of protection against hostile filesystem replacement or older apps.
+3. Acquire ownership before desktop provisioning, vault mutation, migration or worker
+   startup. Retain it through all service/worker and in-flight blocking-operation
+   lifetimes, including failed/retried initialization, without introducing an unlock
+   window. Map contention to an existing safe IPC error variant. Preserve current
+   unlock modes, recovery marker behavior and mutation/hook ordering.
+4. Use the same ownership protocol for startup backup restore, before target checks,
+   staging and publication. Serialize restore versus initialize across processes
+   without creating the target directory merely to lock it. Preserve absent-target
+   restore semantics, authenticated staging, isolated fallback vault and cleanup.
+   The in-process recovery_gate remains in place with consistent lock ordering.
+5. Verify with offline synthetic subprocesses: contention before any provisioning,
+   clean and abrupt process-exit release, persistent lock-file reuse, independent
+   installations, failed initialization/retry, symlink/invalid-file refusal, and
+   restore-versus-initialize exclusion. Confirm cached CLI/WAL reads remain available
+   under writer ownership. Exercise actual OS locks, not only injected mocks, and
+   check that rejected contenders cannot change database/vault or start remote work.
+6. Run the complete repository DoD, SPA build, applicable formatting and tracked-file
+   secret/PII scans using cached tooling and offline dependencies. Preserve contracts
+   and relevant knowledge. Load readme-standard if documented setup/validation changes
+   require paired README updates. Commit atomically, record the hash and close only
+   [00.6]; do not push or start a successor.
+
+- **Approval:** User approved with `proceed` on 2026-11-05.
+- **Approval boundary:** Local ownership and desktop/recovery integration only. No
+  live network tests, downloads, secrets/credential formats, schema/IPC shape changes,
+  active headless bootstrap, scheduling/delivery consent, daemon or image publication.
+- **Prerequisite:** Cached Rust 1.99.0 supports safe standard-library file locking;
+  no Rust dependency download is needed. On 2026-11-05 the user explicitly approved
+  a build-only P0 exception to download GTK/WebKit development packages into a
+  private temporary sysroot for full native validation. No system installation,
+  provider call, live delivery or broader runtime network permission is authorized.
+
+#### Closing Checklist — [00.6]
+
+- [x] Implementation plan approved.
+- [x] Safe ownership guard protects desktop initialization and backup recovery.
+- [x] Offline subprocess contention/release and reader compatibility tests pass.
+- [x] Full repository DoD, SPA build, formatting and secret/PII checks pass.
+- [x] ADR, active contracts and applicable knowledge preserved.
+- [ ] Atomic Conventional Commit recorded; task closed without pushing.
 
 ---
 
