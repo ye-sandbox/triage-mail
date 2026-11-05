@@ -7,9 +7,15 @@
 
 ## Active Task
 
+No active task — [03.10] completed. Remaining backlog is unprioritized and requires planning.
+
+---
+
+## Latest Completed Task
+
 ### Task [03.10]: Real Local Tier 2 ONNX Embeddings
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Selection:** Proposed from the unprioritized backlog after the user's `proceed`
   on 2026-11-05. User approved the plan and development provisioning with `proceed`
   on 2026-11-05. [02.7] remains complete.
@@ -77,18 +83,54 @@
   consent, ANN ranking changes, arbitrary model catalog, new crate or daemon. Material
   dependency, compatibility or security changes outside this plan return to planning.
 
+#### Completion (2026-11-05)
+
+- **Commit:** `dc84fd1` (`feat(embeddings): run pinned local ONNX inference with resumable indexing`).
+- **Delivered:** Genuine CPU MiniLM inference behind the unchanged embedding trait;
+  full model/tokenizer/native-runtime hash verification; no automatic fetch or projection
+  fallback in the native desktop. Append-only v11 tracks source versions and rebuild
+  epochs, rejects stale writes and resumes local indexing after restart. All semantic
+  variants gate complete compatible indexes in their ranking snapshots. Existing
+  injected-provider behavior, exact ranking and backup v1/schema-10 payload stay compatible.
+- **Controls:** Additive readiness/rebuild IPC and EN/PT-BR settings expose safe counts,
+  opt-in and confirmed rebuild with teardown/busy guards. Missing files leave lexical
+  startup/search available. Runtime and weights are installed separately; direct model
+  downloads require explicit consent and pinned hashes. No live mail, cloud inference,
+  external deliveries, telemetry or binary attachments were used.
+- **Validation:** Workspace check/test/fmt/all-target Clippy (-D warnings) exit 0;
+  desktop check reports zero errors/warnings, all 184 frontend tests and SPA build pass.
+  Changed frontend files pass Prettier using existing cached tooling. Five policy
+  regressions pass; the full 419 tracked-text-file scan reports zero secret/PII/Svelte
+  findings. Legacy-prop and whitespace checks pass. The optional artifact-dependent
+  ONNX smoke is ignored in ordinary tests and passed separately offline, including a
+  generated Identity graph, malformed-graph rejection and the genuine pinned model.
+- **Coverage:** Manifest rejection, pooling/shape/finite/UTF-8 bounds, source hydration,
+  deletion, failure/retry, generation replacement, stale results from another writer,
+  encrypted reopen, upgrade, filtered/saved/review/conversation gates, backup restore,
+  missing-runtime startup, explicit consent, EN/PT-BR controls and late-result cleanup.
+- **Evidence:** Standalone release 256-message encrypted fixture: session preparation
+  140.039ms; indexing 712.080ms / 359.510 rows/s; inference p50/p95 1.572/7.473ms;
+  peak process RSS 98,868KiB. Debug smoke: preparation 1,046.662ms and four short
+  EN/PT-BR documents in 7.020ms. These are small repeated-text runs with cached files
+  and concurrent development checks, not large-mailbox/relevance/UI performance claims.
+- **Perimeter:** ADR-022, active contracts, k-035, docs/onnx.md, paired READMEs and the
+  reserved development model example are synchronized. Approved provisioning used
+  official package/model/runtime sources and ignored scratch without system installs.
+  Native execution was validated on Linux x64; other platform hashes do not establish
+  native signing/packaging/interoperability. Existing latency and language-quality
+  limitations remain documented. No new crate or public trait/payload rewrite.
+- **Next:** No prioritized successor is available. Remaining backlog requires selection
+  and planning; no additional task started. Nothing pushed.
+
 #### Closing Checklist — [03.10]
 
 - [x] Plan and narrowly scoped development provisioning approved.
-- [ ] Genuine CPU ONNX execution with verified artifacts and no hidden downloads.
-- [ ] Generation-safe migration/reindex, restart and semantic entry-point coverage.
-- [ ] Full Rust/frontend DoD, SPA build, formatting and secret/PII checks.
-- [ ] EN/PT-BR documentation, ADR/contracts and applicable knowledge preservation.
-- [ ] Atomic conventional commit with recorded hash; task closed without pushing.
+- [x] Genuine CPU ONNX execution with verified artifacts and no hidden downloads.
+- [x] Generation-safe migration/reindex, restart and semantic entry-point coverage.
+- [x] Full Rust/frontend DoD, SPA build, formatting and secret/PII checks.
+- [x] EN/PT-BR documentation, ADR/contracts and applicable knowledge preservation.
+- [x] Atomic conventional commit with recorded hash; task closed without pushing.
 
----
-
-## Latest Completed Task
 
 ### Task [02.7]: Coverage-Guided IMAP Parser Fuzzing
 
@@ -1473,6 +1515,6 @@ All tasks inherit the repository DoD when implemented.
 - Headless CLI / Docker daemon runner consuming `crates/*` without GUI
 - Outbound SMTP & lightweight Markdown/Plain-text reply composer (`v0.2+`)
 - Multi-folder sync (Archive/All Mail with Gmail dedup, Sent read-only): scoped into the proposed [04.1] mailbox queue; implementation pending approval
-- Real Tier 2 ONNX inference via `fastembed`/`ort` (`v0.2`)
+- Real Tier 2 ONNX inference via `ort`: completed in [03.10].
 - Coverage-guided fuzzing for the in-house IMAP parser: completed in [02.7].
 - Optional binary-quantized ANN candidate stage + exact int8 rerank (`v0.2`)
