@@ -7,9 +7,16 @@
 
 ## Active Task
 
+No active task — [00.7] completed. Active headless execution, daemon lifecycle and
+writable container deployment remain unprioritized and require a separate plan.
+
+---
+
+## Latest Completed Task
+
 ### Task [00.7]: Shared Local Installation Bootstrap
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Selection:** Proposed after the user's `proceed` on 2026-11-05. [00.6] remains
   complete. Extract local installation opening before adding an active headless host.
 - **Systems Involved:** Pure Rust sync-runtime bootstrap, desktop ownership adapter,
@@ -64,18 +71,52 @@
 - **Open blockers:** None identified for this bounded proposal. Material behavior or
   dependency changes return to planning before implementation.
 
+#### Completion (2026-11-05)
+
+- **Commit:** `549e154` (`refactor(runtime): share ownership-bound local installation bootstrap`).
+- **Delivered:** Additive sync-runtime local bootstrap with ownership identity
+  validation, existing keyring/fallback/recovery selection and database-key/storage
+  opening. Independent storage/vault clones retain ownership after the installation
+  envelope or desktop service drops. Private repository access exposes no consuming
+  unwrap. Desktop retains service/provider/worker composition and startup ordering;
+  existing public injected constructor, IPC, schemas and core traits remain unchanged.
+- **Validation:** Locked/offline workspace check/test and all-target Clippy with
+  -D warnings pass; cargo fmt passes. Eight new bootstrap tests cover provisioning,
+  reopen, malformed/missing/wrong keys without replacement, recovery unlock, failed
+  retry, mismatched guard/symlink refusal, canonical parent aliases and independently
+  retained resource lifetimes. Real subprocess storage/vault retention passes. Existing
+  desktop cancellation/restore and CLI committed-WAL reader regressions pass. Existing
+  artifact-dependent ONNX and opt-in Docker checks remain ignored.
+- **Frontend/perimeter:** Desktop check has zero errors/warnings; all 184 frontend
+  tests and SPA build pass. Five policy-scanner regressions pass; 446 tracked text
+  files have zero secret/PII/legacy findings. Added Markdown and knowledge card pass
+  cached Prettier; Rust format, legacy-prop and diff checks pass. Normal sync-runtime
+  dependencies contain no Tauri/GTK/WebKit. CLI flags, environment variables and
+  documented validation commands did not change, so paired README edits were unnecessary.
+- **Environment:** Reused the existing private native-build sysroot and cached Rust,
+  frontend and formatter tooling offline. No dependency/model/package download, live
+  provider/delivery action, new test keyring access or personal credentials were used.
+- **Knowledge:** ADR-026, active contracts and k-040 preserve ownership identity,
+  independently retained resource/drop ordering, caller-held retry ownership and
+  host-owned startup effects. No new executable headless writer or runtime policy.
+- **Limits:** Existing cooperative Unix/local-filesystem ownership limits remain;
+  native validation is Linux x86_64. Synchronous bootstrap needs host blocking
+  execution and retained caller ownership across failures. Injected keyring behavior
+  and encrypted fallback tests do not establish live keyring interoperability.
+- **Next:** No prioritized successor is available. Active headless execution,
+  scheduling/delivery consent, daemon lifecycle and writable container deployment
+  require a separate plan. No successor started; nothing pushed.
+
 #### Closing Checklist — [00.7]
 
 - [x] Implementation plan approved.
-- [ ] Shared local bootstrap preserves vault, storage and ownership behavior.
-- [ ] Offline bootstrap/lifetime and desktop recovery regressions pass.
-- [ ] Full repository DoD, SPA build, formatting and secret/PII checks pass.
-- [ ] ADR, active contracts and applicable knowledge preserved.
-- [ ] Atomic Conventional Commit recorded; task closed without pushing.
+- [x] Shared local bootstrap preserves vault, storage and ownership behavior.
+- [x] Offline bootstrap/lifetime and desktop recovery regressions pass.
+- [x] Full repository DoD, SPA build, formatting and secret/PII checks pass.
+- [x] ADR, active contracts and applicable knowledge preserved.
+- [x] Atomic Conventional Commit recorded; task closed without pushing.
 
 ---
-
-## Latest Completed Task
 
 ### Task [00.6]: Exclusive Runtime Writer Ownership
 
