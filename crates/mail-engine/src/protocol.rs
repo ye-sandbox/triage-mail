@@ -291,8 +291,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
     ) -> Result<RawFetchedMessage, EngineError> {
         let mut msg = RawFetchedMessage::default();
         let mut current_chunk = line.to_string();
+        let mut depth = 0usize;
 
         loop {
+            advance_fetch_depth(&current_chunk, &mut depth)?;
             // Extract metadata from current chunk
             if msg.seq == 0 {
                 if let Some(seq_str) = current_chunk.split_whitespace().nth(1) {
@@ -359,7 +361,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
                 }
             }
 
-            if let Some(literal_size) = extract_trailing_literal_size(&current_chunk) {
+            if let Some(literal_size) = extract_trailing_literal_size(&current_chunk)? {
                 let literal = self.read_exact_bytes(literal_size).await?;
 
                 if let Some(section) = extract_body_section_name(&current_chunk) {
@@ -381,7 +383,15 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
 
                 // Read next line chunk continuation
                 current_chunk = self.read_crlf_line().await?;
+                // Tolerate empty separator lines used by existing fixtures, but
+                // INVARIANT: Never treat them as FETCH completion before its closing parenthesis.
+                while current_chunk.is_empty() {
+                    current_chunk = self.read_crlf_line().await?;
+                }
             } else {
+                if depth != 0 {
+                    return Err(EngineError::ImapProtocol("unclosed FETCH response".into()));
+                }
                 break;
             }
         }
@@ -846,15 +856,56 @@ pub fn parse_idle_untagged_line(line: &str) -> IdleWaitOutcome {
 }
 
 /// Helper extracting trailing literal length `{<size>}` if line ends with a literal marker.
-fn extract_trailing_literal_size(s: &str) -> Option<usize> {
+fn extract_trailing_literal_size(s: &str) -> Result<Option<usize>, EngineError> {
     let trimmed = s.trim_end();
     if trimmed.ends_with('}') {
         if let Some(brace_start) = trimmed.rfind('{') {
             let size_str = &trimmed[brace_start + 1..trimmed.len() - 1];
-            return size_str.parse::<usize>().ok();
+            // INVARIANT: Invalid/overflowing markers cannot become successful literal-free responses.
+            if !size_str.is_empty() && size_str.bytes().all(|b| b.is_ascii_digit()) {
+                return size_str
+                    .parse::<usize>()
+                    .map(Some)
+                    .map_err(|_| EngineError::ImapProtocol("invalid literal size".into()));
+            }
+            return Err(EngineError::ImapProtocol("invalid literal size".into()));
         }
     }
-    None
+    Ok(None)
+}
+
+/// Count framing only outside quoted strings; opaque literal bytes never enter this function.
+fn advance_fetch_depth(chunk: &str, depth: &mut usize) -> Result<(), EngineError> {
+    let mut quoted = false;
+    let mut escaped = false;
+    for byte in chunk.bytes() {
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                quoted = false;
+            }
+        } else {
+            match byte {
+                b'"' => quoted = true,
+                b'(' => *depth += 1,
+                b')' => {
+                    *depth = depth.checked_sub(1).ok_or_else(|| {
+                        EngineError::ImapProtocol("unexpected FETCH parenthesis".into())
+                    })?
+                }
+                _ => {}
+            }
+        }
+    }
+    if quoted {
+        return Err(EngineError::ImapProtocol(
+            "unclosed FETCH quoted string".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// Helper extracting bracketed tokens like `[UIDVALIDITY 12345]`.

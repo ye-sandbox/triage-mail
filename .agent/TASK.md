@@ -7,7 +7,45 @@
 
 ## Active Task
 
-No active task — [01.4] completed. No prioritized successor remains; select and plan the next backlog item.
+### Task [02.6]: IMAP FETCH/Literal Parser Property Tests
+
+- **Status:** RUNNING
+- **Selection:** Proposed from the unprioritized backlog after the user's `proceed` on
+  2026-11-04; user approved the plan with `proceed` on 2026-11-04.
+- **Systems Involved:** `crates/mail-engine/src/protocol.rs`,
+  `crates/mail-engine/src/bodystructure.rs`, and mail-engine test fixtures.
+- **Scope:** Offline deterministic generated/property-style tests for FETCH framing,
+  literal byte preservation and BODYSTRUCTURE parsing, with narrowly scoped fixes
+  for demonstrated parser defects. Preserve IPC, storage schemas, core traits and
+  lazy attachment behavior. No new dependencies or live provider calls.
+
+#### Approved Implementation Plan (2026-11-04)
+
+1. Add a bounded in-memory AsyncRead/AsyncWrite test adapter and deterministic
+   generators using existing dependencies. Exercise identical synthetic responses
+   under one-byte, boundary-aligned and seeded fragmented reads; use explicit input,
+   iteration and execution bounds, without sockets or credentials.
+2. Generate valid FETCH responses with multiple messages/sections, reordered metadata,
+   empty and binary literals, embedded CRLF/parentheses/tag-like text, and a following
+   tagged response. Compare results against independently constructed expected metadata
+   and exact payload bytes; verify fragmentation does not change command boundaries.
+3. Exercise malformed/truncated literals, numeric overflow, invalid UTF-8 control lines,
+   escaped/unterminated strings, mismatched parentheses and bounded nested
+   BODYSTRUCTURE inputs. Require deterministic errors for malformed tested grammar,
+   no panics and termination. Include reproducible seeds and small regression cases.
+4. Fix only defects demonstrated by those tests, including checked literal arithmetic
+   and parser rejection where necessary. Document safety invariants inline. If fixes
+   require broader protocol redesign or material new resource-limit policy, return
+   to planning before implementation of that change.
+5. Run the full repository DoD, frontend build and applicable formatting/policy scans.
+   Record actual case counts, seeds and limits without claiming exhaustive fuzzing.
+   Preserve any non-obvious findings in an atomic knowledge card; update contracts
+   only as needed. Make an atomic Conventional Commit, record its hash and close the
+   task. Do not push or start another backlog item.
+
+- **Approval boundary:** Approval authorizes the deterministic test harness and
+  demonstrated local parser fixes above. Continuous coverage-guided fuzzing tooling,
+  dependency downloads and unrelated sync changes remain outside this task.
 
 ---
 

@@ -52,12 +52,13 @@ fn tokenize_sexpr(input: &str) -> Result<Vec<Token>, EngineError> {
             }
             b'"' => {
                 i += 1;
-                let mut string_buf = String::new();
+                let mut string_buf = Vec::new();
                 let mut escaped = false;
+                let mut closed = false;
                 while i < bytes.len() {
                     let b = bytes[i];
                     if escaped {
-                        string_buf.push(b as char);
+                        string_buf.push(b);
                         escaped = false;
                         i += 1;
                     } else if b == b'\\' {
@@ -65,13 +66,20 @@ fn tokenize_sexpr(input: &str) -> Result<Vec<Token>, EngineError> {
                         i += 1;
                     } else if b == b'"' {
                         i += 1;
+                        closed = true;
                         break;
                     } else {
-                        string_buf.push(b as char);
+                        string_buf.push(b);
                         i += 1;
                     }
                 }
-                tokens.push(Token::String(string_buf));
+                if !closed {
+                    return Err(EngineError::ImapProtocol("unclosed quoted string".into()));
+                }
+                // INVARIANT: Preserve UTF-8 bytes while unescaping; byte-to-char casts corrupt non-ASCII metadata.
+                let value = String::from_utf8(string_buf)
+                    .map_err(|_| EngineError::ImapProtocol("invalid quoted string".into()))?;
+                tokens.push(Token::String(value));
             }
             b'{' => {
                 // IMAP literal format: {<size>}\r\n<bytes>
@@ -91,11 +99,23 @@ fn tokenize_sexpr(input: &str) -> Result<Vec<Token>, EngineError> {
                 i += 1; // skip '}'
                 if i + 1 < bytes.len() && bytes[i] == b'\r' && bytes[i + 1] == b'\n' {
                     i += 2;
-                } else if i < bytes.len() && bytes[i] == b'\n' {
-                    i += 1;
+                } else {
+                    return Err(EngineError::ImapProtocol("literal requires CRLF".into()));
                 }
-                let end = (i + size).min(bytes.len());
-                let literal_str = String::from_utf8_lossy(&bytes[i..end]).to_string();
+                // INVARIANT: A declared literal must fit completely; never clamp or overflow its byte range.
+                let end = i
+                    .checked_add(size)
+                    .filter(|&end| end <= bytes.len())
+                    .ok_or_else(|| {
+                        EngineError::ImapProtocol("truncated or oversized literal".into())
+                    })?;
+                // INVARIANT: This str-based parser must not resume tokenization inside a UTF-8 code point.
+                let literal_str = input
+                    .get(i..end)
+                    .ok_or_else(|| {
+                        EngineError::ImapProtocol("literal splits UTF-8 code point".into())
+                    })?
+                    .to_string();
                 tokens.push(Token::String(literal_str));
                 i = end;
             }
@@ -395,6 +415,11 @@ pub fn parse_bodystructure_str(input: &str) -> Result<BodyPartStructure, EngineE
     let tokens = tokenize_sexpr(input)?;
     let mut pos = 0;
     let sexpr = parse_sexpr_from_tokens(&tokens, &mut pos)?;
+    if pos != tokens.len() {
+        return Err(EngineError::ImapProtocol(
+            "trailing BODYSTRUCTURE tokens".into(),
+        ));
+    }
     parse_body_part_structure(&sexpr)
 }
 

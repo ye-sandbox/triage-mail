@@ -7,6 +7,13 @@
 
 ## Active Contracts
 
+- **IMAP parser regression contract ([02.6]):** FETCH literal payloads remain opaque
+  bytes across fragmented reads; completion requires balanced control-chunk parentheses.
+  Invalid/overflowing literal markers fail. BODYSTRUCTURE consumes one complete root,
+  uses checked complete CRLF literal ranges and preserves quoted UTF-8. Public trait,
+  IPC and storage contracts remain unchanged. Bounded offline property coverage and
+  its limits are recorded in k-034.
+
 - **Pre-Approved Tasks (`APPROVED`), Parallel Waves (`[PARALLEL: Wx]`) & `task-queue` Skill:** Tasks finalized during interactive planning use `Status: APPROVED` in `.agent/TASK.md` (with independent disjoint-file tasks tagged `[PARALLEL: Wx]` + `Paths:`), allowing fresh sessions (`proceed`) or isolated worker subagents and multi-account quota failover (`task-queue` skill on `proceed queue`) to transition directly to `RUNNING` without a redundant `PLANNING` pause, halting only when ambiguities, unapproved dependencies, or blockers require human intervention.
 
 
