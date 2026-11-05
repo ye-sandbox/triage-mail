@@ -213,6 +213,27 @@ pnpm --filter desktop build
 cargo build --release --package triage-mail-desktop
 ```
 
+### CLI offline para mensagens em cache
+
+Compile o executável sem GUI e consulte um cache criptografado existente:
+
+```bash
+cargo build --release --locked -p triage-mail-cli
+target/release/triage-mail-cli --data-dir /path/to/triage-mail accounts
+target/release/triage-mail-cli --data-dir /path/to/triage-mail search --query boleto --limit 20
+target/release/triage-mail-cli --data-dir /path/to/triage-mail show --message-id msg-a
+cargo test --locked -p triage-mail-cli
+```
+
+As chaves permanecem no cofre existente. Para desbloquear o cofre alternativo, adicione
+`--unlock-stdin` e forneça a frase-senha por um gerenciador de senhas confiável ou descritor
+de arquivo privado; stdin de terminal é recusado. Instalações restauradas exigem esse
+desbloqueio. Stdout contém mensagens privadas em JSON limitado. A CLI aceita apenas o
+esquema 11 e realiza consultas locais somente de leitura, sem inicialização, migração,
+sincronização ou automação. O acesso ao WAL do SQLite pode exigir arquivos de memória
+compartilhada/permissões no diretório. Consulte a [referência da CLI](docs/cli.md)
+para formatos, limites, códigos de saída e compatibilidade.
+
 ### Conversas e triagem em grupo
 
 Selecione **Conversas** acima da lista para agrupar mensagens em cache dentro de cada conta.
@@ -456,6 +477,7 @@ artefatos provisionados explicitamente; os testes comuns do workspace não exige
 .
 ├── .agent/                   # Governança ADD, contratos ativos (NOTES.md) e roadmap (TASK.md)
 ├── apps/
+│   ├── cli/                  # CLI Rust offline para acesso somente de leitura ao cache
 │   └── desktop/              # Frontend SvelteKit 5 SPA + entrypoint Tauri v2 (src-tauri)
 ├── crates/
 │   ├── mail-engine/          # Conector IMAP assíncrono, OAuth2 PKCE, IDLE Manager e MIME Parser

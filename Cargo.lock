@@ -5313,6 +5313,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "triage-mail-cli"
+version = "0.1.3"
+dependencies = [
+ "serde",
+ "serde_json",
+ "storage",
+ "tempfile",
+ "vault",
+ "zeroize",
+]
+
+[[package]]
 name = "triage-mail-desktop"
 version = "0.1.3"
 dependencies = [

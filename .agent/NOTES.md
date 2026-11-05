@@ -28,6 +28,7 @@ All core domain crates MUST remain pure Rust (zero dependency on `tauri`) so the
 | `crates/mail-engine` | Agnostic IMAP transport (`ImapConnector` trait), incremental sync (`UIDVALIDITY`/`CONDSTORE`), transparent multi-auth (App Passwords, OAuth2 Public PKCE, user-supplied BYO OAuth `client_id`/`client_secret`, Proton Bridge), RFC 8058 One-Click Unsubscribe, `mail-parser` | `ImapConnector`, `IdleManager`, `MimeExtractor`, `SyncEventSink` trait | `crates/vault` (`#![forbid(unsafe_code)]`) |
 | `crates/triage-ai` | 3-Tier Triage: Tier 1 (Regex 2FA/OTP, Pix EMV/keys, FEBRABAN Boletos with exact BRL value & due date, NF-e metadata, Tracking, `List-Unsubscribe` + RFC 8058 One-Click), Tier 2 (Local CPU ONNX embeddings downloaded on demand to `$XDG_DATA_HOME`), Tier 3 (Ollama/BYOK HTTP) | `DeterministicTriage`, `EmbeddingProvider` trait, `LlmSummarizer` trait, `TriageEventHook` trait | None (pure data in/out, `#![forbid(unsafe_code)]`) |
 | `apps/desktop/src-tauri` | Tauri v2 IPC bridge, system tray, native window lifecycle | Typed `#[tauri::command]` handlers & `tauri::ipc::Channel<SyncEvent>` | `mail-engine`, `storage`, `vault`, `triage-ai` |
+| `apps/cli` | Offline cached-mail inspection; no workers or remote actions | `accounts`, `search`, `show`; bounded JSON and fixed exit codes | `storage`, `vault`; no desktop/Tauri dependency |
 
 ### 2. Tauri v2 IPC & Streaming Event Contracts (`apps/desktop`)
 
@@ -861,3 +862,25 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   in docs/onnx.md. Native execution was validated on Linux x64 only; other platform
   hashes do not establish native interoperability. See k-035 for loader and lifecycle
   gotchas. Existing search/UI performance deviations and language-quality limits remain.
+
+## Offline Cached-Mail CLI ([00.3] / ADR-023)
+
+- `apps/cli` builds `triage-mail-cli` without Tauri/GTK/WebKit, using existing core
+  dependencies only. It does not start workers, load inference, fetch data or deliver.
+- Explicit existing `--data-dir` only. Default keyring read never provisions a key;
+  `--unlock-stdin` uses only existing fallback vault and bounded non-terminal UTF-8
+  input with zeroized buffers. Recovery marker forbids keyring mode. Additive
+  `vault::existing::ExistingVaultReader` bounds reads to 16 MiB without persistence.
+- Additive `storage::cached::CachedMailReader` owns a private READONLY/query_only
+  connection. Exact schema-11 migration sequence validation and reads share snapshots.
+  No migration/journal-mode change/immutable flag. Existing lexical ranking and stored
+  tokenizer remain authoritative; no implicit mailbox/review/category eligibility.
+- `accounts` returns opaque IDs with pagination. `search` returns existing summaries
+  with exact optional account scope. `show` reads only 64 KiB cached plain-text bytes,
+  omits incomplete final UTF-8 scalars and reports truncation/null when unavailable.
+  No mark-read or HTML conversion. No account limit; page limit 1..500.
+- Responses serialize fully before stdout within 4 MiB including LF; diagnostics
+  never echo private values. Output limits do not cap internal search/hydration memory.
+  Direct path symlinks are refused, without claiming race-proof filesystem isolation.
+  WAL/SHM files and directory access may be needed; pagination across invocations is
+  not a stable snapshot. See docs/cli.md and k-036 for boundaries and exit codes.

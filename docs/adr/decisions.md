@@ -608,3 +608,37 @@ type: architectural-decision-log
   architectures and Windows x64 are pinned without claiming native-platform validation.
   Short synthetic timings do not establish large-mailbox latency, general relevance,
   Portuguese quality or native UI frame cadence. Existing known deviations remain.
+
+### [2026-11-05] ADR-023: Offline CLI Composition and Read-Only Cache Snapshots
+
+- **Context:** Core crates support headless composition, but desktop bootstrap also
+  provisions keys, migrates storage and starts workers. Reusing it for cache inspection
+  would add GUI dependencies and could execute remote work merely to read local mail.
+- **Decision:** Add `apps/cli` as a Rust workspace executable depending on `storage`
+  and `vault`, without Tauri or desktop runtime imports. The initial commands list
+  opaque account IDs, search cached lexical summaries and show bounded plain text.
+  No worker, account setup, mutation, semantic inference, daemon or Docker image.
+- **Storage:** Add `storage::cached::CachedMailReader` with a private SQLCipher
+  READONLY connection and query_only. Never run the migrator, change journal mode
+  or use immutable mode. Validate the exact current migration sequence and execute
+  each read in one transaction; lexical ranking/hydration reuse existing code and
+  tokenizer. Committed WAL data remains visible. Sidecar/SHM requirements apply;
+  read-only means no logical data/schema writes, not immutable filesystem bytes.
+- **Secrets:** Require an explicit existing app-data directory and existing database
+  key. Default to keyring get only; explicit bounded non-terminal stdin selects only
+  the fallback vault. The recovery marker always forbids keyring selection. Add a
+  bounded existing-file vault reader exposing no secret mutation/persistence API.
+  Zeroize passphrase/raw-key buffers; never put secrets in argv/env or diagnostics.
+  Missing installations, vault entries or unsupported schemas fail without repair.
+- **Output:** JSON only, serialized completely within a 4 MiB ceiling before stdout;
+  fixed diagnostics/exit codes. Show reads at most 64 KiB of cached plain text and
+  reports truncation, without HTML conversion or fetching. The output limit does not
+  imply bounded internal FTS/hydration memory or latency. Mail stdout is private data.
+- **Alternatives:** Reject importing desktop runtime, silent storage initialization,
+  immutable SQLite WAL reads, plaintext key arguments and daemon/HTTP API expansion.
+  A future active runner needs a separate plan for shared orchestration, credentials,
+  single-writer ownership, scheduling and delivery consent.
+- **Validation:** Offline encrypted fixtures exercise WAL/concurrent commits, enforced
+  write refusal, exact lexical parity, scopes/pagination, fallback recovery, schema/key
+  failures, output bounds and controls. Package dependency/build checks establish GUI
+  independence; they do not establish all-platform keyring or packaging interoperability.
