@@ -884,3 +884,23 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   Direct path symlinks are refused, without claiming race-proof filesystem isolation.
   WAL/SHM files and directory access may be needed; pagination across invocations is
   not a stable snapshot. See docs/cli.md and k-036 for boundaries and exit codes.
+
+## Offline CLI Container ([00.4])
+
+- `scripts/build-cli-image.sh` builds the locked CLI offline on Linux x86_64 GNU,
+  packages it from scratch with an explicit four-library ELF allowlist and license
+  notices, and deletes its private generated context. No pulls, package downloads,
+  source/data/vault context, desktop/ONNX runtime or shell entrypoint. Host/toolchain
+  library identity affects the resulting image; this is not a reproducible build.
+- Default UID/GID 65532; run with a nonzero authorized host UID/GID, read-only root
+  and data mount, network none, no capabilities/new privileges, no Docker logs and
+  bounded private tmpfs. Only existing fallback vault via stdin, no D-Bus/keyring
+  socket or secret environment/argument. Existing CLI/schema contracts are unchanged.
+- Readable initialized WAL/SHM sidecars are required for container WAL reads. Missing
+  SHM can fail with exit 4 under the read-only mount; never repair with writable data
+  or immutable mode. Opt-in synthetic Docker test proves command parity, recovery
+  unlock, refusals, WAL visibility and durable/logical-state preservation. Native
+  readers can update SHM read marks; do not assert its bytes stay unchanged.
+- Local validation is Linux x86_64/Docker Desktop only; no registry publication,
+  active synchronization/daemon/automation or cross-platform guarantee. See docs/cli.md
+  and k-037 for build, runtime and sidecar restrictions.

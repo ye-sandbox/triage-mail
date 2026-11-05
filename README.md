@@ -231,6 +231,22 @@ read-only queries, without initialization, migration, sync or automation. SQLite
 access can require shared-memory sidecars/directory permissions. See the [CLI reference](docs/cli.md)
 for output shapes, limits, exit codes and compatibility.
 
+### Offline CLI container
+
+On Linux x86_64, package the CLI using only cached build dependencies and host
+runtime libraries; no base-image pull or dependency download is performed:
+
+```bash
+scripts/build-cli-image.sh triage-mail-cli:local
+TRIAGE_CLI_TEST_IMAGE=triage-mail-cli:local cargo test --offline --locked -p triage-mail-cli --test offline container_reads_readonly_encrypted_wal_and_fails_closed -- --ignored --exact
+```
+
+The non-root `scratch` image supports the same offline commands. Use a read-only
+existing-data mount, fallback passphrase through stdin, `--network=none`, disabled
+Docker logs and the other restrictions in the [container instructions](docs/cli.md#linux-container-packaging).
+Existing usable WAL/SHM sidecars are required; missing sidecars fail closed.
+Active sync, daemon operation and automation are separate future work.
+
 ### Conversations and thread triage
 
 Select **Conversations** above the message list to group cached mail within each account.
@@ -416,7 +432,7 @@ fields without applying mail actions. Simulation never sends. Initial history ne
 Changing/disablement cancels pending destination revisions; enabling never replays canceled work.
 Deleting a message/account cancels its pending alerts, including cache deletion after some moves.
 
-Keep the app active and unlocked for processing; a runnable headless CLI is future work.
+Keep the app active and unlocked for processing; a headless automation runner remains future work.
 Retries use stable event IDs/Idempotency-Key, bounded backoff and rate limits (six starts/minute
 per destination), with at most eight attempts/24 hours. Timeouts/crashes can produce duplicates;
 receivers should deduplicate by event ID. Accepted means receiver/service acceptance, not human
