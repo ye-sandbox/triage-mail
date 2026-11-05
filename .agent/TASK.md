@@ -7,8 +7,65 @@
 
 ## Active Task
 
-No active task — [00.3] completed. Active headless sync/daemon and Docker remain
-unprioritized and require a separate plan.
+### Task [00.4]: Offline Cached-Mail CLI Container Packaging
+
+- **Status:** RUNNING
+- **Selection:** Proposed from the unprioritized Docker runner backlog after the
+  user's `proceed` on 2026-11-05. [00.3] remains complete.
+- **Systems Involved:** Container packaging, offline synthetic integration validation,
+  CLI usage documentation and paired README updates.
+- **Scope:** Package the existing offline CLI for Linux containers. Preserve its
+  command surface, schema-11 read-only contract and vault-only unlock. No active sync,
+  daemon, provisioning, automation, model loading or remote actions.
+
+#### Approved Implementation Plan (2026-11-05)
+
+1. Inventory the local Docker daemon, cached base images, Rust dependencies and native
+   binary linkage without downloads. Select one locally verifiable Linux target and
+   explicit base-image identity. Package only the CLI and necessary runtime libraries;
+   omit source caches, mail, vault files, credentials and desktop/ONNX dependencies.
+   Use a narrowly allowlisted build context. If missing images/tooling prevent offline
+   validation, return to planning with the exact provisioning requirement; no pulls,
+   package downloads or registry publication are authorized by this plan.
+2. Add a container recipe using the existing locked CLI build and a non-root runtime.
+   Require an explicit existing data-directory mount and fallback unlock through stdin;
+   do not expose the host keyring socket, accept secrets through environment/arguments,
+   or create/copy an installation. Document `--network none`, no published ports,
+   dropped capabilities, no-new-privileges, read-only root filesystem, bounded private
+   temporary storage and host UID/GID permissions. Preserve the existing CLI defaults
+   and fixed diagnostics without an entrypoint that starts additional processes.
+3. Validate encrypted synthetic installations in the actual container: help, accounts,
+   lexical search, plain-text show, fallback/recovery unlock, wrong/missing passphrases,
+   absent installations and incompatible schema. Exercise committed WAL visibility
+   with existing sidecars under a read-only data mount; fail closed when sidecar
+   access is insufficient, without immutable mode or a writable-data workaround.
+   Assert unchanged logical mail/queues and no installation creation. Inspect image
+   contents, user, libraries and network-isolated execution. Keep fixtures/passphrases
+   ephemeral and outside the image/build context and tracked files.
+4. Document supported platform, local build/run commands, private stdout, passphrase
+   stdin, permissions, schema compatibility and WAL/SHM requirements in docs/cli.md.
+   Load readme-standard before synchronizing README.md and README.pt-br.md. State
+   that this is offline inspection; active headless sync/daemon remains separate.
+5. Run the full repository DoD, SPA build, applicable formatting and tracked-file
+   secret/PII scans. Record container-specific limitations in active contracts and
+   an atomic knowledge card if applicable. Make an atomic Conventional Commit, log
+   its hash and close only [00.4]. Do not push, publish an image or start a successor.
+
+- **Approval:** User approved with `proceed` on 2026-11-05.
+- **Approval boundary:** Packaging and offline validation only, using existing local
+  tooling/artifacts. No network exception, core trait/schema/IPC change, new runtime
+  command, live personal data test or writable database mount. Missing prerequisites
+  or material security/architecture changes require an updated plan.
+
+#### Closing Checklist — [00.4]
+
+- [x] Implementation plan approved.
+- [ ] Minimal non-root offline CLI image with bounded build context.
+- [ ] Actual offline container tests with synthetic encrypted cache and WAL cases.
+- [ ] Full repository DoD, SPA build, formatting and secret/PII checks.
+- [ ] EN/PT-BR documentation and applicable contract/knowledge preservation.
+- [ ] Atomic conventional commit with recorded hash; task closed without pushing.
+
 
 ---
 

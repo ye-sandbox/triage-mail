@@ -234,6 +234,23 @@ sincronização ou automação. O acesso ao WAL do SQLite pode exigir arquivos d
 compartilhada/permissões no diretório. Consulte a [referência da CLI](docs/cli.md)
 para formatos, limites, códigos de saída e compatibilidade.
 
+### Container da CLI offline
+
+No Linux x86_64, empacote a CLI usando apenas dependências de compilação em cache e
+bibliotecas do host; nenhuma imagem-base ou dependência é baixada:
+
+```bash
+scripts/build-cli-image.sh triage-mail-cli:local
+TRIAGE_CLI_TEST_IMAGE=triage-mail-cli:local cargo test --offline --locked -p triage-mail-cli --test offline container_reads_readonly_encrypted_wal_and_fails_closed -- --ignored --exact
+```
+
+A imagem `scratch` sem root oferece os mesmos comandos offline. Use um volume de
+dados existentes somente de leitura, frase-senha do cofre alternativo via stdin,
+`--network=none`, logs do Docker desativados e as demais restrições das
+[instruções do container](docs/cli.md#linux-container-packaging).
+Arquivos WAL/SHM existentes e utilizáveis são necessários; a ausência causa recusa.
+Sincronização ativa, daemon e automação continuam como trabalho futuro separado.
+
 ### Conversas e triagem em grupo
 
 Selecione **Conversas** acima da lista para agrupar mensagens em cache dentro de cada conta.
@@ -427,7 +444,7 @@ nunca gera alertas. Edição/desativação cancela revisões pendentes; ativaç�
 cancelado. Excluir mensagem/conta cancela seus alertas pendentes, inclusive exclusão de cache após
 algumas movimentações.
 
-Mantenha o aplicativo ativo e desbloqueado para processamento; um CLI headless executável é
+Mantenha o aplicativo ativo e desbloqueado para processamento; um executor headless de automação é
 trabalho futuro. Tentativas usam IDs estáveis/Idempotency-Key, espera e taxa limitadas (seis
 inícios/minuto por destino), com no máximo oito tentativas/24 horas. Timeouts/falhas podem gerar
 duplicatas; destinatários devem deduplicar pelo ID do evento. Aceito indica aceitação pelo

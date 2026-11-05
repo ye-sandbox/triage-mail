@@ -97,5 +97,83 @@ Offline tests cover fallback unlock, recovery gating, wrong/missing keys, schema
 rejection, WAL visibility/concurrent writes, exact lexical behavior, account scopes,
 pagination, direct symlinks, control bytes and output bounds. They do not establish
 live OS-keyring interoperability on every platform or native platform packaging.
-Sync, daemon/Docker operation, account setup, mutations, semantic indexing and all
+Sync, daemon operation, account setup, mutations, semantic indexing and all
 external actions remain outside this executable's command surface.
+
+## Linux container packaging
+
+Use a trusted Linux x86_64 GNU build host with Cargo, cached locked dependencies,
+C/native build tools, Node.js (Cargo metadata parsing), GNU coreutils and Docker.
+The host must provide Debian/Ubuntu runtime notices at
+`/usr/share/doc/libc6/copyright` and `/usr/share/doc/libgcc-s1/copyright`:
+
+```bash
+scripts/build-cli-image.sh triage-mail-cli:local
+docker image inspect triage-mail-cli:local --format '{{.Id}} {{.Size}}'
+```
+
+The script builds the CLI with `--offline --locked --release` for the explicit
+`x86_64-unknown-linux-gnu` target, then creates a private
+throwaway build context containing only that executable, its allowlisted ELF loader
+and runtime libraries, and license notices. The base is Docker's empty `scratch`;
+there is no base-image tag to pull. Docker build uses `--pull=false --network none`.
+No package installation, compiler image, registry access, source tree, mail, vault,
+models, Node runtime or desktop libraries enter the image. The context is deleted
+on exit. The image contains no shell or background entrypoint. Its default command
+is `--help` and its default UID/GID is `65532:65532`.
+
+Packaging currently supports Linux x86_64 GNU only, with `libc.so.6`, `libm.so.6`,
+`libgcc_s.so.1` and `ld-linux-x86-64.so.2`; unexpected linkage fails the build for
+review. It copies the build host's resolved libraries, so artifacts depend on the
+host/toolchain and are not reproducible across arbitrary machines. Rebuild with
+updated trusted host libraries for runtime fixes. Inspect the resulting image ID
+before use. No image is published by the script. Redistribution requires the
+corresponding source and applicable dependency license compliance.
+
+Supply an existing private app-data directory as a **read-only** bind mount. Use a
+nonzero host UID/GID with permission to read its files; do not change production
+permissions merely to satisfy the image's default UID. With fd 3 already privately
+opened by the caller to supply the fallback passphrase:
+
+```bash
+docker run --rm --pull=never --network=none --read-only \
+  --user "$(id -u):$(id -g)" --cap-drop=ALL \
+  --security-opt=no-new-privileges --log-driver=none \
+  --tmpfs=/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777 \
+  --mount type=bind,src=/path/to/triage-mail,dst=/data,readonly \
+  -i triage-mail-cli:local --data-dir /data --unlock-stdin accounts <&3
+```
+
+Run as a non-root host user. Replace `accounts` with the existing `search` or `show`
+arguments as needed. Keep `-i` to forward stdin and do not add `-t`. Never put the
+passphrase in a command, environment variable, image layer or bind-mounted secret
+file. Do not mount a host keyring/D-Bus socket. The container uses only the existing
+fallback vault; installations without one are unsupported by this recipe. The
+recovered-vault marker remains authoritative. No ports are published, capabilities
+are dropped, privilege escalation is disabled, and Docker's log driver is disabled
+because stdout contains private mail. The caller still owns stdout/pipe privacy.
+The temporary filesystem is limited to 16 MiB and is not the data mount.
+
+The same WAL/SHM requirements apply inside the container. Existing readable,
+initialized `mail.db-wal` and `mail.db-shm` allow committed WAL reads. Missing or
+unusable sidecars can cause exit 4 on a read-only mount, including a cleanly closed
+WAL-mode installation. Do not switch to a writable data mount or SQLite immutable
+mode. Use a supported existing installation with usable sidecars, or inspect it
+with the native CLI under its documented filesystem permissions. Never copy only
+the live main database, and never fabricate a SHM file. The container does not
+repair sidecars, checkpoint, migrate or initialize storage.
+
+Opt-in Docker regression (uses synthetic encrypted data only; never pulls an image):
+
+```bash
+TRIAGE_CLI_TEST_IMAGE=triage-mail-cli:local cargo test --offline --locked -p triage-mail-cli --test offline container_reads_readonly_encrypted_wal_and_fails_closed -- --ignored --exact
+```
+
+This covers default help/non-root image configuration, native/container JSON parity
+for all three commands, recovered fallback unlock, wrong/empty passphrases, missing
+vault/cache, unsupported schema, committed WAL visibility, missing SHM refusal and
+mail/queue preservation with read-only mounts. Ordinary workspace tests skip it
+when Docker is unavailable. Runtime validation has been performed on Linux x86_64
+with Docker Desktop; other architectures and native host keyrings are not covered.
+This container performs offline cached-mail inspection only. Active synchronization,
+daemon operation, account setup and automation still require separate work.
