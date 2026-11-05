@@ -1,6 +1,8 @@
 //! One incremental account pass without bootstrap, workers or GUI dependencies.
 #![forbid(unsafe_code)]
 
+pub mod ownership;
+
 use std::time::Duration;
 
 use async_trait::async_trait;

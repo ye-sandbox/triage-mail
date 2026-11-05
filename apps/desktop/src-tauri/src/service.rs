@@ -106,6 +106,9 @@ pub struct DesktopService {
     pub(crate) alert_gate: tokio::sync::Mutex<()>,
     pub(crate) alert_adapter: Arc<dyn crate::alerts::AlertTransport>,
     pub(crate) outbox_gate: tokio::sync::Mutex<()>,
+    // INVARIANT: Workers and blocking storage closures retain Arc<DesktopService>.
+    // Drop ownership after the store/vault/remote fields and their destructors.
+    pub(crate) _ownership: Option<Arc<sync_runtime::ownership::WriterOwnership>>,
 }
 
 impl DesktopService {
@@ -131,6 +134,7 @@ impl DesktopService {
             alert_gate: tokio::sync::Mutex::new(()),
             alert_adapter: Arc::new(crate::alerts::NativeAlerts),
             outbox_gate: tokio::sync::Mutex::new(()),
+            _ownership: None,
         })
     }
 

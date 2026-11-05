@@ -12,6 +12,7 @@ pub mod events;
 mod file_picker;
 pub mod model_download;
 pub mod onboarding;
+mod ownership;
 pub mod reminders;
 pub mod remote;
 pub mod rules;

@@ -681,3 +681,46 @@ type: architectural-decision-log
   exclusive ownership, scheduling/consent, daemon shutdown and writable deployment
   require a separately approved plan. Offline synthetic tests establish orchestration
   and encrypted desktop adapter behavior; they do not establish live interoperability.
+
+### [2026-11-05] ADR-025: Cooperative Installation Writer Ownership
+
+- **Context:** SQLite serializes transactions, not installation provisioning, vault
+  writes, worker ownership or remote side effects. The desktop recovery gate alone
+  cannot exclude another process. An active headless host needs a reusable guard.
+- **Decision:** Add `sync_runtime::ownership::WriterOwnership` using safe standard
+  library nonblocking file locking, without new dependencies or unsafe code. Unix
+  hosts use an empty mode-0600 single-link regular sibling file named
+  `.triage-mail-writer-<installation-name>.lock` under the canonical parent. Parent
+  directories may be created; acquisition never creates the installation itself.
+  Reject direct installation symlinks/non-directories, relative/traversal paths,
+  malformed lock files and unsupported platforms. Errors contain no private values.
+- **Identity:** Canonical parent aliases converge on the same lock; the final
+  installation component remains literal so absent-target restore has the same
+  identity before and after publication. The persistent lock file is never removed,
+  truncated, annotated or repaired. File existence and PIDs never imply ownership.
+  The OS releases ownership when the last live handle closes, including process exit.
+- **Desktop:** Acquire before bootstrap and retain in RuntimeState across failed
+  unlock/retry, in DesktopService through worker/blocking-storage lifetimes, and in
+  a delegating SecretStore wrapper through detached native credential work. Existing
+  injected service constructors remain available for isolated synthetic composition;
+  production bootstrap supplies ownership. Existing IPC errors map all acquisition
+  failures to StorageUnavailable, with no DTO/schema changes.
+- **Recovery:** Public restore acquires before target checks/staging/publication.
+  Runtime restore shares its retained guard with subsequent bootstrap. Lock order is
+  recovery gate then process ownership. Initialization and restore transfer owned
+  in-process gate handles into blocking tasks; caller cancellation cannot release
+  serialization while those operations continue. Cancellation does not roll back
+  committed writes. No worker or runtime command is added.
+- **Readers:** The existing offline cached-mail CLI never acquires or inspects this
+  lock; SQLCipher read-only WAL snapshots remain governed by their existing contract.
+  Read-only container behavior, sidecar access and CLI arguments stay unchanged.
+- **Limits:** Advisory protection covers cooperating current hosts on local
+  filesystems. Older binaries, direct storage/vault consumers, hostile path/inode
+  replacement, bind-mount aliases and network filesystems are outside the guarantee.
+  Unix path/permission behavior is implemented; Linux subprocess validation does not
+  establish other-platform interoperability. Unsupported platforms fail closed.
+  Parent-directory write access is required even for an existing installation.
+- **Alternatives:** Reject PID/existence sentinels, lock-file unlinking, relying on
+  SQLite alone, implicit stale-lock deletion, blocking contention waits, or acquiring
+  after vault/bootstrap changes. Headless bootstrap, scheduling/delivery consent,
+  daemon shutdown and writable containers still require separate plans.
