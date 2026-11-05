@@ -23,7 +23,7 @@ All credentials, message bodies, and semantic indices reside exclusively on the 
 - **Transparent Multi-Mode Authentication:** Supports App Passwords, OAuth2 Public PKCE, user-supplied BYO OAuth (`client_id`/`client_secret` stored in the OS vault), standard IMAP (TLS 1.3 and TLS 1.2), and local Proton Mail Bridge behind an agnostic `ImapConnector`.
 - **3-Tier Local-First AI Pipeline:**
   - *Tier 1 (Deterministic, Zero Cost):* Native Rust regex and heuristics for instant extraction of 2FA/OTP codes, FEBRABAN Boletos (with deterministic BRL amount and due date extraction), Pix EMV/keys, NF-e metadata, package tracking numbers, `List-Unsubscribe` + RFC 8058 One-Click Unsubscribe (`List-Unsubscribe-Post`), and automatic categorization (`Financial`, `Security`, `Newsletter`, `Personal`).
-  - *Tier 2 (Experimental Local CPU Semantic Projection):* Deterministic token and n-gram feature-hash projections (`int8[384]`) seeded from model headers or offline constants for `sqlite-vec`; learned neural ONNX model inference is planned for v0.2.
+  - *Tier 2 (Local CPU ONNX Embeddings):* Opt-in learned MiniLM inference with verified, separately installed model/runtime files and generation-safe `int8[384]` indexing for `sqlite-vec`.
   - *Tier 3 (Optional Generative LLM):* On-demand thread summarization via local Ollama (`http://127.0.0.1:11434`) or explicit BYOK cloud providers.
 - **Due-Date Dashboard & Scheduled Reminders:** Extracted FEBRABAN boletos and invoices automatically populate a dedicated due-date dashboard with 1-click barcode copy, status breakdowns (Overdue, Due Today, Upcoming), non-payment disclaimers, and configurable scheduled reminders (days before deadline or unread duration) dispatched locally or via external destinations (Webhooks, Telegram, Discord).
 - **Zero-Knowledge Security & Safe Rendering:** OS Keyring integration (`keyring` + `argon2` fallback vault), full-database SQLCipher AES-256 storage, lazy attachment fetching (`IMAP BODY.PEEK` on demand), and strict HTML sanitization (`DOMPurify` inside `<iframe sandbox="">` with normalized dark-mode CSS and remote tracking pixels blocked by default).
@@ -51,7 +51,7 @@ flowchart TD
 
 - **Search Latency Target Bounds (ADR-008):** At 100,000 messages on reference hardware (AMD Ryzen 7 7700), observed warm p95 latencies are: partition-filtered semantic $\le 15$ ms (12.9 ms), lexical search $\le 40$ ms (37.3 ms), global exact semantic $\le 50$ ms (47.8 ms), and parallel hybrid search $\le 60$ ms (52.4 ms p50). Global exact vector scans over 100k items stream 38.4 MB of raw `int8[384]` embeddings through SQLCipher AES-256 decryption; sub-15ms global vector search is physically infeasible on CPU without lossy approximations. Sub-15ms candidate pre-filtering via 1-bit scalar quantization (Hamming distance POPCNT) is scheduled for evaluation in v0.2.
 - **Native Display & Virtual Scrolling:** The virtualized message list maintains a bounded DOM footprint ($\le 18$ mounted rows) across 100k messages. Native WebKitGTK frame callback intervals observed p95 at ~23ms under Linux/WSL. Hardware-accelerated 60fps presentation depends on local GPU and display compositor drivers and is not guaranteed across all Linux environments.
-- **Tier 2 Semantic Search:** Tier 2 currently uses experimental deterministic feature-hash projections (`int8[384]`) seeded from model configuration. Neural ONNX embedding runtime integration is deferred to v0.2.
+- **Tier 2 Semantic Search:** Native MiniLM CPU inference replaces projections in the desktop. Semantic search requires explicit enablement, verified model/runtime files and a complete compatible local index; word search remains available during rebuilds.
 - **In-House IMAP Client (ADR-009):** IMAP communication uses an in-house asynchronous client built on `tokio` and `tokio-rustls` (supporting TLS 1.3 and TLS 1.2, with loopback certificate pinning for Proton Mail Bridge), replacing `async-imap` to enforce `#![forbid(unsafe_code)]` and zero-download lazy body fetches via RFC 3501 `BODYSTRUCTURE`.
 - **Inbound-Only Scope:** MVP v0.1 focuses strictly on inbound email synchronization, local reading, search, and triage. Outbound composition and SMTP transmission are deferred to v0.2.
 - **Multi-Folder Sync Scope:** Synchronization indexes standard folders (INBOX, Archive, Trash) with two-phase text-part fetching. Binary attachments are fetched on demand via `IMAP BODY.PEEK[<part_id>]`.
@@ -96,7 +96,7 @@ Runtime credentials and database encryption keys are stored strictly in the oper
 | :--- | :--- | :--- | :--- |
 | `RUST_LOG` | Tracing filter directives for Rust crates | `info,triage_mail=debug,mail_engine=info,storage=info` | No |
 | `TRIAGE_DB_PATH` | Development override path for local SQLCipher database | `./.agent/scratch/dev-triage.db` | No |
-| `TRIAGE_EMBEDDING_MODEL` | Model identifier for Tier 2 artifact caching and seed resolution | `all-MiniLM-L6-v2` | No |
+| `TRIAGE_EMBEDDING_MODEL` | Reserved development model example; desktop pins `all-MiniLM-L6-v2` | `all-MiniLM-L6-v2` | No |
 | `OLLAMA_BASE_URL` | Local Ollama HTTP endpoint for Tier 3 on-demand summaries | `http://127.0.0.1:11434` | No |
 | `OLLAMA_MODEL` | Default local Ollama model tag | `qwen2.5:3b` | No |
 | `PROTON_BRIDGE_HOST` | Local loopback address for Proton Mail Bridge IMAP | `127.0.0.1` | No |
@@ -422,6 +422,19 @@ stay disabled; AI/network consent and pending deliveries are not restored.
 Unfetched attachment binaries, external attachment files, model files, credentials
 and secret integration URLs are absent. Native file selection currently requires
 a Linux desktop portal. See [backup contents, limits and recovery](docs/backup.md).
+
+## Local Semantic Search
+
+Install the pinned MiniLM model/tokenizer and CPU ONNX runtime following the
+[artifact hashes and setup guide](docs/onnx.md), then enable semantic search in Settings → Search.
+The app performs no automatic downloads. The model form requires direct HTTPS URLs
+serving the pinned files and explicit consent; install the native runtime separately.
+Local progress and confirmed rebuild controls are available in English and Portuguese.
+Partial/incompatible indexes fail closed; no mail is sent for inference.
+
+Optional offline model/graph tests and the disposable encrypted indexing measurement
+are documented in [docs/onnx.md](docs/onnx.md#offline-reproduction). They require
+explicitly provisioned artifacts; ordinary workspace tests do not.
 
 ## Development
 

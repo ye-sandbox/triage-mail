@@ -7,7 +7,84 @@
 
 ## Active Task
 
-No active task — [02.7] completed. Remaining backlog is unprioritized and requires planning.
+### Task [03.10]: Real Local Tier 2 ONNX Embeddings
+
+- **Status:** RUNNING
+- **Selection:** Proposed from the unprioritized backlog after the user's `proceed`
+  on 2026-11-05. User approved the plan and development provisioning with `proceed`
+  on 2026-11-05. [02.7] remains complete.
+- **Systems Involved:** `crates/triage-ai`, vector lifecycle in `crates/storage`,
+  desktop native runtime/model settings, EN/PT-BR documentation and regression tests.
+- **Problem:** `LocalCpuEmbeddingProvider` currently produces feature-hash projections;
+  cached ONNX artifacts only seed that projection. Downloading a model does not run it.
+- **Scope:** Native CPU inference for one supported 384-dimensional model, explicit
+  artifact installation, safe replacement of incompatible cached vectors and bounded
+  resumable indexing. Preserve existing core traits, IPC payloads, exact int8 ranking,
+  local-first consent and lazy attachments. No model training or cloud inference.
+
+#### Approved Implementation Plan (2026-11-05)
+
+1. Inventory cached dependencies, native runtime libraries and model artifacts.
+   Evaluate `ort`/`fastembed` integration against `#![forbid(unsafe_code)]`, headless
+   builds, CPU-only execution, distribution licensing and explicit-download policy.
+   Select and pin one supported 384-dimensional model/runtime combination; document
+   tokenizer, truncation, pooling, normalization and quantization in an ADR. Disable
+   library-provided automatic downloads and telemetry. If required tooling cannot
+   be provisioned within the approval below, return to planning before proceeding.
+2. Add a real inference provider behind the unchanged `EmbeddingProvider` trait.
+   Bound input/token lengths, batch size, concurrency and CPU threads; reuse loaded
+   sessions off async/UI threads. Validate shapes and finite outputs before int8
+   quantization. Missing/corrupt/incompatible artifacts produce fixed errors, never
+   an implicit projection fallback. Retain existing projection APIs for compatibility
+   while removing their use from the learned-embedding runtime path.
+3. Establish authenticated artifact identity using a pinned manifest and checksums,
+   including tokenizer and preprocessing identity. Install only after explicit action;
+   keep weights outside the binary in the existing XDG cache. Preserve bounded HTTPS
+   downloads, no redirects/proxies and no initialization/query-triggered network work.
+   Do not treat nonempty cached files as proof that inference is ready.
+4. Add append-only encrypted vector-generation metadata as needed, preserving earlier
+   migrations, traits and int8[384] storage. Existing unversioned/projection vectors
+   are incompatible. Prevent mixed-generation query/document comparisons across every
+   semantic search entry point, including saved views and conversations. Invalidate
+   stale writes on model changes and rebuild from cached text in bounded resumable
+   batches, with transactional progress and deletion/hydration handling. Lexical search
+   stays available; indexing never fetches mail or executes rules/reminders/deliveries.
+   Keep the existing backup format compatible by excluding rebuildable generation/index
+   state or explicitly rebuilding it under the existing restore contract.
+5. Integrate native readiness/index progress and explicit enable/rebuild controls using
+   additive IPC where necessary. Retain semantic opt-in, disabled-by-default behavior,
+   stale-request/dirty/busy guards and EN/PT-BR parity. Clearly distinguish ready,
+   missing model, rebuilding and failed states. Load `svelte-dev` before component edits
+   and `readme-standard` before paired README updates; stop if a required skill is missing.
+6. Verify actual ONNX execution with small synthetic graph fixtures, malformed-artifact
+   and output tests, and an explicitly provisioned real-model smoke evaluation using
+   synthetic EN/PT-BR mail only. Test upgrade/restart, model replacement, concurrent
+   ingestion/deletion, stale writes, restored caches and all semantic consent gates.
+   Record cold/warm inference, indexing throughput and memory; distinguish model quality
+   evidence from exact search correctness and retain existing performance targets.
+7. Run the full repository DoD, SPA build, applicable formatting and secret/PII scans.
+   Preserve contracts and platform gotchas, update paired usage documentation, make an
+   atomic Conventional Commit, record its hash and close only this task. Do not push.
+
+- **Approved provisioning:** This implementation plan plus narrowly scoped development
+  provisioning: official dependency/model documentation, Rust package dependencies,
+  CPU ONNX runtime artifacts and the selected public model/tokenizer needed for local
+  validation. Record versions, sources, licenses and checksums; use ignored scratch/cache
+  for binaries and weights, never system-wide installation or external corpus uploads.
+  User approved this development-only network exception with `proceed` on 2026-11-05.
+  Runtime model downloads remain separately user-initiated.
+- **Approval boundary:** No live mail/provider calls, external deliveries, new cloud AI
+  consent, ANN ranking changes, arbitrary model catalog, new crate or daemon. Material
+  dependency, compatibility or security changes outside this plan return to planning.
+
+#### Closing Checklist — [03.10]
+
+- [x] Plan and narrowly scoped development provisioning approved.
+- [ ] Genuine CPU ONNX execution with verified artifacts and no hidden downloads.
+- [ ] Generation-safe migration/reindex, restart and semantic entry-point coverage.
+- [ ] Full Rust/frontend DoD, SPA build, formatting and secret/PII checks.
+- [ ] EN/PT-BR documentation, ADR/contracts and applicable knowledge preservation.
+- [ ] Atomic conventional commit with recorded hash; task closed without pushing.
 
 ---
 

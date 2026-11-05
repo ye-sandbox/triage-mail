@@ -35,13 +35,7 @@ impl DesktopService {
             if !self.read_stored_settings()?.experimental_semantic_search {
                 return Err(IpcError::InvalidRequest);
             }
-            Some(
-                self.embedding
-                    .as_ref()
-                    .ok_or(IpcError::EmbeddingUnavailable)?
-                    .embed_int8(&query.query)
-                    .map_err(|_| IpcError::EmbeddingUnavailable)?,
-            )
+            Some(self.query_embedding(&query.query)?)
         };
         query
             .into_hybrid_query(embedding)

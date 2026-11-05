@@ -133,7 +133,7 @@ impl DesktopService {
                 tokenizer: s.store.tokenizer_mode(),
                 has_api_key: !stored.api_key.is_empty(),
                 model_cached: crate::model_download::model_config()
-                    .map(|c| triage_ai::embeddings::ModelCacheManager::new(c).is_model_cached())
+                    .map(|c| triage_ai::onnx::verify_model(&c).is_ok())
                     .unwrap_or(false),
                 experimental_semantic_search: stored.experimental_semantic_search,
             })

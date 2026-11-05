@@ -15,6 +15,7 @@ pub mod classifier;
 pub mod embeddings;
 pub mod llm;
 pub mod nfe;
+pub mod onnx;
 pub mod otp;
 pub mod pix;
 pub mod reminders;

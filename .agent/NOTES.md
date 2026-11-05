@@ -64,7 +64,7 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 | Debt | Rationale | Revisit When |
 |---|---|---|
 | Outbound SMTP / Email Composer omitted | MVP v0.1 is strictly "Triage-First" (Inbound reading, search, and triage) | Post-v0.1 (`v0.2+`) after inbound sync and hybrid search reach stability |
-| Local embedding runtime uses deterministic projections, without ONNX inference | Existing provider seeds projections from cached artifacts; [04.7] discloses this limitation instead of implying learned semantics | Tier 2 ONNX runtime integration |
+| Native ONNX runtime requires explicit separate installation | Keep native libraries and weights outside the desktop binary; verify pinned platform hashes before loading | Native packaging/integration validation on additional platforms |
 
 ## Desktop IPC Implementation Details ([04.1])
 
@@ -202,11 +202,11 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   Empty key preserves an existing key only for the same provider/endpoint; saving Ollama
   clears it. Saving performs no network request. A disabled setting revokes future dispatch.
 - Add `cmd_set_experimental_semantic_search(enabled: bool)` -> `()` to enable/disable
-  Tier 2 feature-hash semantic projection search.
+  Tier 2 learned CPU ONNX semantic search (legacy wire name retained).
 - When `experimental_semantic_search` is false (default), `cmd_search_messages` rejects
   `Semantic` and `Hybrid` queries with `IpcError::InvalidRequest`.
 - In UI, match options are hidden by default and, when enabled, honestly labeled as
-  "Words", "Semantic projection (Experimental)", and "Words + semantic projection (Experimental)".
+  "Words", "Meaning (local)", and "Words + meaning (local)", with EN/PT-BR labels.
 - In sync worker, `SyncProgressEvent.embedding_errors_count: usize` exposes failed embedding telemetry
   instead of silently discarding errors.
 - Add `cmd_set_tokenizer(tokenizer: FtsTokenizerMode)` -> `()` as a separate explicit rebuild
@@ -214,7 +214,7 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - Add `cmd_download_model(request: { model_url, tokenizer_url, consent })` -> `()`.
   Only explicit consent permits HTTPS artifact requests; credentials, fragments, redirects,
   inherited proxies and retries are forbidden. Downloads are bounded and cached under the
-  existing XDG model directory. This is artifact caching, not an ONNX inference implementation.
+  existing XDG model directory. Only the pinned model/tokenizer revision is accepted; genuine inference additionally requires the separately installed verified native runtime ([03.10]).
 - Add `cmd_summarize_message(messageId, consent, expected: AiSettings)` -> summary string. Native code reads the
   selected stored subject/plain body, checks enabled settings, per-call consent and equality
   with the displayed settings snapshot, retrieves
@@ -829,3 +829,35 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - EN/PT-BR Settings/startup controls preserve transient credentials, busy/dirty guards,
   preview/reference confirmation and teardown invalidation. No provider validation or
   network call. See k-033; offline tests do not establish live portal interoperability.
+
+## Learned CPU ONNX Embeddings ([03.10] / ADR-022)
+
+- Additive OnnxEmbeddingProvider retains EmbeddingProvider and legacy exported projection
+  APIs. Production composes only the learned provider, with no implicit fallback. ort
+  rc.10/tokenizers 0.21.4 have automatic-download/default features disabled; CPU runtime
+  1.22.0 initializes with telemetry off, from an explicitly installed verified library.
+- Model/tokenizer and platform-library SHA-256 manifests are compiled in. MiniLM revision
+  751bff37182d3f1213fa05d7196b954e230abad9 yields finite float32 [1,tokens,384], masked
+  mean/L2/absmax int8 output. Inputs are UTF-8 bounded to 32KiB/256 tokens. One session
+  serializes inference with 2 intra-op/1 inter-op threads. No inference path fetches files.
+- Append-only v11 adds embedding_generation and embedding_work plus source invalidation
+  triggers/index. Activation removes unversioned vectors; generation/epoch/source-version
+  CAS rejects stale results after hydration/deletion/rebuild. Restart resumes completed
+  work. Eight-document blocking batches run only under semantic opt-in, yield separately
+  from automation loops and never execute rules/reminders/deliveries or fetch mail.
+- All semantic entry points gate compatible complete managed indexes in the ranking
+  snapshot. New pending work temporarily gates semantic availability. Managed global
+  hybrid uses existing sequential exact ranking within one transaction; legacy unmanaged
+  headless parallel behavior remains. Existing exactness/latency targets are unchanged.
+- Additive cmd_embedding_state and cmd_rebuild_embeddings(consent) expose only safe
+  statuses/counts and explicit local rebuild. Existing DTO/IPC/experimental wire names
+  remain. EN/PT-BR controls show progress/missing-or-invalid files/failures, retain
+  busy/confirmation guards and invalidate polling/action completions on teardown.
+- Missing model/runtime cannot block lexical startup. Failed work requires confirmed
+  rebuild; disable prevents further commits, re-enable resumes. Backup v1 retains its
+  schema-10 allowlist, excluding v11 derived state; restored mail needs fresh indexing
+  and semantic consent. No backup format/migration rewrite or automation replay.
+- Model/runtime files are not bundled; explicit setup and source licenses/hashes are
+  in docs/onnx.md. Native execution was validated on Linux x64 only; other platform
+  hashes do not establish native interoperability. See k-035 for loader and lifecycle
+  gotchas. Existing search/UI performance deviations and language-quality limits remain.

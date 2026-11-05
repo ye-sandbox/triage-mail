@@ -569,3 +569,42 @@ type: architectural-decision-log
   JSON and existing rule/view capacities. No compression/archive paths accepted.
   Backups omit unfetched attachment binaries, external files/models and browser
   preferences. This is fresh recovery, not in-place restore/merge or passphrase recovery.
+
+### [2026-11-05] ADR-022: Pinned CPU ONNX Inference and Generation-Managed Indexes
+
+- **Context:** The exported LocalCpuEmbeddingProvider is a deterministic projection,
+  including when ONNX artifacts are cached. Learned MiniLM vectors are a different
+  coordinate space; mixing either documents or queries with old vectors is invalid.
+- **Decision:** Add OnnxEmbeddingProvider behind unchanged EmbeddingProvider, using
+  pinned ort rc.10/tokenizers 0.21.4 with CPU-only ONNX Runtime 1.22.0. Disable default,
+  download and fetch features. Verify the full weight/tokenizer/native-library hashes
+  before use; disable telemetry before initialization. The existing projection API
+  remains available for explicit injection, while production uses learned composition.
+  Files are installed separately and never fetched during initialization, indexing or
+  querying. Direct consented artifact downloads retain their no-redirect limits.
+- **Preprocessing:** One supported 384-dimensional quantized MiniLM revision; UTF-8
+  byte bound, 256-token truncation, attention-masked mean pooling, L2 normalization,
+  symmetric absmax int8 output. Reject invalid/zero outputs. Retain one serialized
+  session with two intra-op/one inter-op threads. See docs/onnx.md for the full manifest.
+- **Lifecycle:** Append-only v11 adds generation/work metadata and transactional source
+  invalidation triggers. First activation removes unversioned vectors. Random epoch
+  and source-version CAS protect writes across rebuild, hydration, deletion and model
+  replacement. Eight-document blocking batches resume after restart and respect opt-in.
+  Failed jobs need explicit rebuild. All semantic search variants gate complete,
+  compatible managed indexes in their ranking snapshots. Lexical search stays usable.
+  Managed global hybrid uses the existing sequential exact path in one transaction;
+  unmanaged headless parallel search remains compatible. No ranking budget is relaxed.
+- **Compatibility:** Existing traits, command arguments, DTO fields and migrations stay
+  unchanged. Readiness/rebuild commands are additive; experimental wire names remain.
+  v1 backups keep schema-10 allowlisted data because v11 is entirely rebuildable.
+  Restored caches require consent and indexing again. Legacy injected service behavior
+  and embedding-error counts retain their prior contract without a production fallback.
+- **Alternatives:** Reject silent projection fallback, mixing model generations,
+  library-driven downloads, bundled weights, GPU requirements and new cloud dispatch.
+  Packaging a native runtime inside every desktop binary is deferred; explicit setup
+  is documented, including platform hashes and missing-runtime feedback.
+- **Consequences:** Model/runtime absence degrades semantic availability, never lexical
+  startup. Linux x64 execution is validated offline; hashes for Linux ARM64, both macOS
+  architectures and Windows x64 are pinned without claiming native-platform validation.
+  Short synthetic timings do not establish large-mailbox latency, general relevance,
+  Portuguese quality or native UI frame cadence. Existing known deviations remain.

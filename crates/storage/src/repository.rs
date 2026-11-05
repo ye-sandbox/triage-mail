@@ -268,6 +268,18 @@ impl SqliteMailStore {
         let tx = conn
             .transaction()
             .map_err(|e| StorageError::Query(e.to_string()))?;
+        let managed: bool = tx
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM embedding_generation)",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(|e| StorageError::Query(e.to_string()))?;
+        if managed {
+            return Err(StorageError::Query(
+                "versioned embedding write required".into(),
+            ));
+        }
         let vec_bytes = int8_slice_to_bytes(embedding_int8);
         tx.execute("DELETE FROM vec_messages WHERE message_id=?1", [message_id])
             .map_err(|e| StorageError::Query(e.to_string()))?;
@@ -537,6 +549,25 @@ impl SearchEngine for SqliteMailStore {
     fn search(&self, query: &HybridQuery) -> Result<Vec<MessageRowSummary>, StorageError> {
         query.validate()?;
 
+        if query.mode != SearchMode::Lexical {
+            let managed = self.transaction(|tx| {
+                tx.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM embedding_generation)",
+                    [],
+                    |r| r.get::<_, bool>(0),
+                )
+                .map_err(|e| StorageError::Query(e.to_string()))
+            })?;
+            if managed {
+                return self.transaction(|tx| {
+                    crate::embeddings::check_ready(tx, query)?;
+                    match query.mode {
+                        SearchMode::Semantic => execute_semantic_search(tx, query),
+                        _ => execute_hybrid_search(tx, query),
+                    }
+                });
+            }
+        }
         match query.mode {
             SearchMode::Lexical => {
                 let conn = self

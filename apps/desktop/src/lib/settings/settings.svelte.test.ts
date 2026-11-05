@@ -11,12 +11,12 @@ const defaults = (): Settings => ({
 		enabled: false,
 		provider: 'Ollama',
 		endpoint: 'http://127.0.0.1:11434',
-		model: 'llama3.2'
+		model: 'llama3.2',
 	},
 	tokenizer: 'Unicode61RemoveDiacritics',
 	has_api_key: false,
 	model_cached: false,
-	experimental_semantic_search: false
+	experimental_semantic_search: false,
 });
 function fixture() {
 	const transport = {
@@ -29,7 +29,7 @@ function fixture() {
 		download: vi.fn<SettingsTransport['download']>().mockResolvedValue(),
 		summarize: vi
 			.fn<SettingsTransport['summarize']>()
-			.mockResolvedValue('<script>untrusted</script>')
+			.mockResolvedValue('<script>untrusted</script>'),
 	};
 	const target = document.createElement('div');
 	document.body.append(target);
@@ -48,16 +48,20 @@ it('loads settings without downloads, probes or summaries and explicitly applies
 	const { target, transport } = fixture();
 	const component = mount(SettingsView, {
 		target,
-		props: { close: vi.fn(), transport }
+		props: { close: vi.fn(), transport },
 	});
-	await vi.waitFor(() => expect(target.querySelector('[name=tokenizer]')).not.toBeNull());
+	await vi.waitFor(() =>
+		expect(target.querySelector('[name=tokenizer]')).not.toBeNull(),
+	);
 	expect(transport.download).not.toHaveBeenCalled();
 	expect(transport.summarize).not.toHaveBeenCalled();
 	expect(transport.save).not.toHaveBeenCalled();
 	const select = target.querySelector<HTMLSelectElement>('[name=tokenizer]')!;
 	select.value = 'Trigram';
 	submit(select.closest('form')!);
-	await vi.waitFor(() => expect(transport.tokenizer).toHaveBeenCalledExactlyOnceWith('Trigram'));
+	await vi.waitFor(() =>
+		expect(transport.tokenizer).toHaveBeenCalledExactlyOnceWith('Trigram'),
+	);
 	await unmount(component);
 });
 
@@ -68,7 +72,7 @@ it('clears unbound API keys before dispatch, rejects duplicate saves and clears 
 	const changed = vi.fn();
 	const component = mount(AiSettingsForm, {
 		target,
-		props: { initial: defaults().ai, hasKey: false, transport, changed }
+		props: { initial: defaults().ai, hasKey: false, transport, changed },
 	});
 	flushSync();
 	const key = target.querySelector<HTMLInputElement>('[name=apiKey]')!;
@@ -76,7 +80,10 @@ it('clears unbound API keys before dispatch, rejects duplicate saves and clears 
 	submit(target.querySelector('form')!);
 	submit(target.querySelector('form')!);
 	expect(key.value).toBe('');
-	expect(transport.save).toHaveBeenCalledExactlyOnceWith(defaults().ai, 'synthetic-private-value');
+	expect(transport.save).toHaveBeenCalledExactlyOnceWith(
+		defaults().ai,
+		'synthetic-private-value',
+	);
 	resolve();
 	await tick();
 	flushSync();
@@ -90,7 +97,7 @@ it('requires download consent and redacts errors', async () => {
 	transport.download.mockRejectedValue('private URL data');
 	const component = mount(ModelSettings, {
 		target,
-		props: { cached: false, transport, changed: vi.fn() }
+		props: { cached: false, transport, changed: vi.fn() },
 	});
 	flushSync();
 	const form = target.querySelector('form')!;
@@ -102,11 +109,13 @@ it('requires download consent and redacts errors', async () => {
 	expect(transport.download).not.toHaveBeenCalled();
 	(target.querySelector('[name=consent]') as HTMLInputElement).checked = true;
 	submit(form);
-	await vi.waitFor(() => expect(target.textContent).toContain('Download failed'));
+	await vi.waitFor(() =>
+		expect(target.textContent).toContain('Download or verification failed'),
+	);
 	expect(transport.download).toHaveBeenCalledExactlyOnceWith({
 		model_url: 'https://models.example.com/model.onnx',
 		tokenizer_url: 'https://models.example.com/tokenizer.json',
-		consent: true
+		consent: true,
 	});
 	expect(target.textContent).not.toContain('private URL data');
 	await unmount(component);
@@ -119,20 +128,28 @@ it('requires per-message confirmation bound to displayed AI settings and renders
 	transport.get.mockResolvedValue(settings);
 	const component = mount(MessageSummary, {
 		target,
-		props: { messageId: 'message-one', transport }
+		props: { messageId: 'message-one', transport },
 	});
 	flushSync();
 	expect(transport.get).not.toHaveBeenCalled();
 	target.querySelector<HTMLButtonElement>('button')!.click();
-	await vi.waitFor(() => expect(target.textContent).toContain('Send and summarize'));
+	await vi.waitFor(() =>
+		expect(target.textContent).toContain('Send and summarize'),
+	);
 	expect(transport.summarize).not.toHaveBeenCalled();
 	const confirm = Array.from(target.querySelectorAll('button')).find(
-		(button) => button.textContent === 'Send and summarize'
+		(button) => button.textContent === 'Send and summarize',
 	)!;
 	confirm.click();
 	confirm.click();
-	await vi.waitFor(() => expect(target.textContent).toContain('<script>untrusted</script>'));
-	expect(transport.summarize).toHaveBeenCalledExactlyOnceWith('message-one', true, settings.ai);
+	await vi.waitFor(() =>
+		expect(target.textContent).toContain('<script>untrusted</script>'),
+	);
+	expect(transport.summarize).toHaveBeenCalledExactlyOnceWith(
+		'message-one',
+		true,
+		settings.ai,
+	);
 	expect(target.querySelector('script')).toBeNull();
 	await unmount(component);
 });
@@ -141,14 +158,18 @@ it('keeps disabled AI offline and ignores late preparation after teardown', asyn
 	const { target, transport } = fixture();
 	const component = mount(MessageSummary, {
 		target,
-		props: { messageId: 'message-one', transport }
+		props: { messageId: 'message-one', transport },
 	});
 	flushSync();
 	target.querySelector<HTMLButtonElement>('button')!.click();
-	await vi.waitFor(() => expect(target.textContent).toContain('Enable summaries in Settings'));
+	await vi.waitFor(() =>
+		expect(target.textContent).toContain('Enable summaries in Settings'),
+	);
 	expect(transport.summarize).not.toHaveBeenCalled();
 	let resolve!: (settings: Settings) => void;
-	transport.get.mockReturnValue(new Promise<Settings>((done) => (resolve = done)));
+	transport.get.mockReturnValue(
+		new Promise<Settings>((done) => (resolve = done)),
+	);
 	target.querySelector<HTMLButtonElement>('button')!.click();
 	await unmount(component);
 	resolve({ ...defaults(), ai: { ...defaults().ai, enabled: true } });
@@ -161,21 +182,21 @@ it('toggles experimental semantic search setting explicitly', async () => {
 	const { target, transport } = fixture();
 	const component = mount(SettingsView, {
 		target,
-		props: { close: vi.fn(), transport }
+		props: { close: vi.fn(), transport },
 	});
 	await vi.waitFor(() =>
 		expect(
-			target.querySelector('section[aria-label="Experimental semantic search"]')
-		).not.toBeNull()
+			target.querySelector('section[aria-label="Local semantic search"]'),
+		).not.toBeNull(),
 	);
 	const checkbox = target.querySelector<HTMLInputElement>(
-		'section[aria-label="Experimental semantic search"] input[type=checkbox]'
+		'section[aria-label="Local semantic search"] input[type=checkbox]',
 	)!;
 	expect(checkbox.checked).toBe(false);
 	checkbox.checked = true;
 	checkbox.dispatchEvent(new Event('change', { bubbles: true }));
 	await vi.waitFor(() =>
-		expect(transport.setExperimentalSemanticSearch).toHaveBeenCalledWith(true)
+		expect(transport.setExperimentalSemanticSearch).toHaveBeenCalledWith(true),
 	);
 	await unmount(component);
 });

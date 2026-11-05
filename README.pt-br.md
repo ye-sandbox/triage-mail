@@ -23,7 +23,7 @@ Todas as credenciais, corpos de mensagens e índices vetoriais residem exclusiva
 - **Autenticação Multimodo Transparente:** Suporte a Senhas de App (*App Passwords*), OAuth2 PKCE público, credenciais BYO OAuth fornecidas pelo usuário (`client_id`/`client_secret` salvos no cofre do SO), IMAP padrão (TLS 1.3 e TLS 1.2) e Proton Mail Bridge local através de um conector `ImapConnector` agnóstico.
 - **Pipeline de IA Local-First em 3 Camadas:**
   - *Camada 1 (Determinística, Custo Zero):* Regex e heurísticas nativas em Rust para extração imediata de códigos 2FA/OTP, Boletos FEBRABAN (com extração determinística de valor em R\$ e data de vencimento), chaves/payloads Pix, metadados de NF-e, códigos de rastreio, `List-Unsubscribe` + cancelamento em 1 clique RFC 8058 (`List-Unsubscribe-Post`) e categorização automática (`Financeiro`, `Segurança`, `Newsletter`, `Pessoal`).
-  - *Camada 2 (Projeção Semântica Experimental em CPU Local):* Projeções determinísticas de hash de tokens e n-grams (`int8[384]`) inicializadas a partir de cabeçalhos de modelos ou constantes offline para `sqlite-vec`; inferência neural com modelos ONNX está planejada para a v0.2.
+  - *Camada 2 (Embeddings ONNX em CPU Local):* Inferência neural MiniLM ativada por consentimento, com modelo/runtime verificados e instalados separadamente e indexação `int8[384]` por geração para `sqlite-vec`.
   - *Camada 3 (LLM Generativo Opcional):* Resumos sob demanda via Ollama local (`http://127.0.0.1:11434`) ou provedores Cloud explícitos via BYOK (*Bring Your Own Key*).
 - **Painel de Vencimentos e Lembretes Programados:** Boletos FEBRABAN e faturas extraídos alimentam automaticamente um painel de vencimentos com cópia do código de barras em 1 clique, divisão por status (Atrasados, Vencendo Hoje, A Vencer), aviso de não pagamento e lembretes programáveis (dias antes do prazo ou tempo sem leitura) disparados localmente ou via destinos externos (Webhooks, Telegram, Discord).
 - **Segurança Zero-Knowledge & Renderização Isolada:** Cofre do sistema operacional (`keyring` + cofre fallback `argon2`), armazenamento completo em SQLCipher AES-256, política de anexos sob demanda (*Lazy Attachments* via `IMAP BODY.PEEK`) e sanitização estrita de HTML (`DOMPurify` em `<iframe sandbox="">` com CSS base normalizado para modo escuro e bloqueio padrão de pixels de rastreamento).
@@ -51,7 +51,7 @@ O `triage-mail` é um motor de entrada e triagem de e-mails em versão MVP (v0.1
 
 - **Limites de Latência de Busca (ADR-008):** Em 100.000 mensagens no hardware de referência (AMD Ryzen 7 7700), as latências observadas em p95 warm são: semântica com filtro de partição $\le 15$ ms (12,9 ms), busca léxica $\le 40$ ms (37,3 ms), semântica exata global $\le 50$ ms (47,8 ms) e busca híbrida concorrente $\le 60$ ms (52,4 ms p50). A varredura vetorial exata global em 100k itens transmite 38,4 MB de embeddings `int8[384]` brutos através da descriptografia AES-256 do SQLCipher; busca vetorial global abaixo de 15ms é fisicamente inviável em CPU sem aproximações. Pré-filtragem de candidatos via quantização escalar de 1 bit (POPCNT Hamming distance) está agendada para avaliação na v0.2.
 - **Exibição Nativa e Rolagem Virtual:** A lista de mensagens virtualizada mantém uma pegada de DOM delimitada ($\le 18$ linhas montadas) em 100k mensagens. Intervalos de callback de frame observados no WebKitGTK nativo registraram p95 em ~23ms sob Linux/WSL. Apresentação a 60fps acelerada por hardware depende dos drivers locais de GPU e compositor e não é garantida em todas as distribuições Linux.
-- **Busca Semântica na Camada 2:** A Camada 2 utiliza atualmente projeções determinísticas experimentais de hash de características (`int8[384]`) inicializadas a partir da configuração de modelo. A integração com runtime neural ONNX está postergada para a v0.2.
+- **Busca Semântica na Camada 2:** A inferência MiniLM nativa em CPU substitui projeções no desktop. A busca semântica requer ativação explícita, arquivos de modelo/runtime verificados e índice local compatível completo; a busca por palavras continua disponível durante reconstruções.
 - **Cliente IMAP Próprio (ADR-009):** A comunicação IMAP emprega um cliente assíncrono próprio desenvolvido sobre `tokio` e `tokio-rustls` (suportando TLS 1.3 e TLS 1.2, com pinning de certificado em loopback para Proton Mail Bridge), substituindo a biblioteca `async-imap` para garantir `#![forbid(unsafe_code)]` e busca tardia de corpos sem download de anexos via RFC 3501 `BODYSTRUCTURE`.
 - **Escopo Exclusivo de Entrada (*Inbound-Only*):** O MVP v0.1 foca estritamente na sincronização, leitura local, busca e triagem de mensagens de entrada. Composição de e-mails e envio via SMTP estão postergados para a v0.2.
 - **Escopo de Sincronização Multipasas:** A sincronização indexa pastas padrão (INBOX, Archive, Trash) com busca de partes de texto em duas fases. Anexos binários são baixados sob demanda via `IMAP BODY.PEEK[<part_id>]`.
@@ -96,7 +96,7 @@ As credenciais de contas e chaves de criptografia do banco são armazenadas excl
 | :--- | :--- | :--- | :--- |
 | `RUST_LOG` | Diretivas de filtro de logs para as crates Rust | `info,triage_mail=debug,mail_engine=info,storage=info` | No |
 | `TRIAGE_DB_PATH` | Caminho alternativo do banco SQLCipher para desenvolvimento | `./.agent/scratch/dev-triage.db` | No |
-| `TRIAGE_EMBEDDING_MODEL` | Identificador de modelo para cache de artefatos da Camada 2 e resolução de seed | `all-MiniLM-L6-v2` | No |
+| `TRIAGE_EMBEDDING_MODEL` | Exemplo de modelo de desenvolvimento reservado; o desktop fixa `all-MiniLM-L6-v2` | `all-MiniLM-L6-v2` | No |
 | `OLLAMA_BASE_URL` | Endpoint HTTP do Ollama local para resumos sob demanda (Camada 3) | `http://127.0.0.1:11434` | No |
 | `OLLAMA_MODEL` | Modelo padrão do Ollama local | `qwen2.5:3b` | No |
 | `PROTON_BRIDGE_HOST` | Endereço de loopback local para o Proton Mail Bridge IMAP | `127.0.0.1` | No |
@@ -434,6 +434,19 @@ não são restaurados. Binários de anexos não baixados, arquivos externos de a
 modelos, credenciais e URLs secretas de integrações estão ausentes. A seleção nativa
 de arquivos exige um portal de desktop Linux. Veja [conteúdo, limites e recuperação
 do backup](docs/backup.md) (em inglês).
+
+## Busca Semântica Local
+
+Instale o modelo/tokenizer MiniLM e o runtime CPU ONNX fixados seguindo o
+[guia de configuração e hashes](docs/onnx.md), depois ative a busca em Configurações → Busca.
+O aplicativo não faz downloads automáticos. O formulário exige URLs HTTPS diretas
+com os arquivos fixados e consentimento explícito; instale o runtime nativo separadamente.
+Progresso local e reconstrução confirmada estão disponíveis em inglês e português.
+Índices parciais/incompatíveis são bloqueados; nenhuma mensagem é enviada para inferência.
+
+Testes opcionais offline do modelo/grafo e a medição de indexação em banco criptografado
+descartável estão em [docs/onnx.md](docs/onnx.md#offline-reproduction). Eles exigem
+artefatos provisionados explicitamente; os testes comuns do workspace não exigem.
 
 ## Development
 

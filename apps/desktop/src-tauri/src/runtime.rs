@@ -120,18 +120,11 @@ fn bootstrap(
     )
     .map_err(|_| IpcError::StorageUnavailable)?;
     let remote = Arc::new(NativeRemoteMail::new(vault.clone()));
-    let embedding = triage_ai::EmbeddingModelConfig::from_xdg_env(
-        triage_ai::embeddings::MODEL_ALL_MINILM_L6_V2,
-    )
-    .ok()
-    .map(triage_ai::embeddings::LocalCpuEmbeddingProvider::new)
-    .map(|p| Arc::new(p) as Arc<dyn triage_ai::EmbeddingProvider>);
-    Ok(DesktopService::new(
-        Arc::new(store),
-        vault,
-        remote,
-        embedding,
-    ))
+    let provider = crate::model_download::model_config()
+        .ok()
+        .map(triage_ai::onnx::OnnxEmbeddingProvider::new)
+        .map(Arc::new);
+    DesktopService::new_learned(Arc::new(store), vault, remote, provider)
 }
 
 #[tauri::command]
@@ -983,6 +976,8 @@ pub fn run() {
             cmd_reorder_rules,
             cmd_simulate_rules,
             cmd_rule_draft,
+            cmd_embedding_state,
+            cmd_rebuild_embeddings,
             cmd_get_settings,
             cmd_save_settings,
             cmd_set_tokenizer,
@@ -1145,6 +1140,8 @@ mod tests {
                 cmd_get_message_body,
                 cmd_triage_action,
                 cmd_fetch_attachment,
+                cmd_embedding_state,
+                cmd_rebuild_embeddings,
                 cmd_get_settings,
                 cmd_save_settings,
                 cmd_set_tokenizer,
@@ -1466,4 +1463,22 @@ mod tests {
             Ok(json!(null))
         );
     }
+}
+
+#[tauri::command]
+pub async fn cmd_embedding_state(
+    state: State<'_, RuntimeState>,
+) -> Result<crate::embeddings::EmbeddingState, IpcError> {
+    state.initialize(None).await?.embedding_state().await
+}
+#[tauri::command]
+pub async fn cmd_rebuild_embeddings(
+    state: State<'_, RuntimeState>,
+    consent: bool,
+) -> Result<(), IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .rebuild_embeddings(consent)
+        .await
 }

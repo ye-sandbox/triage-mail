@@ -13,7 +13,7 @@
 		busy = false,
 		disabled = false,
 		experimentalSemanticSearch = false,
-		context = ''
+		context = '',
 	}: {
 		savedActive?: boolean;
 		query?: string;
@@ -63,7 +63,8 @@
 		class="search-field flex min-w-48 flex-1 items-center gap-2 rounded-lg border border-[var(--separator)] bg-[var(--field)] px-3 py-2 sm:max-w-96"
 		role="search"
 	>
-		<span class="text-[var(--secondary)]"><Icon name="search" size={16} /></span>
+		<span class="text-[var(--secondary)]"><Icon name="search" size={16} /></span
+		>
 		<input
 			bind:this={searchInput}
 			bind:value={query}
@@ -78,16 +79,26 @@
 	</div>
 	{#if experimentalSemanticSearch}
 		<label class="flex items-center gap-2 text-xs text-[var(--secondary)]"
-			>Match
+			>{i18n.locale === 'pt-BR' ? 'Correspondência' : 'Match'}
 			<select
 				bind:value={mode}
 				disabled={savedActive}
 				aria-label="Search matching"
 				class="rounded-md border border-[var(--separator)] bg-[var(--field)] px-2 py-2 text-sm text-[var(--text)]"
 			>
-				<option value="Lexical">Words</option>
-				<option value="Semantic">Semantic projection (Experimental)</option>
-				<option value="Hybrid">Words + semantic projection (Experimental)</option>
+				<option value="Lexical"
+					>{i18n.locale === 'pt-BR' ? 'Palavras' : 'Words'}</option
+				>
+				<option value="Semantic"
+					>{i18n.locale === 'pt-BR'
+						? 'Significado (local)'
+						: 'Meaning (local)'}</option
+				>
+				<option value="Hybrid"
+					>{i18n.locale === 'pt-BR'
+						? 'Palavras + significado (local)'
+						: 'Words + meaning (local)'}</option
+				>
 			</select>
 		</label>
 	{/if}
