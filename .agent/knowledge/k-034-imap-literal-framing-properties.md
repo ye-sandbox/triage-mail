@@ -37,6 +37,20 @@ cover CRLF boundaries, one-byte reads, small prime chunks, 4 KiB chunks and seed
 chunks. Expected metadata/payloads are constructed independently of parsing.
 Additional cases cover every truncated prefix of a small FETCH, malformed lengths
 and framing, escaped/literal UTF-8 descriptions at depths 0..16, and 1,024 bounded
-generated ASCII S-expressions. These are deterministic properties and regressions,
-not continuous coverage-guided fuzzing, exhaustive grammar validation or a production
-resource-limit guarantee. Runtime protocol/recursion limit design is separate work.
+generated ASCII S-expressions. These deterministic tests run as part of normal
+workspace test suites.
+
+## Coverage-guided fuzzing harness
+
+- The `fuzz/` package provides isolated libFuzzer harnesses for `bodystructure` and
+  `fetch` without adding fuzz dependencies to production crate builds. Deterministic
+  seed replays run offline via `cargo test --manifest-path fuzz/Cargo.toml`.
+- Harnesses bound inputs to 64 KiB, in-memory stream reads to 100,000, and enforce
+  process-level limits (`-rss_limit_mb=2048`, `-malloc_limit_mb=256`, `-timeout=5`).
+  Process memory bounds are necessary because synchronous allocation loops or deep
+  recursion cannot rely on async Tokio timeouts for containment.
+- Initial 5-minute campaigns (seed 4242) completed with 0 crashes, 0 timeouts, 0 OOMs:
+  `bodystructure` executed 2.34M units (~7.7k/s, peak RSS 568 MB); `fetch` executed
+  563k units (~1.8k/s, peak RSS 419 MB). Bounded campaigns demonstrate local parser
+  stability under mutation, but do not prove grammar exhaustiveness or replace production
+  resource limits.

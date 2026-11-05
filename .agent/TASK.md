@@ -7,7 +7,59 @@
 
 ## Active Task
 
-No active task — [02.6] completed. Remaining backlog is unprioritized and requires planning.
+### Task [02.7]: Coverage-Guided IMAP Parser Fuzzing
+
+- **Status:** RUNNING
+- **Selection:** Proposed from the unprioritized backlog after the user's `proceed`
+  on 2026-11-04; user approved the plan and development-only tooling provisioning
+  with `proceed` on 2026-11-04. [02.6] remains complete.
+- **Systems Involved:** Development-only fuzz harnesses for `crates/mail-engine`,
+  synthetic seed corpus, parser regression tests and reproduction documentation.
+- **Scope:** Coverage-guided exploration of BODYSTRUCTURE and fragmented FETCH
+  parsing through existing public APIs. Preserve production traits, IPC, schemas,
+  lazy attachments and core unsafe-code restrictions. No live provider calls.
+
+#### Approved Implementation Plan (2026-11-04)
+
+1. Establish an isolated development-only fuzz package using cargo-fuzz/libfuzzer-sys,
+   without adding fuzz dependencies to production crate builds. Inventory installed
+   tooling and cached dependencies before edits. Preserve the existing workspace DoD.
+2. Add BODYSTRUCTURE and FETCH targets using existing public parser/session APIs.
+   Feed FETCH through bounded in-memory AsyncRead/AsyncWrite, without sockets,
+   credentials or authentication. Compare equivalent fragmentation modes and retain
+   exact payload/command-boundary assertions for structured valid inputs. Invalid
+   UTF-8 is rejected at the str API boundary, not lossily converted.
+3. Seed from synthetic [02.6] cases: binary/empty literals, CRLF boundaries, escaped
+   UTF-8, malformed lengths, truncation and nesting. Bound input to 64 KiB and reads
+   to 100,000; configure process-level time/memory limits so synchronous recursion
+   or allocation failures cannot rely on a Tokio timeout for containment.
+4. Run a bounded initial campaign (five minutes per target), retaining commands,
+   tool versions, seed, execution counts and observed failures. Minimize reproducible
+   findings and add ordinary deterministic regressions. Fix only demonstrated local
+   parser defects; production recursion/allocation policy or protocol redesign
+   requires separate approval before implementation.
+5. Document offline build/run/replay commands and corpus hygiene; keep generated
+   corpora, crash artifacts and build output ignored. Commit only reviewed synthetic
+   seeds. Synchronize paired READMEs under readme-standard if validation commands
+   change. Record coverage limits without claiming exhaustive correctness.
+6. Run the full repository DoD, SPA build, applicable formatting and secret/PII
+   scans. Preserve non-obvious findings in k-034 or a new atomic card. Make an atomic
+   Conventional Commit, record its hash and close only this task. Do not push.
+
+- **Tooling authorization:** User explicitly approved development-only cargo-fuzz,
+  libfuzzer-sys and compatible instrumented Rust toolchain provisioning. Use ignored
+  project scratch for installed tools; do not alter shared toolchain binaries.
+- **Approval boundary:** Provisioning does not authorize CI services, external corpus
+  uploads, runtime network access, broad parser redesign or another backlog item.
+
+#### Closing Checklist — [02.7]
+
+- [x] Plan and development-only tooling provisioning approved.
+- [x] Isolated targets, reviewed synthetic seeds and reproducible bounded campaign.
+- [x] Demonstrated defects covered by ordinary deterministic regression tests.
+- [x] Full Rust/frontend DoD, SPA build, formatting and secret/PII checks.
+- [ ] Documentation/knowledge preservation and atomic commit with recorded hash.
+
 
 ---
 
@@ -1315,5 +1367,6 @@ All tasks inherit the repository DoD when implemented.
 - Outbound SMTP & lightweight Markdown/Plain-text reply composer (`v0.2+`)
 - Multi-folder sync (Archive/All Mail with Gmail dedup, Sent read-only): scoped into the proposed [04.1] mailbox queue; implementation pending approval
 - Real Tier 2 ONNX inference via `fastembed`/`ort` (`v0.2`)
-- Coverage-guided fuzzing for the in-house IMAP parser; deterministic property tests completed in [02.6].
+- Coverage-guided fuzzing for the in-house IMAP parser: active as [02.7] (RUNNING);
+  deterministic property tests completed in [02.6].
 - Optional binary-quantized ANN candidate stage + exact int8 rerank (`v0.2`)
