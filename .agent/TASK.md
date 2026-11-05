@@ -7,9 +7,16 @@
 
 ## Active Task
 
+No active task — [00.6] completed. Active headless bootstrap, daemon lifecycle and
+writable container deployment remain unprioritized and require a separate plan.
+
+---
+
+## Latest Completed Task
+
 ### Task [00.6]: Exclusive Runtime Writer Ownership
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Selection:** Proposed after the user's `proceed` on 2026-11-05. [00.5] remains
   complete. Establish ownership before introducing an active headless writer.
 - **Systems Involved:** Pure Rust runtime ownership helper, desktop bootstrap and
@@ -59,13 +66,54 @@
 
 - **Approval:** User approved with `proceed` on 2026-11-05.
 - **Approval boundary:** Local ownership and desktop/recovery integration only. No
-  live network tests, downloads, secrets/credential formats, schema/IPC shape changes,
+  live network tests, runtime downloads, secrets/credential formats, schema/IPC shape changes,
   active headless bootstrap, scheduling/delivery consent, daemon or image publication.
 - **Prerequisite:** Cached Rust 1.99.0 supports safe standard-library file locking;
   no Rust dependency download is needed. On 2026-11-05 the user explicitly approved
   a build-only P0 exception to download GTK/WebKit development packages into a
   private temporary sysroot for full native validation. No system installation,
   provider call, live delivery or broader runtime network permission is authorized.
+
+#### Completion (2026-11-05)
+
+- **Commit:** `ab7dd36` (`feat(runtime): enforce exclusive installation writer ownership`).
+- **Delivered:** Safe standard-library nonblocking ownership guard in sync-runtime,
+  with persistent private sibling lock identity before and after installation
+  publication. Desktop acquires before bootstrap and retains ownership through
+  failed unlock/retry, workers, blocking storage and detached credential reads.
+  Backup restore uses the same guard. Owned recovery-gate handles prevent canceled
+  blocking initialization/restore from overlapping same-process retries.
+- **Validation:** Locked/offline workspace check/test and all-target Clippy with
+  -D warnings pass; cargo fmt passes. All 375 Rust tests pass, with the existing
+  artifact-dependent ONNX and opt-in Docker tests ignored. Desktop typecheck has zero
+  errors/warnings; all 184 frontend tests and SPA build pass. Five scanner regressions
+  pass; 443 tracked text files have zero secret/PII/legacy findings. Added Markdown
+  sections and changed standalone documents pass cached Prettier; legacy-prop and
+  diff checks pass. Core normal dependencies contain no Tauri/GTK/WebKit.
+- **Coverage:** Real subprocess contention, normal/abrupt exit release, persistent
+  inode reuse, independent installations, canonical parent aliases, invalid paths,
+  symlink/nonregular/nonempty/multilink/private-mode refusal, failed unlock/retry,
+  detached vault and canceled blocking-storage lifetimes, restore/bootstrap handoff,
+  unchanged rejected-contender database/vault files and actual CLI committed-WAL reads
+  while another process holds ownership. Native IPC regression uses a private
+  temporary path; no fixture bypass was added to production acquisition.
+- **Build exception:** User explicitly approved build-only GTK/WebKit package
+  downloads into a private temporary sysroot. No system packages or shared wrappers
+  were modified. Session-only real pkg-config, resolved development symlinks and
+  dynamic-ONNX probing configuration enabled native validation. No live provider,
+  AI or delivery calls, personal mail, credentials or runtime downloads were used.
+- **Perimeter:** ADR-025, active contracts, CLI reader documentation and k-039 preserve
+  lock identity, cancellation lifetimes and build-tool gotchas. Existing CLI flags,
+  .env.example variables and documented validation commands did not change, so paired
+  README edits were unnecessary. No Rust dependency, schema or IPC shape changed.
+- **Limits:** Cooperative current Unix hosts on local filesystems only; native
+  validation is Linux x86_64. Unsupported platforms fail closed. Older binaries,
+  direct core consumers, hostile path replacement, bind aliases and network
+  filesystems remain outside the guarantee. Writers require parent write access;
+  a leftover lock file is normal and must not be deleted while a writer runs.
+- **Next:** No prioritized successor is available. Active headless bootstrap,
+  scheduling/delivery consent, daemon lifecycle and writable container deployment
+  require a separate plan. No successor started; nothing pushed.
 
 #### Closing Checklist — [00.6]
 
@@ -74,11 +122,10 @@
 - [x] Offline subprocess contention/release and reader compatibility tests pass.
 - [x] Full repository DoD, SPA build, formatting and secret/PII checks pass.
 - [x] ADR, active contracts and applicable knowledge preserved.
-- [ ] Atomic Conventional Commit recorded; task closed without pushing.
+- [x] Atomic Conventional Commit recorded; task closed without pushing.
+
 
 ---
-
-## Latest Completed Task
 
 ### Task [00.5]: Shared Headless Sync Orchestration Foundation
 
