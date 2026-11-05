@@ -642,3 +642,42 @@ type: architectural-decision-log
   write refusal, exact lexical parity, scopes/pagination, fallback recovery, schema/key
   failures, output bounds and controls. Package dependency/build checks establish GUI
   independence; they do not establish all-platform keyring or packaging interoperability.
+
+### [2026-11-05] ADR-024: Shared Account Sync Coordinator with Host-Owned Effects
+
+- **Context:** Protocol primitives already run headless, while the desktop worker
+  owns folder traversal and incremental ingestion policy. A future active runner
+  must reuse that policy without importing desktop bootstrap or duplicating it.
+- **Decision:** Add pure Rust `crates/sync-runtime` with an additive `SyncHost` trait
+  and `sync_account_once`. The account-bound host supplies discovery/catalog access,
+  checkpoints, per-batch context, remote fetch and commit-with-hooks. Dependencies
+  use existing workspace/cached crates; there is no Tauri/GTK/WebKit dependency.
+- **Coordinator:** Preserve discovered selectable-folder order with INBOX first,
+  best-effort catalog saving, cached-folder fallback with exact INBOX insertion,
+  the 120-second remote-batch deadline, zero-UIDVALIDITY refusal, saturating UIDNEXT
+  and reset-to-one behavior. Await each commit before reading another checkpoint.
+  Stop a folder on a short batch or UIDVALIDITY reset. No retry loop or independent
+  task is created. Host errors stay opaque; timeout/invalid remote state map to the
+  desktop's existing fixed RemoteUnavailable diagnostic.
+- **Host:** The desktop adapter retains its mutation gate and blocking-storage
+  executor, rule baseline and sender-review frontier establishment, deterministic
+  extraction/canonical identity, atomic message/flag/checkpoint commit, triage/rule
+  hooks, reminder scheduling, injected indexing and final buffered progress flush.
+  Preserve existing fatal and best-effort failures. Independent rule invalidation
+  events may precede the final success event, always after their own durable writes.
+- **Limits:** This extraction does not make a whole pass bounded: traversal can
+  include every selectable folder and continue through multiple 300-message batches;
+  discovery, storage and hooks retain their existing host timing behavior. Dropping
+  a pending remote future cancels it without a detached coordinator task; committed
+  batches persist. Already running blocking host work can outlive cancellation, and
+  baselines/frontiers are established separately before the message transaction.
+  This is not a new process ownership or cross-process serialization protocol.
+- **Alternatives:** Reject importing desktop runtime into the CLI, duplicating the
+  traversal loop, moving GUI errors into core crates or silently bypassing hooks.
+  Avoid a broad service/transport migration before the active runner is scoped.
+- **Consequences:** Desktop supervisor, IDLE/polling, authentication, outbox, delivery,
+  embeddings and calendar ownership stay with their host. Existing traits, schema,
+  IPC and offline CLI/container interfaces remain compatible. Active headless unlock,
+  exclusive ownership, scheduling/consent, daemon shutdown and writable deployment
+  require a separately approved plan. Offline synthetic tests establish orchestration
+  and encrypted desktop adapter behavior; they do not establish live interoperability.

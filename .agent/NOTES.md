@@ -904,3 +904,19 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - Local validation is Linux x86_64/Docker Desktop only; no registry publication,
   active synchronization/daemon/automation or cross-platform guarantee. See docs/cli.md
   and k-037 for build, runtime and sidecar restrictions.
+
+## Shared Sync Orchestration ([00.5] / ADR-024)
+
+- Additive pure Rust `sync-runtime::{SyncHost, sync_account_once}` binds one account
+  through the host. Reuses existing mail-engine/storage DTOs without changing their
+  traits or migrations. No Tauri/GTK/WebKit dependency, bootstrap or spawned workers.
+- Coordinator owns folder selection/fallback, existing 120-second remote deadline,
+  batch sequencing and reset/checkpoint construction. Catalog save is best effort;
+  remote UIDVALIDITY zero fails. Each commit completes before the next checkpoint.
+- Desktop host retains gate/blocking execution, baseline/frontier-before-ingestion,
+  atomic message/flag/checkpoint write and original rule/reminder/index/event order.
+  Rule invalidation events remain independent of final buffered success progress.
+- Cancellation preserves committed work; already running host blocking operations
+  may continue. Neither the entire pass nor host storage/discovery is newly bounded.
+  No active CLI/daemon, process ownership or writable container contract is added.
+  See k-038 for ordering and cancellation limits; offline CLI contracts remain intact.
