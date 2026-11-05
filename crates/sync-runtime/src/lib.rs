@@ -1,6 +1,7 @@
-//! One incremental account pass without bootstrap, workers or GUI dependencies.
+//! Shared local bootstrap and incremental sync without workers or GUI dependencies.
 #![forbid(unsafe_code)]
 
+pub mod bootstrap;
 pub mod ownership;
 
 use std::time::Duration;

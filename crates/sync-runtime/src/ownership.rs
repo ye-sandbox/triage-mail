@@ -27,9 +27,23 @@ impl std::error::Error for OwnershipError {}
 /// This is not protection against hostile filesystem replacement or older binaries.
 pub struct WriterOwnership {
     _file: File,
+    #[cfg(unix)]
+    installation: std::path::PathBuf,
 }
 
 impl WriterOwnership {
+    pub(crate) fn matches_installation(&self, path: &Path) -> bool {
+        #[cfg(unix)]
+        {
+            unix::installation_path(path).is_ok_and(|path| path == self.installation)
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = path;
+            false
+        }
+    }
+
     /// Acquire immediately or fail. Parent directories may be created, but the
     /// installation itself is neither created nor opened. Unix only; other hosts
     /// fail closed until their path/permission behavior has an explicit contract.
@@ -57,16 +71,31 @@ mod unix {
     };
 
     pub(super) fn acquire(installation: &Path) -> Result<WriterOwnership, OwnershipError> {
-        let lock = lock_path(installation)?;
+        // INVARIANT: Validate before creating parents; rejected paths cannot provision them.
+        validate_path(installation)?;
+        std::fs::create_dir_all(installation.parent().ok_or(OwnershipError::Unavailable)?)
+            .map_err(|_| OwnershipError::Unavailable)?;
+        let installation = installation_path(installation)?;
+        let mut lock_name = OsString::from(".triage-mail-writer-");
+        lock_name.push(
+            installation
+                .file_name()
+                .ok_or(OwnershipError::Unavailable)?,
+        );
+        lock_name.push(".lock");
+        let lock = installation.with_file_name(lock_name);
         let file = open_lock(&lock)?;
         match file.try_lock() {
-            Ok(()) => Ok(WriterOwnership { _file: file }),
+            Ok(()) => Ok(WriterOwnership {
+                _file: file,
+                installation,
+            }),
             Err(TryLockError::WouldBlock) => Err(OwnershipError::Busy),
             Err(TryLockError::Error(_)) => Err(OwnershipError::Unavailable),
         }
     }
 
-    fn lock_path(installation: &Path) -> Result<std::path::PathBuf, OwnershipError> {
+    fn validate_path(installation: &Path) -> Result<(), OwnershipError> {
         if !installation.is_absolute()
             || installation
                 .components()
@@ -74,11 +103,20 @@ mod unix {
         {
             return Err(OwnershipError::Unavailable);
         }
+        installation
+            .file_name()
+            .ok_or(OwnershipError::Unavailable)?;
+        Ok(())
+    }
+
+    pub(super) fn installation_path(
+        installation: &Path,
+    ) -> Result<std::path::PathBuf, OwnershipError> {
+        validate_path(installation)?;
         let name = installation
             .file_name()
             .ok_or(OwnershipError::Unavailable)?;
         let parent = installation.parent().ok_or(OwnershipError::Unavailable)?;
-        fs::create_dir_all(parent).map_err(|_| OwnershipError::Unavailable)?;
         let parent = parent
             .canonicalize()
             .map_err(|_| OwnershipError::Unavailable)?;
@@ -89,10 +127,7 @@ mod unix {
             }
             _ => {}
         }
-        let mut lock_name = OsString::from(".triage-mail-writer-");
-        lock_name.push(name);
-        lock_name.push(".lock");
-        Ok(parent.join(lock_name))
+        Ok(parent.join(name))
     }
 
     fn valid(meta: &Metadata) -> bool {

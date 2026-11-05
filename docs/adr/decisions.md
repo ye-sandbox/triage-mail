@@ -724,3 +724,45 @@ type: architectural-decision-log
   SQLite alone, implicit stale-lock deletion, blocking contention waits, or acquiring
   after vault/bootstrap changes. Headless bootstrap, scheduling/delivery consent,
   daemon shutdown and writable containers still require separate plans.
+
+### [2026-11-05] ADR-026: Ownership-Bound Local Installation Bootstrap
+
+- **Context:** Shared sync orchestration and writer ownership are headless, but the
+  desktop still owns vault selection, database-key provisioning and local storage
+  opening. Repeating those steps in a future host risks inconsistent recovery and
+  credential behavior. Retaining only a service-level guard also permits detached
+  repository handles to outlive ownership.
+- **Decision:** Add `sync_runtime::bootstrap::open` returning `LocalInstallation`
+  with independently guarded storage and vault handles. Require an existing
+  `Arc<WriterOwnership>` and match its canonical-parent/literal-installation identity
+  before directory permissions, vault selection or database writes. Validation does
+  not create parents; canonical parent aliases remain accepted. Reuse existing cached
+  vault, zeroize and randomness dependencies without downloads or unsafe code.
+- **Local policy:** Preserve private directory setup, keyring selection without a
+  passphrase, AutoSecretStore with a nonempty passphrase, and fallback-only unlock
+  for recovered installations. A missing database key is provisioned only when the
+  database is absent. Existing missing/malformed keys and failed SQLCipher unlocks
+  fail without replacing the key. Passphrase and raw-key buffers are zeroizing;
+  bootstrap errors contain only fixed diagnostics. No credential format changes.
+- **Lifetimes:** `Arc<OwnedStorage>` exposes borrowed repository access via Deref,
+  with no raw Arc extraction, consuming unwrap or mutable replacement. Its private
+  repository drops before ownership. The secret-store delegate likewise drops its
+  inner store before the guard. Cloned handles therefore retain the lock independently
+  of the installation envelope and desktop service. Callers must separately retain
+  ownership across failed opens, as desktop RuntimeState already does.
+- **Desktop:** Keep native remote/provider composition, embedding-generation setup,
+  orphan cleanup, snooze reconciliation and worker startup in the host and in their
+  original order. An internal ServiceStore supports guarded production handles and
+  explicit unguarded injected fixtures; the existing public DesktopService::new
+  signature remains unchanged. Existing recovery-gate cancellation and process-lock
+  ordering stay authoritative. Backup restore continues to use its existing protocol.
+- **Alternatives:** Reject importing desktop bootstrap into a headless executable,
+  duplicating vault selection, returning an unguarded Arc<SqliteMailStore>, or
+  changing storage/vault traits to depend on sync-runtime. Do not expand this task
+  into an active CLI, daemon, scheduling policy or writable container.
+- **Limits:** Bootstrap performs local provisioning/migration and may call the OS
+  credential service; it starts no workers, network transport or inference. Its
+  synchronous work must run on the host's blocking executor. Advisory local-filesystem,
+  hostile-replacement and unsupported-platform limits from ADR-025 remain. Offline
+  injected keyring tests and real encrypted fallback/subprocess checks do not establish
+  live keyring interoperability or platform support beyond Linux x86_64.

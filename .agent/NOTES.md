@@ -27,7 +27,7 @@ All core domain crates MUST remain pure Rust (zero dependency on `tauri`) so the
 | `crates/storage` | Single-file SQLite WAL + Full-DB SQLCipher + Configurable `FTS5` (default `unicode61 remove_diacritics 2`) + `sqlite-vec` (`int8` quantized KNN + pre-filtering) + IMAP `UIDVALIDITY`/`MODSEQ` sync state | `MailRepository`, `SearchEngine` (`HybridQuery` -> `<15ms`), `MigrationRunner` | `crates/vault` (`#![deny(unsafe_code)]` with isolated `#[allow(unsafe_code)]` only on `sqlite-vec` FFI init) |
 | `crates/mail-engine` | Agnostic IMAP transport (`ImapConnector` trait), incremental sync (`UIDVALIDITY`/`CONDSTORE`), transparent multi-auth (App Passwords, OAuth2 Public PKCE, user-supplied BYO OAuth `client_id`/`client_secret`, Proton Bridge), RFC 8058 One-Click Unsubscribe, `mail-parser` | `ImapConnector`, `IdleManager`, `MimeExtractor`, `SyncEventSink` trait | `crates/vault` (`#![forbid(unsafe_code)]`) |
 | `crates/triage-ai` | 3-Tier Triage: Tier 1 (Regex 2FA/OTP, Pix EMV/keys, FEBRABAN Boletos with exact BRL value & due date, NF-e metadata, Tracking, `List-Unsubscribe` + RFC 8058 One-Click), Tier 2 (Local CPU ONNX embeddings downloaded on demand to `$XDG_DATA_HOME`), Tier 3 (Ollama/BYOK HTTP) | `DeterministicTriage`, `EmbeddingProvider` trait, `LlmSummarizer` trait, `TriageEventHook` trait | None (pure data in/out, `#![forbid(unsafe_code)]`) |
-| `crates/sync-runtime` | Shared single-account sync-pass coordinator; host-owned storage/transport/hooks | Additive `SyncHost`, `sync_account_once` | `mail-engine`, `storage`; no desktop/Tauri dependency |
+| `crates/sync-runtime` | Ownership-bound local bootstrap and single-account sync coordinator; host-owned workers/transport/hooks | Additive `bootstrap::open`, `WriterOwnership`, `SyncHost`, `sync_account_once` | `mail-engine`, `storage`, `vault`; no desktop/Tauri dependency |
 | `apps/desktop/src-tauri` | Tauri v2 IPC bridge, system tray, native window lifecycle | Typed `#[tauri::command]` handlers & `tauri::ipc::Channel<SyncEvent>` | `mail-engine`, `storage`, `vault`, `triage-ai` |
 | `apps/cli` | Offline cached-mail inspection; no workers or remote actions | `accounts`, `search`, `show`; bounded JSON and fixed exit codes | `storage`, `vault`; no desktop/Tauri dependency |
 
@@ -943,3 +943,24 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   Cooperative local-filesystem protection only: older binaries, direct core writers,
   hostile replacement, bind aliases and network filesystems are outside the contract.
   Existing-installation writers also need parent write access. See k-039 and ADR-025.
+
+## Shared Local Installation Bootstrap ([00.7] / ADR-026)
+
+- Additive sync_runtime::bootstrap::open takes a retained Arc<WriterOwnership> and
+  returns LocalInstallation with Arc<OwnedStorage> and a guarded SecretStore delegate.
+  Canonical parent/literal final-name matching rejects mismatched guards and direct
+  installation symlinks before mutations; verification itself never creates parents.
+- Preserve existing directory permissions, keyring/AutoSecretStore/fallback selection,
+  recovered-marker fallback-only unlock and absent-database-only key provisioning.
+  Existing missing/malformed/wrong keys fail without replacement. Passphrase/raw-key
+  buffers zeroize; fixed errors expose no backend values. No credential/schema change.
+- Storage Deref exposes only borrowed access, never an unguarded owned repository.
+  Independent storage/vault clones retain process ownership and drop resources before
+  the guard. Caller-held ownership is still required across failed opens/retries.
+- Desktop retains native remote/provider composition, generation setup, cleanup,
+  reconciliation, recovery gate and worker startup order. Internal ServiceStore retains
+  guarded production storage while public injected constructor signatures remain.
+  Existing backup/CLI/container, IPC and core trait contracts stay unchanged. No active
+  headless command, worker/network/inference startup or new provisioning policy.
+- Bootstrap is synchronous; hosts supply blocking execution and cancellation lifetime
+  management. Existing cooperative Unix/local-filesystem limits remain. See k-040.

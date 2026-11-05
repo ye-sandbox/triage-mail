@@ -59,7 +59,7 @@ async fn settings_persist_without_exposing_keys_or_reusing_them_at_new_endpoints
     service.save_settings(settings, input("")).await.unwrap();
     assert!(!service.get_settings().await.unwrap().has_api_key);
     // Recreating the service demonstrates vault persistence, without copying UI state.
-    let reopened = DesktopService::new(
+    let reopened = DesktopService::new_with_store(
         service.store.clone(),
         service.vault.clone(),
         service.remote.clone(),
