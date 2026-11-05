@@ -145,12 +145,27 @@ impl DesktopService {
 
     pub async fn list_accounts(self: &Arc<Self>) -> Result<Vec<AccountConfigDto>, IpcError> {
         self.blocking(|s| {
-            s.store
+            let mut accounts: Vec<AccountConfigDto> = s
+                .store
                 .list_account_connections()
                 .map_err(storage_error)?
                 .iter()
                 .map(|json| serde_json::from_str(json).map_err(|_| IpcError::StorageUnavailable))
-                .collect()
+                .collect::<Result<_, _>>()?;
+            accounts.extend(
+                s.store
+                    .disconnected_accounts()
+                    .map_err(storage_error)?
+                    .into_iter()
+                    .map(|(account_id, email_display)| AccountConfigDto {
+                        account_id,
+                        email_display,
+                        imap_host: String::new(),
+                        imap_port: 993,
+                        auth_method: AuthMethod::AppPassword,
+                    }),
+            );
+            Ok(accounts)
         })
         .await
     }
@@ -181,6 +196,15 @@ impl DesktopService {
         validate_config(&config, &credentials.0)?;
         self.blocking(move |s| {
             let _guard = s.account_gate.lock().map_err(|_| IpcError::Internal)?;
+            if let Some((id, _)) = s
+                .store
+                .disconnected_accounts()
+                .map_err(storage_error)?
+                .into_iter()
+                .find(|(_, email)| email == &config.email_display)
+            {
+                config.account_id = id;
+            }
             if s.store
                 .get_account_connection(&config.account_id)
                 .map_err(storage_error)?

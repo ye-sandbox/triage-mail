@@ -184,3 +184,21 @@ it('keeps failed saves editable and ignores completion after teardown', async ()
 	await settle();
 	expect(inbox.savedView).toBeNull();
 });
+
+it('reloads newly imported views from native storage on local invalidation', async () => {
+	const { inbox, saved, view } = fixture();
+	const component = mount(SavedViews, {
+		target: document.body,
+		props: { inbox, connected: true, accounts: [] }
+	});
+	cleanup = () => {
+		void unmount(component);
+	};
+	await settle();
+	vi.mocked(saved.list).mockResolvedValue([
+		{ ...view, id: 'imported', name: 'Imported synthetic view' }
+	]);
+	window.dispatchEvent(new Event('triage-definitions-imported'));
+	await settle();
+	expect(document.body.textContent).toContain('Imported synthetic view');
+});

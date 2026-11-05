@@ -192,6 +192,7 @@ export interface Translations {
 			reminders: string;
 			categories: string;
 			senderReview: string;
+			backup: string;
 			general: string;
 			accounts: string;
 			search: string;

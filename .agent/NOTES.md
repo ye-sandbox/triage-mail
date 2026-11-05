@@ -785,3 +785,40 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - Native claim_alert_with_calendar gates actual retry candidates independently of staging
   batches. Headless hosts must supply their calendar for local-zone policies; legacy
   claim_alert uses the UTC adapter and fails closed for local-zone quiet hours. Existing network/privacy/lease/history limits remain.
+
+## Encrypted Backup and Portable Definitions ([01.4] / ADR-021)
+
+- Additive headless vault::backup authenticated record streams and storage::{backup,
+  portable} APIs. No migration, dependency or existing trait/signature changes.
+  `TMBACK01` fixes Argon2id/AES-GCM parameters; encrypted sequence/final records bind
+  order and completeness. Encrypted manifest version1/schema10 only; reject unknowns.
+  Bounds: 64MiB records, 64GiB native input, ten million rows, 4MiB portable JSON.
+- One read transaction snapshots committed WAL data across explicit allowlisted tables.
+  No plaintext database staging, vault/source keys, credentials, connection configs,
+  secret URLs, vault references or pending work/history/previews. Cached mail/metadata,
+  local state/definitions and tokenizer persist. Derived indexes rebuild as applicable;
+  models/external attachments/browser preferences are omitted. See docs/backup.md.
+- Restore only before runtime initialization into an absent app-data directory.
+  recovery_gate serializes initialization/recovery. Fresh private sibling staging
+  database/vault authenticate/validate before durable directory publication. Failures
+  preserve existing installations; crash-abandoned sibling stages stay inert. Recovery
+  marker forces fallback-only vault unlock with the backup passphrase, bypassing keyring.
+- Rules/reminders/destinations/sender review stay disabled; AI/network consent and
+  urgent bypass reset. Queues never replay. Cached-only AccountConfigDto list entries
+  use empty imap_host (existing connected entries unchanged); workers skip them.
+  Explicit add_account with exact recovered email preserves its ID/cache and attaches
+  new credentials. Existing connected IDs remain non-replaceable.
+- Portable JSON placeholders require complete explicit account/destination mappings;
+  unknown targets/mailbox scopes fail closed. Native preview comparison guards file
+  changes. Atomic append uses fresh IDs/revisions, disabled rules, no historical jobs.
+  Names/query/predicate text is readable and can contain private data; disclose it.
+- Additive IPC: cmd_choose_transfer_file(save), cmd_write_backup(path,passphrase),
+  cmd_export_definitions(path), cmd_preview_definitions(path),
+  cmd_import_definitions(path,mapping,expected,consent), cmd_recovery_available,
+  cmd_restore_backup(path,passphrase,consent). Passphrase input uses fixed errors and
+  zeroizing backend memory; no passphrase is returned or persisted in browser state.
+  Native paths refuse occupied outputs, symlinks and traversal. Linux FileChooser
+  portal uses existing zbus; unavailable/other-platform selection reports failure.
+- EN/PT-BR Settings/startup controls preserve transient credentials, busy/dirty guards,
+  preview/reference confirmation and teardown invalidation. No provider validation or
+  network call. See k-033; offline tests do not establish live portal interoperability.

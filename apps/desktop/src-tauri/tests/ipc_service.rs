@@ -1776,3 +1776,101 @@ async fn conversation_local_commit_survives_partial_remote_completion() {
     assert!(!statuses[0].pending);
     assert!(statuses[1].pending && statuses[1].failed);
 }
+
+#[tokio::test]
+async fn recovered_account_reconnection_keeps_identity_cached_mail_and_credentials_isolated() {
+    let (source, original, _) = setup(Arc::new(FakeRemote::default()));
+    seed(&source, &original).await;
+    let passphrase = b"synthetic backup passphrase";
+    let bytes = original.write_backup(Vec::new(), passphrase).unwrap();
+    let (recovered, target, secrets) = setup(Arc::new(FakeRemote::default()));
+    target.read_backup(bytes.as_slice(), passphrase).unwrap();
+    let accounts = recovered.list_accounts().await.unwrap();
+    assert_eq!(accounts.len(), 1);
+    assert_eq!(accounts[0].account_id, "acct-1");
+    assert!(accounts[0].imap_host.is_empty());
+    assert!(secrets
+        .get_secret(&VaultKey::for_account("acct-1", "imap-auth").unwrap())
+        .is_err());
+    assert_eq!(
+        recovered
+            .search_messages(query(SearchMode::Lexical))
+            .await
+            .unwrap()[0]
+            .id,
+        "m-1"
+    );
+    let mut new_config = config("");
+    new_config.email_display = accounts[0].email_display.clone();
+    assert_eq!(
+        recovered
+            .add_account(new_config, credentials())
+            .await
+            .unwrap(),
+        "acct-1"
+    );
+    assert_eq!(recovered.list_accounts().await.unwrap().len(), 1);
+    assert!(!recovered.list_accounts().await.unwrap()[0]
+        .imap_host
+        .is_empty());
+    assert!(target.disconnected_accounts().unwrap().is_empty());
+    assert!(secrets
+        .get_secret(&VaultKey::for_account("acct-1", "imap-auth").unwrap())
+        .is_ok());
+    assert_eq!(
+        recovered.add_account(config("acct-1"), credentials()).await,
+        Err(IpcError::AccountExists)
+    );
+}
+
+#[tokio::test]
+async fn portable_import_rejects_changed_preview_and_missing_consent() {
+    use std::collections::BTreeMap;
+    use storage::portable::ReferenceMapping;
+    use triage_ai::rules::{Condition, Rule, RuleAction};
+    let (service, store, _) = setup(Arc::new(FakeRemote::default()));
+    seed(&service, &store).await;
+    store
+        .save_rule(Rule {
+            version: 1,
+            id: "rule".into(),
+            revision: 0,
+            name: "Synthetic original".into(),
+            enabled: false,
+            position: 0,
+            all: vec![Condition::Account("acct-1".into())],
+            any: vec![],
+            except: vec![],
+            actions: vec![RuleAction::Star],
+            stop_processing: false,
+        })
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("definitions.json");
+    service.export_file(path.clone()).await.unwrap();
+    let expected = backup::preview(&path).unwrap();
+    let mut changed = expected.clone();
+    changed.rules[0].name = "Synthetic replacement".into();
+    std::fs::write(&path, serde_json::to_vec(&changed).unwrap()).unwrap();
+    assert_eq!(
+        service
+            .import_file(
+                path.clone(),
+                ReferenceMapping {
+                    accounts: BTreeMap::from([("account-1".into(), "acct-1".into())]),
+                    destinations: BTreeMap::new()
+                },
+                expected,
+                true
+            )
+            .await,
+        Err(IpcError::InvalidRequest)
+    );
+    assert_eq!(
+        service
+            .import_file(path, ReferenceMapping::default(), changed, false)
+            .await,
+        Err(IpcError::InvalidRequest)
+    );
+    assert_eq!(store.list_rules().unwrap().len(), 1);
+}

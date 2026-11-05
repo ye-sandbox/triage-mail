@@ -518,3 +518,54 @@ type: architectural-decision-log
   The active unlocked runner is required. Clock/timezone changes may delay or expire work;
   the feature promises neither exactly-once delivery nor human visibility. Offline tests
   cover synthetic transitions and isolated OS timezone resolution, not live providers.
+
+### [2026-11-04] ADR-021: Allowlisted Encrypted Logical Backup and Fresh-Target Recovery
+
+- **Context:** [01.4] needs portable definitions and a recoverable local mail cache
+  without exporting authentication, source database keys or durable pending actions.
+  Copying `mail.db` alone loses committed WAL data; copying vault material would
+  cross the secrets isolation boundary and overwrite risks during recovery.
+- **Decision:** Keep codecs in vault, snapshot/interchange in storage and file/UI
+  orchestration in desktop. Add no crate, runtime sidecar, dependency or schema
+  migration. A single storage read transaction streams an allowlisted schema-10
+  logical snapshot. Recreate the current schema and populate known tables with
+  parameterized values only. Never execute SQL/paths from the input. Preserve
+  tokenizer settings; rebuild derived FTS/conversation indexes and separately
+  reconfigure vectors/models. Existing public traits/command signatures remain.
+- **Cryptography:** `TMBACK01` fixes Argon2id v19 (19MiB/t=2/p=1) and a random
+  16-byte salt. The vault derives a transient AES-256-GCM key, uses independently
+  randomized 96-bit nonces and encrypts sequence/type alongside each bounded
+  record. A mandatory authenticated final record and EOF reject truncation,
+  reordering, duplication and trailing data. Format/schema manifest is encrypted.
+  Unknown versions fail closed. No source key or plaintext database file is stored.
+- **Recovery:** Startup serializes initialization/recovery and only restores into
+  an absent app-data directory. Stage a fresh SQLCipher database and fresh
+  passphrase-encrypted fallback vault in a private sibling directory, validate
+  authentication/schema/FKs/integrity, fsync files/directory, then rename and fsync
+  the parent. Before publication, failure removes the owned stage; process crashes
+  can leave inert random-named sibling stages, never auto-resumed. After publication,
+  the isolated-vault marker requires explicit unlock with the backup passphrase.
+  Restored vault selection bypasses AutoSecretStore/OS keyring to prevent reading
+  or changing an existing installation's application key.
+- **Consent/lifecycle:** No connection configs, authentication, AI consent, secret
+  URLs, vault references, queues/leases/history or preview tokens are included.
+  Restored rule/reminder/destination definitions and sender review stay disabled;
+  urgent bypass is reset. Alert cadence/quiet preferences survive, counters do not.
+  Cached-only accounts are listed using an empty endpoint sentinel and cannot start
+  workers. Explicit account registration with the same exact email reconnects its
+  existing ID; existing connected accounts still reject replacement. No replay runs.
+- **Portable definitions:** Bounded versioned JSON replaces account/destination
+  references with placeholders, clears rule enablement and resets IDs/revisions.
+  Native parsing/validation, explicit complete reference mapping and confirmation
+  precede one atomic append transaction. Fresh random IDs prevent stale revision
+  reuse; unknown accounts/mailboxes/destinations fail closed. Re-reading and comparing
+  the complete preview detects file replacement. Definition text can contain PII;
+  the UI explicitly discloses that portable JSON is readable.
+- **Consequences:** Native file selection uses the existing Linux zbus dependency
+  and desktop FileChooser portal; unavailable/other-platform selection fails visibly.
+  No installed file-picker dependency or helper executable is required. Snapshotting
+  can block ingestion/UI on the main connection; no latency claim is introduced.
+  Limits are 64MiB/record, ten million restored rows, 64GiB native input, 4MiB portable
+  JSON and existing rule/view capacities. No compression/archive paths accepted.
+  Backups omit unfetched attachment binaries, external files/models and browser
+  preferences. This is fresh recovery, not in-place restore/merge or passphrase recovery.

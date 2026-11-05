@@ -36,6 +36,15 @@
 	$effect(() => {
 		if (connected && inbox.savedTransport) untrack(() => void reload());
 	});
+	$effect(() => {
+		// INVARIANT: Import sends only an invalidation event; definitions are re-read
+		// from encrypted native storage, never carried in browser persistence/events.
+		const imported = () => {
+			if (connected) void reload();
+		};
+		window.addEventListener('triage-definitions-imported', imported);
+		return () => window.removeEventListener('triage-definitions-imported', imported);
+	});
 	$effect(() => () => {
 		disposed = true;
 		generation++;

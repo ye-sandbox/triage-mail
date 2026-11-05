@@ -126,7 +126,8 @@ describe('SettingsDialog and typed modules', () => {
 			'alerts',
 			'reminders',
 			'categories',
-			'senderReview'
+			'senderReview',
+			'backup'
 		]);
 	});
 

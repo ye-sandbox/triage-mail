@@ -407,6 +407,22 @@ Disable or delete a destination to stop local dispatch. Revoke a Telegram token 
 delete the Discord webhook in Discord to revoke provider access; this app does not revoke shared
 credentials remotely. Neither operation recalls already accepted messages.
 
+### Encrypted backup and portable rules
+
+In **Settings → Backup**, create a passphrase-protected local backup or export/import
+rules and saved views as readable JSON. Import previews require explicit account
+and destination mapping; rules import disabled with fresh identities. JSON names,
+queries and predicates can contain private text.
+
+Restore is offered before first setup into an absent application data directory.
+It creates an isolated local vault, never replaces an existing database/vault, and
+requires the backup passphrase again to unlock. Reconnect cached-only accounts by
+adding the same exact email address in Accounts. Rules, reminders and destinations
+stay disabled; AI/network consent and pending deliveries are not restored.
+Unfetched attachment binaries, external attachment files, model files, credentials
+and secret integration URLs are absent. Native file selection currently requires
+a Linux desktop portal. See [backup contents, limits and recovery](docs/backup.md).
+
 ## Development
 
 ### Repository Structure

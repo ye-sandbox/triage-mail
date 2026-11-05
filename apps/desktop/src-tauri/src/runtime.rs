@@ -20,6 +20,7 @@ pub struct RuntimeState {
     workers: OnceCell<Arc<WorkerSupervisor>>,
     subscriptions: Mutex<HashMap<String, tokio::task::JoinHandle<()>>>,
     authorizations: AuthorizationSessions,
+    recovery_gate: tokio::sync::Mutex<()>,
 }
 
 impl RuntimeState {
@@ -30,6 +31,7 @@ impl RuntimeState {
             workers: OnceCell::new(),
             subscriptions: Mutex::new(HashMap::new()),
             authorizations: AuthorizationSessions::default(),
+            recovery_gate: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -37,6 +39,7 @@ impl RuntimeState {
         &self,
         passphrase: Option<Zeroizing<String>>,
     ) -> Result<Arc<DesktopService>, IpcError> {
+        let _recovery = self.recovery_gate.lock().await;
         let service = self
             .service
             .get_or_try_init(|| async {
@@ -62,6 +65,9 @@ fn bootstrap(
     path: &Path,
     passphrase: Option<Zeroizing<String>>,
 ) -> Result<Arc<DesktopService>, IpcError> {
+    if path.join("recovered-local-vault").exists() && passphrase.is_none() {
+        return Err(IpcError::VaultUnavailable);
+    }
     std::fs::create_dir_all(path).map_err(|_| IpcError::StorageUnavailable)?;
     #[cfg(unix)]
     {
@@ -80,7 +86,11 @@ fn bootstrap(
             let fallback =
                 vault::EncryptedFallbackStore::file_backed(path.join("vault.enc"), cipher)
                     .map_err(|_| IpcError::VaultUnavailable)?;
-            Arc::new(vault::AutoSecretStore::new(Arc::new(fallback)))
+            if path.join("recovered-local-vault").exists() {
+                Arc::new(fallback)
+            } else {
+                Arc::new(vault::AutoSecretStore::new(Arc::new(fallback)))
+            }
         }
         None => Arc::new(vault::KeyringStore::new()),
     };
@@ -849,6 +859,73 @@ pub async fn cmd_subscribe_sync(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn cmd_choose_transfer_file(save: bool) -> Result<Option<PathBuf>, IpcError> {
+    crate::file_picker::choose(save).await
+}
+#[tauri::command]
+pub async fn cmd_write_backup(
+    state: State<'_, RuntimeState>,
+    path: PathBuf,
+    passphrase: crate::settings::IncomingApiKey,
+) -> Result<(), IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .backup_file(path, passphrase)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_export_definitions(
+    state: State<'_, RuntimeState>,
+    path: PathBuf,
+) -> Result<(), IpcError> {
+    state.initialize(None).await?.export_file(path).await
+}
+#[tauri::command]
+pub async fn cmd_preview_definitions(
+    path: PathBuf,
+) -> Result<storage::portable::PortableDefinitions, IpcError> {
+    tokio::task::spawn_blocking(move || crate::backup::preview(&path))
+        .await
+        .map_err(|_| IpcError::Internal)?
+}
+#[tauri::command]
+pub async fn cmd_import_definitions(
+    state: State<'_, RuntimeState>,
+    path: PathBuf,
+    mapping: storage::portable::ReferenceMapping,
+    expected: storage::portable::PortableDefinitions,
+    consent: bool,
+) -> Result<(), IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .import_file(path, mapping, expected, consent)
+        .await
+}
+#[tauri::command]
+pub async fn cmd_recovery_available(state: State<'_, RuntimeState>) -> Result<bool, IpcError> {
+    let _guard = state.recovery_gate.lock().await;
+    Ok(state.service.get().is_none() && std::fs::symlink_metadata(&state.data_dir).is_err())
+}
+#[tauri::command]
+pub async fn cmd_restore_backup(
+    state: State<'_, RuntimeState>,
+    path: PathBuf,
+    passphrase: crate::settings::IncomingApiKey,
+    consent: bool,
+) -> Result<(), IpcError> {
+    let _guard = state.recovery_gate.lock().await;
+    if !consent || state.service.get().is_some() {
+        return Err(IpcError::InvalidRequest);
+    }
+    let target = state.data_dir.clone();
+    tokio::task::spawn_blocking(move || crate::backup::restore(&path, &target, passphrase.0))
+        .await
+        .map_err(|_| IpcError::Internal)?
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         .setup(|app| {
@@ -857,6 +934,13 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            cmd_choose_transfer_file,
+            cmd_write_backup,
+            cmd_export_definitions,
+            cmd_preview_definitions,
+            cmd_import_definitions,
+            cmd_recovery_available,
+            cmd_restore_backup,
             cmd_alert_schedule,
             cmd_save_alert_schedule,
             cmd_preview_alert_schedule,
@@ -1002,6 +1086,12 @@ mod tests {
         let app = mock_builder()
             .manage(state)
             .invoke_handler(tauri::generate_handler![
+                cmd_write_backup,
+                cmd_export_definitions,
+                cmd_preview_definitions,
+                cmd_import_definitions,
+                cmd_recovery_available,
+                cmd_restore_backup,
                 cmd_alert_schedule,
                 cmd_save_alert_schedule,
                 cmd_preview_alert_schedule,
@@ -1067,6 +1157,19 @@ mod tests {
         let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()
             .unwrap();
+        assert_eq!(
+            invoke(&window, "cmd_recovery_available", json!({})).unwrap(),
+            json!(false)
+        );
+        let malformed = invoke(
+            &window,
+            "cmd_write_backup",
+            json!({"path":"/tmp/synthetic.tmb","passphrase":{"synthetic_sensitive":"never-echo"}}),
+        )
+        .unwrap_err();
+        assert!(!malformed.to_string().contains("never-echo"));
+        assert!(invoke(&window, "cmd_restore_backup", json!({"path":"/tmp/synthetic.tmb","passphrase":"synthetic backup passphrase","consent":true})).is_err());
+
         assert_eq!(invoke(&window,"cmd_search_sender_review",json!({"query":{"query":"","mode":"Lexical","limit":200,"offset":0},"reviewState":"Pending"})).unwrap(),json!([]));
         assert_eq!(
             invoke(

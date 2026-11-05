@@ -3,10 +3,13 @@
 pub mod alert_schedule;
 pub mod alerts;
 pub mod avatars;
+pub mod backup;
 pub mod categories;
 pub mod conversations;
 pub mod dto;
 pub mod events;
+#[cfg(feature = "native-runtime")]
+mod file_picker;
 pub mod model_download;
 pub mod onboarding;
 pub mod reminders;

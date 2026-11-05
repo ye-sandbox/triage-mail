@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import BackupModule from '../backup/BackupModule.svelte';
 	import type { Settings, SettingsTab, SettingsTransport } from './types';
 	import { SETTINGS_TABS } from './types';
 	import { nativeSettingsTransport } from './transport';
@@ -235,6 +236,8 @@
 						{:else}
 							<p class="text-sm text-[var(--secondary)]">Account manager unavailable.</p>
 						{/if}
+					{:else if activeTab === 'backup'}
+						<BackupModule {guard} accounts={accountController?.accounts ?? []} />
 					{:else if activeTab === 'alerts'}
 						<AlertsModule {guard} selectedIds={selectedMessageIds} />
 					{:else if activeTab === 'senderReview'}

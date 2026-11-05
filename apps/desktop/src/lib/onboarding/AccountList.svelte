@@ -2,6 +2,7 @@
 	import type { AccountConfig } from './types';
 	import AccountPhoto from './AccountPhoto.svelte';
 	import type { AvatarTransport } from './avatar-types';
+	import { labels as backupLabels } from '../backup/labels';
 	import { i18n } from '../i18n/index.svelte';
 
 	let {
@@ -31,12 +32,15 @@
 				{account.email_display}
 			</p>
 			<p class="mt-1 break-all text-sm text-[var(--secondary)]">
-				{account.imap_host}:<span class="tabular-nums">{account.imap_port}</span>
-				· {account.auth_method === 'AppPassword'
-					? formT.methodAppPassword
-					: account.auth_method === 'ProtonBridgeLocal'
-						? 'Proton Bridge'
-						: 'OAuth'}
+				{#if !account.imap_host}{backupLabels[i18n.locale]
+						.disconnected}{:else}{account.imap_host}:<span class="tabular-nums"
+						>{account.imap_port}</span
+					>
+					· {account.auth_method === 'AppPassword'
+						? formT.methodAppPassword
+						: account.auth_method === 'ProtonBridgeLocal'
+							? 'Proton Bridge'
+							: 'OAuth'}{/if}
 			</p>
 		</li>
 	{/each}

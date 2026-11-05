@@ -100,7 +100,7 @@ impl SavedView {
     }
 }
 
-fn validate_accounts(conn: &Connection, view: &SavedView) -> Result<(), StorageError> {
+pub(crate) fn validate_accounts(conn: &Connection, view: &SavedView) -> Result<(), StorageError> {
     for account in &view.accounts {
         if !conn
             .query_row(
