@@ -1,14 +1,13 @@
+mod sync_host;
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use mail_engine::{AdaptivePollConfig, AdaptivePollSchedule, ParsedInboundMessage};
-use storage::{AttachmentRecord, FolderRecord, FolderSyncState, MailRepository, MessageRecord};
+use storage::{AttachmentRecord, FolderSyncState, MailRepository, MessageRecord};
 use tokio::sync::watch;
-use triage_ai::{
-    DefaultDeterministicTriage, DeterministicTriage, DeterministicTriageResult, TriageCategory,
-    TriageEventHook,
-};
+use triage_ai::{DefaultDeterministicTriage, DeterministicTriage};
 
 use crate::events::BatchEvents;
 use crate::remote::{MutationOutcome, RemoteMutation};
@@ -160,192 +159,13 @@ pub async fn sync_account_once(
     service: &Arc<DesktopService>,
     config: &AccountConfigDto,
 ) -> Result<usize, IpcError> {
-    // 1. Discover folders from remote and save catalog
-    let discovered = service.remote.discover_folders(config).await;
-    if let Ok(ref discovered_list) = discovered {
-        let account_id = config.account_id.clone();
-        let folder_records: Vec<FolderRecord> = discovered_list
-            .iter()
-            .map(|f| FolderRecord {
-                account_id: account_id.clone(),
-                folder_name: f.name.clone(),
-                display_name: f.display_name.clone(),
-                delimiter: f.delimiter.clone(),
-                role: f
-                    .role
-                    .map(|r| r.as_role_str())
-                    .unwrap_or("other")
-                    .to_string(),
-                is_selectable: f.is_selectable,
-                total_messages: None,
-                unread_messages: None,
-                updated_at_epoch_ms: now_ms(),
-            })
-            .collect();
-
-        let acct_copy = account_id.clone();
-        let _ = service
-            .blocking(move |s| {
-                s.store
-                    .save_folders(&acct_copy, &folder_records)
-                    .map_err(storage_error)
-            })
-            .await;
-    }
-
-    // 2. Determine folders to synchronize (selectable folders)
-    let mut folders: Vec<String> = Vec::new();
-    if let Ok(ref discovered_list) = discovered {
-        for f in discovered_list {
-            if f.is_selectable {
-                folders.push(f.name.clone());
-            }
-        }
-    }
-    if folders.is_empty() {
-        let account = config.account_id.clone();
-        folders = service
-            .blocking(move |s| s.store.list_synced_folders(&account).map_err(storage_error))
-            .await?;
-        if !folders.iter().any(|f| f == "INBOX") {
-            folders.push("INBOX".into());
-        }
-    } else if let Some(pos) = folders.iter().position(|f| f.eq_ignore_ascii_case("INBOX")) {
-        let inbox = folders.remove(pos);
-        folders.insert(0, inbox);
-    }
-
-    let mut count = 0;
-    for folder in folders {
-        loop {
-            let previous = checkpoint(service, &config.account_id, &folder).await?;
-            let events = Arc::new(BatchEvents::new(
-                config.account_id.clone(),
-                service.events.clone(),
-            ));
-            let result = tokio::time::timeout(
-                Duration::from_secs(120),
-                service.remote.sync(config, &previous, events.as_ref()),
-            )
-            .await
-            .map_err(|_| IpcError::RemoteUnavailable)??;
-            if result.uidvalidity == 0 {
-                return Err(IpcError::RemoteUnavailable);
-            }
-            let batch_len = result.new_messages.len();
-            count += batch_len;
-            let state = FolderSyncState {
-                account_id: config.account_id.clone(),
-                folder_name: folder.clone(),
-                uidvalidity: result.uidvalidity,
-                uidnext: if result.uidvalidity_reset {
-                    1
-                } else {
-                    result.new_last_uid.saturating_add(1)
-                },
-                highest_modseq: result.highest_modseq,
-            };
-            let _guard = service.mutation_gate.lock().await;
-            service
-                .blocking(move |s| {
-                    s.store
-                        .establish_rule_baseline(
-                            &state.account_id,
-                            &state.folder_name,
-                            state.uidvalidity,
-                            result.server_uidnext,
-                        )
-                        .map_err(storage_error)?;
-                    s.store
-                        .establish_review_frontier(
-                            &state.account_id,
-                            &state.folder_name,
-                            state.uidvalidity,
-                            result.server_uidnext,
-                        )
-                        .map_err(storage_error)?;
-                    let records = result
-                        .new_messages
-                        .into_iter()
-                        .map(|m| message_record(m, &state))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    let flags: Vec<_> = result
-                        .flag_deltas
-                        .into_iter()
-                        .map(|f| storage::MessageFlagsDelta {
-                            uid: f.uid,
-                            is_read: f
-                                .flags
-                                .iter()
-                                .any(|flag| flag.eq_ignore_ascii_case("\\Seen")),
-                            is_starred: f
-                                .flags
-                                .iter()
-                                .any(|flag| flag.eq_ignore_ascii_case("\\Flagged")),
-                        })
-                        .collect();
-                    let records = s
-                        .store
-                        .commit_sync_batch(&records, &flags, &state, result.uidvalidity_reset)
-                        .map_err(storage_error)?;
-                    for (index, record) in records.iter().enumerate() {
-                        let category = record
-                            .category_badge
-                            .as_deref()
-                            .and_then(|c| match c {
-                                "Security" => Some(TriageCategory::Security),
-                                "Financial" => Some(TriageCategory::Financial),
-                                "Shopping" => Some(TriageCategory::Shopping),
-                                "Newsletter" => Some(TriageCategory::Newsletter),
-                                "Personal" => Some(TriageCategory::Personal),
-                                "Notifications" => Some(TriageCategory::Notifications),
-                                _ => None,
-                            })
-                            .unwrap_or(TriageCategory::Personal);
-                        let triage = DeterministicTriageResult {
-                            category,
-                            badges: record.triage_badges.clone(),
-                        };
-                        events
-                            .on_message_triaged(&record.id, &triage)
-                            .map_err(|_| IpcError::Internal)?;
-                        // INVARIANT: One post-triage queue drain per committed batch;
-                        // failures remain durable and retry independently of ingestion.
-                        if index + 1 == records.len()
-                            && crate::rules::RuleObserver(&s)
-                                .on_message_triaged(&record.id, &triage)
-                                .is_err()
-                        {
-                            status(&s, &state.account_id, SyncState::MutationFailed);
-                        }
-                    }
-                    let tz_offset = crate::reminders::local_tz_offset_seconds();
-                    for record in &records {
-                        let _ = s.store.schedule_reminders_for_message(
-                            &record.id,
-                            storage::now_epoch_ms(),
-                            tz_offset,
-                        );
-                    }
-                    index_injected_provider(&s, &records, &events)?;
-                    // INVARIANT: Progress is published only after messages and checkpoints commit together.
-                    events.committed_with_state(if result.uidvalidity_reset {
-                        SyncState::ResyncRequired
-                    } else {
-                        SyncState::Idle
-                    });
-                    Ok(())
-                })
-                .await?;
-
-            if batch_len < mail_engine::DEFAULT_SYNC_UID_BATCH_SIZE as usize
-                || result.uidvalidity_reset
-            {
-                break;
-            }
-        }
-    }
-    Ok(count)
+    let host = sync_host::DesktopSyncHost { service, config };
+    sync_runtime::sync_account_once(&host)
+        .await
+        .map_err(|error| match error {
+            sync_runtime::SyncError::Host(error) => error,
+            sync_runtime::SyncError::RemoteUnavailable => IpcError::RemoteUnavailable,
+        })
 }
 
 fn message_record(

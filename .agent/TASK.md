@@ -7,8 +7,72 @@
 
 ## Active Task
 
-No active task — [00.4] completed. Active headless sync/daemon and its container
-deployment remain unprioritized and require a separate plan.
+### Task [00.5]: Shared Headless Sync Orchestration Foundation
+
+- **Status:** RUNNING
+- **Selection:** Proposed after the user's `proceed` on 2026-11-05. [00.4] remains
+  complete. This is a prerequisite for the unprioritized active headless runner.
+- **Systems Involved:** New pure Rust `crates/sync-runtime`, desktop worker adapter,
+  offline synthetic integration tests and architecture/contracts documentation.
+- **Problem:** Incremental IMAP primitives are headless, but folder selection, batch
+  orchestration and ingestion ordering currently live in the desktop worker and
+  depend on DesktopService/IpcError. An active CLI must not duplicate this logic or
+  import Tauri bootstrap, which also provisions storage and starts unrelated workers.
+- **Scope:** Extract a reusable single-account sync-pass coordinator and use it from
+  the existing desktop worker. Preserve observable desktop behavior and leave native
+  transport, credentials, persistence and post-commit work behind explicit adapters.
+  No runnable daemon, active CLI command or container behavior change in this task.
+
+#### Approved Implementation Plan (2026-11-05)
+
+1. Record the coordinator/host-adapter boundary in an ADR. Add a workspace
+   `sync-runtime` crate with `#![forbid(unsafe_code)]`, using cached dependencies
+   only and no Tauri, GTK/WebKit or desktop imports. Keep existing core traits,
+   schemas, IPC payloads and CLI commands unchanged; introduce additive types only.
+2. Extract folder discovery/selection, INBOX ordering, cached-folder fallback,
+   checkpoint loading, bounded batch progression, existing 120-second remote timeout
+   and UIDVALIDITY reset handling into the coordinator. Define small injectable host
+   operations for remote access, checkpoint/catalog reads and batch persistence;
+   translate core errors to fixed desktop diagnostics at the adapter boundary.
+3. Retain desktop mutation-gate and blocking-storage execution in its adapter.
+   Preserve rule baseline and sender-review frontier establishment before ingestion,
+   atomic message/flag/checkpoint commits, canonical IDs, deterministic extraction,
+   rule eligibility and reminder/index hooks. Deliver committed progress only after
+   persistence succeeds. Preserve current best-effort versus fatal error behavior.
+   Post-commit hooks remain host-owned and must not be silently omitted or reordered.
+4. Route desktop sync_account_once through the coordinator. Keep supervisor lifetime,
+   IDLE/adaptive polling, native authentication/refresh, remote mutations, outbox,
+   alerts, reminders, local calendar and embeddings in their current host. Preserve
+   lazy attachments and existing cancellation semantics. Do not add network calls,
+   background workers, installation provisioning or runtime credential formats.
+5. Use offline scripted remote/storage/observer adapters to verify folder selection,
+   multi-batch progress, UIDVALIDITY reset, invalid frontiers, remote/storage failure,
+   timeout/cancellation and commit-before-progress ordering. Exercise the desktop
+   adapter with synthetic encrypted storage to preserve canonical deduplication,
+   baseline/frontier behavior and hook ordering. Verify GUI-free dependency closure.
+6. Run the full repository DoD, SPA build, relevant formatting and tracked-file
+   secret/PII scans. Preserve active contracts and applicable knowledge. Update paired
+   READMEs under readme-standard only if their documented interface or validation
+   commands change. Make an atomic Conventional Commit and log its hash. Close only
+   [00.5]; do not push or automatically start an active CLI/daemon successor.
+
+- **Approval:** User approved with `proceed` on 2026-11-05.
+- **Approval boundary:** Internal shared sync orchestration and desktop adaptation
+  only. No live provider test, dependency download, new network exception, schema/IPC
+  change, CLI write access, process ownership protocol or container publication.
+  Headless unlock/bootstrap, exclusive runner ownership, scheduling/delivery consent,
+  daemon shutdown and writable container deployment require a successor plan.
+- **Open blockers:** None for this bounded proposal. Material dependencies or changes
+  to the stated behavior/security boundary return to planning.
+
+#### Closing Checklist — [00.5]
+
+- [x] Implementation plan approved.
+- [ ] Pure Rust reusable coordinator and desktop adapter preserve sync behavior.
+- [ ] Offline orchestration and encrypted-storage adapter regressions pass.
+- [ ] Full repository DoD, SPA build, formatting and secret/PII checks.
+- [ ] ADR, active contracts and applicable knowledge preserved.
+- [ ] Atomic Conventional Commit recorded; task closed without pushing.
 
 ---
 

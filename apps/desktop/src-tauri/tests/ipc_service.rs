@@ -8,7 +8,7 @@ use mail_engine::sync::IncrementalSyncResult;
 use mail_engine::{AuthMethod, SyncEventSink, UnsubscribeDescriptor};
 use storage::{
     AccountRecord, AttachmentRecord, DatabaseKey, FolderSyncState, MailRepository, MessageRecord,
-    SearchMode, SqliteMailStore,
+    SearchEngine, SearchMode, SqliteMailStore,
 };
 use triage_ai::{EmbeddingProvider, TriageError};
 use triage_mail_desktop_lib::remote::{MutationOutcome, RemoteMail, RemoteMutation};
@@ -1873,4 +1873,165 @@ async fn portable_import_rejects_changed_preview_and_missing_consent() {
         Err(IpcError::InvalidRequest)
     );
     assert_eq!(store.list_rules().unwrap().len(), 1);
+}
+
+/// Observes the real SQLCipher adapter at the last host hook, before progress flush.
+struct SyncHookProbe {
+    store: Arc<SqliteMailStore>,
+    events: Mutex<Option<tokio::sync::broadcast::Receiver<SyncProgressEvent>>>,
+    calls: AtomicUsize,
+}
+impl EmbeddingProvider for SyncHookProbe {
+    fn embed_int8(&self, _: &str) -> Result<Vec<i8>, TriageError> {
+        use storage::sender_review::ReviewState;
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        let uid = if call == 0 { 1 } else { 2 };
+        let id = self
+            .store
+            .find_message_id("acct-1", "INBOX", uid)
+            .unwrap()
+            .unwrap();
+        let checkpoint = self
+            .store
+            .get_folder_sync_state("acct-1", "INBOX")
+            .unwrap()
+            .unwrap();
+        assert_eq!(checkpoint.uidnext, uid + 1);
+        let review = self.store.review_metadata(&id).unwrap().unwrap();
+        assert_eq!(
+            review.state,
+            if uid == 1 {
+                ReviewState::Known
+            } else {
+                ReviewState::Pending
+            }
+        );
+        if call == 1 {
+            // Rules have already drained after commit, before injected indexing.
+            let message = self.store.get_message_by_id(&id).unwrap().unwrap();
+            assert!(message.is_starred);
+            assert_eq!(message.tags, ["arrival"]);
+            assert_eq!(self.store.pending_mutations().unwrap().len(), 1);
+        }
+        let mut events = self.events.lock().unwrap();
+        let events = events.as_mut().unwrap();
+        if call == 1 {
+            // Rule changes retain their independent post-commit invalidation event.
+            let changed = events.try_recv().unwrap();
+            assert_eq!(changed.state, SyncState::ResyncRequired);
+            assert_eq!(changed.new_messages_count, 0);
+        }
+        assert!(events.try_recv().is_err());
+        Ok(vec![3; 384])
+    }
+}
+
+#[tokio::test]
+async fn shared_sync_adapter_preserves_encrypted_frontiers_hooks_and_duplicate_identity() {
+    use storage::sender_review::ReviewState;
+    use triage_ai::rules::{Condition, Rule, RuleAction};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("mail.db");
+    let key = DatabaseKey::from_bytes([23; 32]);
+    let store = Arc::new(SqliteMailStore::open(&path, &key, Default::default()).unwrap());
+    let remote = Arc::new(FakeRemote::default());
+    let probe = Arc::new(SyncHookProbe {
+        store: store.clone(),
+        events: Mutex::new(None),
+        calls: AtomicUsize::new(0),
+    });
+    let service = DesktopService::new(store.clone(), vault(), remote.clone(), Some(probe.clone()));
+    service
+        .add_account(config("acct-1"), credentials())
+        .await
+        .unwrap();
+    let mut preferences = store.review_preferences("acct-1").unwrap();
+    preferences.enabled = true;
+    store.save_review_preferences(preferences).unwrap();
+    store.backfill_sender_review().unwrap();
+    assert!(!store.review_preferences("acct-1").unwrap().initializing);
+    service
+        .save_rule(Rule {
+            version: 1,
+            id: "sync-rule".into(),
+            revision: 0,
+            name: "Synthetic arrival".into(),
+            enabled: true,
+            position: 0,
+            all: vec![Condition::Account("acct-1".into())],
+            any: vec![],
+            except: vec![],
+            actions: vec![RuleAction::Star, RuleAction::Tag("arrival".into())],
+            stop_processing: false,
+        })
+        .await
+        .unwrap();
+    *probe.events.lock().unwrap() = Some(service.events.subscribe());
+
+    for uid in [1, 2, 2] {
+        let mut message = mock_parsed_message(uid);
+        message.sender = if uid == 1 {
+            "history@example.org"
+        } else {
+            "arrival@example.org"
+        }
+        .into();
+        let mut result = sync_result(vec![message]);
+        result.new_last_uid = uid;
+        result.server_uidnext = uid + 1;
+        *remote.sync_result.lock().unwrap() = Some(result);
+        assert_eq!(
+            worker::sync_account_once(&service, &config("acct-1"))
+                .await
+                .unwrap(),
+            1
+        );
+        let event = probe
+            .events
+            .lock()
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .try_recv()
+            .unwrap();
+        assert_eq!(event.state, SyncState::Idle);
+        assert_eq!(event.new_messages_count, 1);
+    }
+    let id = store
+        .find_message_id("acct-1", "INBOX", 2)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        store
+            .search(&storage::HybridQuery {
+                query_text: String::new(),
+                query_embedding_int8: None,
+                account_filter: None,
+                mode: SearchMode::Lexical,
+                limit: 100,
+                offset: 0,
+            })
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(store.pending_mutations().unwrap().len(), 1);
+    assert_eq!(probe.calls.load(Ordering::SeqCst), 3);
+    assert_eq!(remote.attachments.load(Ordering::SeqCst), 0);
+    assert!(remote.mutations.lock().unwrap().is_empty());
+    assert_eq!(remote.unsubscribes.load(Ordering::SeqCst), 0);
+    drop(service);
+    drop(probe);
+    drop(store);
+    let reopened = SqliteMailStore::open(&path, &key, Default::default()).unwrap();
+    assert_eq!(
+        reopened.find_message_id("acct-1", "INBOX", 2).unwrap(),
+        Some(id.clone())
+    );
+    assert_eq!(
+        reopened.review_metadata(&id).unwrap().unwrap().state,
+        ReviewState::Pending
+    );
+    assert_eq!(reopened.pending_mutations().unwrap().len(), 1);
+    assert_ne!(&std::fs::read(&path).unwrap()[..16], b"SQLite format 3\0");
 }

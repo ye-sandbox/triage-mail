@@ -5,6 +5,7 @@ members = [
     "crates/storage",
     "crates/mail-engine",
     "crates/triage-ai",
+    "crates/sync-runtime",
     "apps/desktop/src-tauri",
     "apps/cli",
 ]
@@ -30,3 +31,4 @@ vault = { path = "crates/vault" }
 storage = { path = "crates/storage" }
 mail-engine = { path = "crates/mail-engine" }
 triage-ai = { path = "crates/triage-ai" }
+sync-runtime = { path = "crates/sync-runtime" }
