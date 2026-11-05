@@ -7,9 +7,15 @@
 
 ## Active Task
 
+No active task — [02.6] completed. Remaining backlog is unprioritized and requires planning.
+
+---
+
+## Latest Completed Task
+
 ### Task [02.6]: IMAP FETCH/Literal Parser Property Tests
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Selection:** Proposed from the unprioritized backlog after the user's `proceed` on
   2026-11-04; user approved the plan with `proceed` on 2026-11-04.
 - **Systems Involved:** `crates/mail-engine/src/protocol.rs`,
@@ -46,6 +52,43 @@
 - **Approval boundary:** Approval authorizes the deterministic test harness and
   demonstrated local parser fixes above. Continuous coverage-guided fuzzing tooling,
   dependency downloads and unrelated sync changes remain outside this task.
+
+#### Completion (2026-11-04)
+
+- **Commit:** `6dc0c8d` (`fix(mail-engine): harden literal parsing with generated regressions`).
+- **Delivered:** Six offline deterministic property/regression tests using bounded
+  in-memory IO. Seeds 1, 42, 4242 and 0x5eed cover 20 valid fragmented command runs
+  (160 messages), 40 malformed FETCH runs, 56 truncated prefixes in five modes (280
+  runs), 136 valid nested/escaped/literal BODYSTRUCTURE cases, ten malformed metadata
+  cases and 1,024 generated ASCII expressions parsed twice for determinism.
+  Payload sizes include exactly 4095/4096/4097 bytes and empty sections. Input/read
+  budgets are 64 KiB/100,000; async command timeout is five seconds; generated valid
+  nesting is 0..16 and generated arbitrary strings are at most 127 bytes.
+- **Reproduced and fixed:** Quoted UTF-8 corruption; BODYSTRUCTURE literal addition
+  overflow and UTF-8 boundary panics; acceptance of trailing tokens and missing CRLF;
+  malformed/overflowing FETCH literals and unclosed framing reported as success.
+  FETCH literal bytes remain opaque and surplus bytes remain available to the next
+  command. Quoted parentheses and metadata following literals have regression coverage.
+- **Validation:** Workspace check/test/fmt/Clippy pass with 335 Rust tests and zero
+  Clippy warnings. Desktop check has zero errors/warnings; all 181 frontend tests and
+  SPA build pass. Five policy-scanner regressions pass; all 385 tracked text files
+  report zero secret/PII/legacy-Svelte findings. Legacy-prop and diff checks pass.
+- **Perimeter:** No dependency, CLI flag, environment variable, validation command,
+  public trait, IPC, migration or UI changes. README synchronization is not needed.
+  NOTES and k-034 preserve framing/UTF-8 invariants, test bounds and coverage limits.
+  Existing offline toolchain/sysroot were used; no downloads or provider calls.
+- **Limits:** Deterministic properties do not establish exhaustive grammar correctness,
+  coverage-guided fuzzing or production resource limits. No unrelated protocol redesign.
+- **Next:** No prioritized successor; select and plan another backlog item. Nothing pushed.
+
+#### Closing Checklist — [02.6]
+
+- [x] Rust/frontend strict typing, automated tests, formatting and Clippy.
+- [x] SPA build, Svelte invariant, secret/PII policy scan and clean diff.
+- [x] Reproducible bounded offline coverage and demonstrated defect fixes.
+- [x] Active contracts and k-034 knowledge preservation; documentation perimeter checked.
+- [x] Atomic conventional implementation commit and recorded hash.
+- [x] Task closed; no prioritized successor available to promote.
 
 ---
 
@@ -1272,5 +1315,5 @@ All tasks inherit the repository DoD when implemented.
 - Outbound SMTP & lightweight Markdown/Plain-text reply composer (`v0.2+`)
 - Multi-folder sync (Archive/All Mail with Gmail dedup, Sent read-only): scoped into the proposed [04.1] mailbox queue; implementation pending approval
 - Real Tier 2 ONNX inference via `fastembed`/`ort` (`v0.2`)
-- Fuzz/property tests for the in-house IMAP FETCH/literal parser (`v0.2`)
+- Coverage-guided fuzzing for the in-house IMAP parser; deterministic property tests completed in [02.6].
 - Optional binary-quantized ANN candidate stage + exact int8 rerank (`v0.2`)
