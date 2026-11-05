@@ -7,9 +7,15 @@
 
 ## Active Task
 
+No active task — [02.7] completed. Remaining backlog is unprioritized and requires planning.
+
+---
+
+## Latest Completed Task
+
 ### Task [02.7]: Coverage-Guided IMAP Parser Fuzzing
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Selection:** Proposed from the unprioritized backlog after the user's `proceed`
   on 2026-11-04; user approved the plan and development-only tooling provisioning
   with `proceed` on 2026-11-04. [02.6] remains complete.
@@ -52,18 +58,42 @@
 - **Approval boundary:** Provisioning does not authorize CI services, external corpus
   uploads, runtime network access, broad parser redesign or another backlog item.
 
+#### Completion (2026-11-04)
+
+- **Commit:** `24a7374` (`test(mail-engine): add coverage-guided imap parser fuzzing harness and campaign`).
+- **Delivered:** Isolated `fuzz/` Cargo package with `bodystructure` and `fetch` libFuzzer
+  targets, bounded in-memory streams, seed corpora (binary/empty literals, split UTF-8,
+  nesting, malformed tags, overflow, CRLF boundaries), and deterministic seed replay
+  tests running offline.
+- **Campaign results:** Bounded 5-minute initial campaigns using cargo-fuzz 0.13.2 /
+  libfuzzer-sys 0.4.13 on x86_64 Linux (seed 4242, 64 KiB max input, 5s timeout,
+  2048 MB RSS, 256 MB malloc):
+  - `bodystructure`: 2,343,067 runs in 301s (~7,784 exec/s), peak RSS 568 MB, cov 922,
+    ft 3,386, 0 crashes / 0 timeouts / 0 OOMs.
+  - `fetch`: 563,885 runs in 301s (~1,873 exec/s), peak RSS 419 MB, cov 1,633,
+    ft 4,426, 0 crashes / 0 timeouts / 0 OOMs.
+- **Validation:** Workspace check/test/fmt/Clippy pass with 335 Rust tests and zero
+  Clippy warnings. Desktop check has zero errors/warnings; all 181 frontend tests and
+  SPA build pass. Fuzz package check/test/fmt/Clippy pass with zero warnings. Five
+  policy-scanner regressions pass; all 408 tracked text files report zero secret/PII/legacy-Svelte
+  findings. `git diff --check` passes cleanly.
+- **Perimeter:** No production dependencies, public traits, IPC, schemas or UI changes.
+  Tooling runs offline with local seeds and scratch tools. Documentation in `docs/testing/imap-fuzzing.md`,
+  READMEs, and `k-034` synchronized.
+- **Limits:** Bounded coverage-guided campaigns explore mutation space without crashes,
+  but do not establish exhaustive grammar correctness or substitute for production
+  resource limits.
+- **Next:** No prioritized successor; select and plan another backlog item. Nothing pushed.
+
 #### Closing Checklist — [02.7]
 
 - [x] Plan and development-only tooling provisioning approved.
 - [x] Isolated targets, reviewed synthetic seeds and reproducible bounded campaign.
 - [x] Demonstrated defects covered by ordinary deterministic regression tests.
 - [x] Full Rust/frontend DoD, SPA build, formatting and secret/PII checks.
-- [ ] Documentation/knowledge preservation and atomic commit with recorded hash.
+- [x] Documentation/knowledge preservation and atomic commit with recorded hash.
+- [x] Task closed; no prioritized successor available to promote.
 
-
----
-
-## Latest Completed Task
 
 ### Task [02.6]: IMAP FETCH/Literal Parser Property Tests
 
@@ -1367,6 +1397,5 @@ All tasks inherit the repository DoD when implemented.
 - Outbound SMTP & lightweight Markdown/Plain-text reply composer (`v0.2+`)
 - Multi-folder sync (Archive/All Mail with Gmail dedup, Sent read-only): scoped into the proposed [04.1] mailbox queue; implementation pending approval
 - Real Tier 2 ONNX inference via `fastembed`/`ort` (`v0.2`)
-- Coverage-guided fuzzing for the in-house IMAP parser: active as [02.7] (RUNNING);
-  deterministic property tests completed in [02.6].
+- Coverage-guided fuzzing for the in-house IMAP parser: completed in [02.7].
 - Optional binary-quantized ANN candidate stage + exact int8 rerank (`v0.2`)
