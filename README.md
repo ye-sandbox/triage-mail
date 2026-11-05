@@ -476,6 +476,13 @@ node scripts/ci-guard.mjs
 git diff --check
 ```
 
+Optional offline IMAP parser fuzzing lives in a separate Cargo workspace. After
+explicitly provisioning cargo-fuzz, nightly Rust and its locked dependencies, run
+`CARGO_NET_OFFLINE=true cargo test --locked --manifest-path fuzz/Cargo.toml` for
+synthetic seed replay. See [bounded fuzz campaigns and replay](docs/testing/imap-fuzzing.md)
+for coverage-guided commands, resource limits and evidence. Normal builds do not
+include the fuzz tooling; no provider or private mail data is used.
+
 Optional synthetic performance validation covers 100,000-row SQLCipher search and a separate
 native WebKitGTK inbox fixture, with frame timing and process-tree memory sampling. See
 [methodology, commands and measured limits](docs/performance/native-validation.md).

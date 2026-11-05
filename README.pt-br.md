@@ -490,6 +490,13 @@ node scripts/ci-guard.mjs
 git diff --check
 ```
 
+O fuzzing opcional e offline do parser IMAP fica em um workspace Cargo separado.
+Após provisionar explicitamente cargo-fuzz, Rust nightly e as dependências fixadas,
+execute `CARGO_NET_OFFLINE=true cargo test --locked --manifest-path fuzz/Cargo.toml`
+para reproduzir as sementes sintéticas. Consulte [campanhas limitadas e reprodução](docs/testing/imap-fuzzing.md)
+para comandos guiados por cobertura, limites de recursos e evidências. Builds normais
+não incluem essas ferramentas; nenhum provedor ou dado de email privado é utilizado.
+
 A validação opcional de desempenho usa dados sintéticos para busca SQLCipher com 100.000
 mensagens e uma instância separada da interface nativa WebKitGTK, medindo intervalos entre
 frames e memória da árvore de processos. Consulte

@@ -1,0 +1,32 @@
+[package]
+name = "mail-engine-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+license = "AGPL-3.0-only"
+
+[package.metadata]
+cargo-fuzz = true
+
+# INVARIANT: Fuzz instrumentation and libFuzzer never enter production workspace builds.
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "=0.4.13"
+mail-engine = { path = "../crates/mail-engine" }
+tokio = { version = "1.54.1", features = ["rt", "time", "io-util"] }
+
+[[bin]]
+name = "bodystructure"
+path = "fuzz_targets/bodystructure.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fetch"
+path = "fuzz_targets/fetch.rs"
+test = false
+doc = false
+bench = false
