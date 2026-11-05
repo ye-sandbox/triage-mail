@@ -43,7 +43,11 @@ impl WorkerSupervisor {
             let mut stop = self.shutdown.subscribe();
             *outbox = Some(tokio::spawn(async move {
                 let work = async {
-                    tokio::join!(outbox_loop(service.clone()), category_loop(service));
+                    tokio::join!(
+                        outbox_loop(service.clone()),
+                        category_loop(service.clone()),
+                        embedding_loop(service)
+                    );
                 };
                 tokio::select! { _ = work => {}, _ = stop.changed() => {} }
             }));
@@ -323,30 +327,7 @@ pub async fn sync_account_once(
                             tz_offset,
                         );
                     }
-                    // Index only with an explicitly configured provider; missing models never trigger downloads.
-                    if let Some(provider) = &s.embedding {
-                        for record in &records {
-                            let text = format!(
-                                "{}\n{}",
-                                record.subject,
-                                record.text_body.as_deref().unwrap_or_default()
-                            );
-                            match provider.embed_int8(&text) {
-                                Ok(vector) => {
-                                    s.store
-                                        .insert_message_embedding(&record.id, &vector)
-                                        .map_err(storage_error)?;
-                                }
-                                Err(err) => {
-                                    events.on_embedding_failed(&record.id, &err);
-                                    eprintln!(
-                                        "[worker] failed to generate embedding for message {}: {}",
-                                        record.id, err
-                                    );
-                                }
-                            }
-                        }
-                    }
+                    index_injected_provider(&s, &records, &events)?;
                     // INVARIANT: Progress is published only after messages and checkpoints commit together.
                     events.committed_with_state(if result.uidvalidity_reset {
                         SyncState::ResyncRequired
@@ -576,4 +557,50 @@ async fn process_remote_mutation(
             }
         })
         .await
+}
+
+async fn embedding_loop(service: Arc<DesktopService>) {
+    loop {
+        let delay = match service.index_embeddings().await {
+            Ok(n) if n > 0 => {
+                status(&service, "", SyncState::ResyncRequired);
+                Duration::from_millis(100)
+            }
+            Ok(_) => Duration::from_secs(2),
+            Err(_) => {
+                status(&service, "", SyncState::MutationFailed);
+                Duration::from_secs(30)
+            }
+        };
+        tokio::time::sleep(delay).await;
+    }
+}
+
+fn index_injected_provider(
+    service: &DesktopService,
+    records: &[MessageRecord],
+    events: &BatchEvents,
+) -> Result<(), IpcError> {
+    // INVARIANT: Preserve the existing injectable service contract. Production always
+    // uses new_learned and its separate consent/generation-managed worker, never this path.
+    if service.learned.is_some() {
+        return Ok(());
+    }
+    if let Some(provider) = &service.embedding {
+        for record in records {
+            let text = format!(
+                "{}\n{}",
+                record.subject,
+                record.text_body.as_deref().unwrap_or_default()
+            );
+            match provider.embed_int8(&text) {
+                Ok(vector) => service
+                    .store
+                    .insert_message_embedding(&record.id, &vector)
+                    .map_err(storage_error)?,
+                Err(err) => events.on_embedding_failed(&record.id, &err),
+            }
+        }
+    }
+    Ok(())
 }

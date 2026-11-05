@@ -202,7 +202,7 @@ fn unsupported_authenticated_manifest_is_rejected_without_writes() {
         .record(
             &json(&Manifest {
                 version: 99,
-                schema: CURRENT_SCHEMA_VERSION,
+                schema: BACKUP_SCHEMA_VERSION,
                 tokenizer: Default::default(),
             })
             .unwrap(),

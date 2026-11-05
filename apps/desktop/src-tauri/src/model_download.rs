@@ -2,10 +2,7 @@
 use std::{sync::Arc, time::Duration};
 
 use serde::Deserialize;
-use triage_ai::{
-    embeddings::{ModelCacheManager, ModelFetcher, MODEL_ALL_MINILM_L6_V2},
-    EmbeddingModelConfig, TriageError,
-};
+use triage_ai::{embeddings::MODEL_ALL_MINILM_L6_V2, EmbeddingModelConfig};
 
 use crate::{service::DesktopService, IpcError};
 
@@ -64,20 +61,6 @@ async fn fetch(client: &reqwest::Client, url: url::Url, limit: usize) -> Result<
     Ok(bytes)
 }
 
-struct Artifacts {
-    model: Vec<u8>,
-    tokenizer: Vec<u8>,
-}
-impl ModelFetcher for Artifacts {
-    fn fetch_artifact(&self, _: &str, filename: &str) -> Result<Vec<u8>, TriageError> {
-        match filename {
-            "model.onnx" => Ok(self.model.clone()),
-            "tokenizer.json" => Ok(self.tokenizer.clone()),
-            _ => Err(TriageError::Embedding("unsupported artifact".into())),
-        }
-    }
-}
-
 impl DesktopService {
     pub async fn download_model(
         self: &Arc<Self>,
@@ -93,8 +76,7 @@ impl DesktopService {
             .try_lock()
             .map_err(|_| IpcError::InvalidRequest)?;
         let config = model_config()?;
-        let cached = ModelCacheManager::new(config.clone());
-        if cached.is_model_cached() {
+        if triage_ai::onnx::verify_model(&config).is_ok() {
             return Ok(());
         }
         let client = reqwest::Client::builder()
@@ -109,8 +91,7 @@ impl DesktopService {
         serde_json::from_slice::<serde_json::Value>(&tokenizer)
             .map_err(|_| IpcError::InvalidRequest)?;
         self.blocking(move |_| {
-            ModelCacheManager::new(config)
-                .ensure_cached(Some(&Artifacts { model, tokenizer }))
+            triage_ai::onnx::install_model(&config, &model, &tokenizer)
                 .map(|_| ())
                 .map_err(|_| IpcError::EmbeddingUnavailable)
         })

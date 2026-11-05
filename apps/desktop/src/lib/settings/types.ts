@@ -1,3 +1,15 @@
+export interface EmbeddingState {
+	status:
+		| 'Disabled'
+		| 'MissingModelOrRuntime'
+		| 'Rebuilding'
+		| 'Failed'
+		| 'Ready'
+		| 'Unavailable';
+	indexed: number;
+	pending: number;
+	failed: number;
+}
 export type Tokenizer = 'Unicode61RemoveDiacritics' | 'Trigram';
 export interface AiSettings {
 	enabled: boolean;
@@ -13,12 +25,22 @@ export interface Settings {
 	experimental_semantic_search: boolean;
 }
 export interface SettingsTransport {
+	embeddingState?(): Promise<EmbeddingState>;
+	rebuildEmbeddings?(consent: boolean): Promise<void>;
 	get(): Promise<Settings>;
 	save(settings: AiSettings, apiKey: string): Promise<void>;
 	tokenizer(tokenizer: Tokenizer): Promise<void>;
 	setExperimentalSemanticSearch(enabled: boolean): Promise<void>;
-	download(request: { model_url: string; tokenizer_url: string; consent: boolean }): Promise<void>;
-	summarize(messageId: string, consent: boolean, expected: AiSettings): Promise<string>;
+	download(request: {
+		model_url: string;
+		tokenizer_url: string;
+		consent: boolean;
+	}): Promise<void>;
+	summarize(
+		messageId: string,
+		consent: boolean,
+		expected: AiSettings,
+	): Promise<string>;
 }
 
 export type SettingsTab =
@@ -50,7 +72,7 @@ export const SETTINGS_TABS: readonly SettingsTabItem[] = [
 	{ id: 'reminders', label: 'Reminders' },
 	{ id: 'categories', label: 'Local categories' },
 	{ id: 'senderReview', label: 'New senders' },
-	{ id: 'backup', label: 'Backup' }
+	{ id: 'backup', label: 'Backup' },
 ] as const;
 
 export interface SettingsModuleProps {

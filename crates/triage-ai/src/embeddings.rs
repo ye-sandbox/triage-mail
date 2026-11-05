@@ -54,7 +54,9 @@ impl EmbeddingModelConfig {
     /// falling back to `$HOME/.local/share/triage-mail/models` per the XDG Base Directory spec.
     pub fn from_xdg_env(model_name: impl Into<String>) -> Result<Self, TriageError> {
         let xdg = std::env::var("XDG_DATA_HOME").ok();
-        let home = std::env::var("HOME").ok();
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .ok();
         let base_dir = resolve_xdg_data_dir(xdg.as_deref(), home.as_deref())?;
         Ok(Self::with_data_dir(model_name, base_dir))
     }

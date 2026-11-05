@@ -181,6 +181,7 @@ pub(crate) struct ScopedSearch<'connection> {
 
 impl ScopedSearch<'_> {
     pub(crate) fn execute(&self, query: &HybridQuery) -> Result<Vec<String>, StorageError> {
+        crate::embeddings::check_ready(self.conn, query)?;
         let lexical = !query.query_text.trim().is_empty();
         let semantic = query.query_embedding_int8.is_some();
         if query.mode != SearchMode::Hybrid || !lexical || !semantic {

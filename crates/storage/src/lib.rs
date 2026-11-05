@@ -223,3 +223,7 @@ mod tests {
 
 #[cfg(test)]
 mod partition_tests;
+
+pub mod embeddings;
+#[cfg(test)]
+mod embeddings_tests;

@@ -5,7 +5,10 @@ use rusqlite::{params_from_iter, types::Value, Connection};
 use serde::{Deserialize, Serialize};
 use vault::backup::{BackupReader, BackupWriter};
 
-use crate::{migrations::CURRENT_SCHEMA_VERSION, FtsTokenizerMode, SqliteMailStore, StorageError};
+use crate::{FtsTokenizerMode, SqliteMailStore, StorageError};
+
+// INVARIANT: v11 adds only rebuildable indexes; the v1 backup remains schema-10 compatible.
+const BACKUP_SCHEMA_VERSION: u32 = 10;
 
 // INVARIANT: Order is dependency order. No identifier/SQL from the file is executed.
 const TABLES: &[&str] = &[
@@ -82,7 +85,7 @@ impl SqliteMailStore {
         self.transaction(|tx| {
             writer.record(&json(&Manifest {
                 version: 1,
-                schema: CURRENT_SCHEMA_VERSION,
+                schema: BACKUP_SCHEMA_VERSION,
                 tokenizer: crate::settings::read_tokenizer(tx)?,
             })?)?;
             for (index, table) in TABLES.iter().enumerate() {
@@ -101,7 +104,7 @@ impl SqliteMailStore {
     pub fn read_backup<R: Read>(&self, input: R, passphrase: &[u8]) -> Result<(), StorageError> {
         let mut reader = BackupReader::new(input, passphrase)?;
         let manifest: Manifest = decode(&reader.record()?.ok_or_else(invalid)?)?;
-        if manifest.version != 1 || manifest.schema != CURRENT_SCHEMA_VERSION {
+        if manifest.version != 1 || manifest.schema != BACKUP_SCHEMA_VERSION {
             return Err(invalid());
         }
         self.transaction(|tx| {

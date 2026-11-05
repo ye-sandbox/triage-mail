@@ -19,7 +19,7 @@ function row(index: number): MessageRowDto {
 		has_attachments: false,
 		tags: [],
 		folder_override: null,
-		category_badge: null
+		category_badge: null,
 	};
 }
 function deferred<T>() {
@@ -39,7 +39,7 @@ function setup() {
 		subscribe: async (callback) => {
 			handler = callback;
 			return stop;
-		}
+		},
 	});
 	return {
 		inbox,
@@ -50,8 +50,8 @@ function setup() {
 				account_id: 'account-local',
 				state: 'ResyncRequired',
 				new_messages_count: 1,
-				triage_alerts: []
-			})
+				triage_alerts: [],
+			}),
 	};
 }
 beforeAll(() => {
@@ -62,7 +62,7 @@ beforeAll(() => {
 			observe() {}
 			unobserve() {}
 			disconnect() {}
-		}
+		},
 	);
 });
 afterEach(() => vi.useRealTimers());
@@ -82,7 +82,7 @@ describe('inbox requests and synchronization', () => {
 			query: 'invoice',
 			mode: 'Hybrid',
 			limit: PAGE_SIZE,
-			offset: 0
+			offset: 0,
 		});
 		inbox.dispose();
 	});
@@ -93,7 +93,7 @@ describe('inbox requests and synchronization', () => {
 			.mockResolvedValueOnce(page)
 			.mockResolvedValueOnce([
 				row(199),
-				{ ...row(200), tags: ['Paged'], folder_override: 'Archive' }
+				{ ...row(200), tags: ['Paged'], folder_override: 'Archive' },
 			]);
 		await inbox.search('', 'Lexical');
 		inbox.selectedId = row(50).id;
@@ -102,7 +102,7 @@ describe('inbox requests and synchronization', () => {
 			query: '',
 			mode: 'Lexical',
 			limit: PAGE_SIZE,
-			offset: PAGE_SIZE
+			offset: PAGE_SIZE,
 		});
 		expect(inbox.rows).toHaveLength(201);
 		expect(inbox.localTags['message-200']).toEqual(['Paged']);
@@ -152,7 +152,7 @@ describe('inbox requests and synchronization', () => {
 			subscribe: async (cb) => {
 				handler = cb;
 				return () => {};
-			}
+			},
 		});
 		await inbox.connect();
 		expect(inbox.syncStatus).toBe('Up to date');
@@ -161,7 +161,7 @@ describe('inbox requests and synchronization', () => {
 			state: 'Idle',
 			new_messages_count: 5,
 			triage_alerts: [],
-			embedding_errors_count: 2
+			embedding_errors_count: 2,
 		});
 		expect(inbox.totalEmbeddingErrors).toBe(2);
 		expect(inbox.syncStatus).toBe('Up to date (2 indexing warnings)');
@@ -187,14 +187,18 @@ describe('virtualized message list', () => {
 		await tick();
 		const list = target.querySelector<HTMLElement>('[role=listbox]')!;
 		Object.defineProperty(list, 'clientHeight', { value: 600 });
-		list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+		list.dispatchEvent(
+			new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
+		);
 		flushSync();
 		expect(inbox.selectedId).toBe('message-0');
 		list.scrollTop = 88000;
 		list.dispatchEvent(new Event('scroll'));
 		flushSync();
 		await tick();
-		expect(target.querySelectorAll('[role=option]').length).toBeLessThanOrEqual(20);
+		expect(target.querySelectorAll('[role=option]').length).toBeLessThanOrEqual(
+			20,
+		);
 		expect(list.hasAttribute('aria-activedescendant')).toBe(false);
 		inbox.rows = [row(100001), ...inbox.rows];
 		flushSync();
@@ -210,18 +214,24 @@ describe('virtualized message list', () => {
 describe('inbox toolbar', () => {
 	it('renders persisted local metadata when the inbox is opened', async () => {
 		const { inbox, search } = setup();
-		search.mockResolvedValueOnce([{ ...row(0), tags: ['Keep'], folder_override: 'Archive' }]);
+		search.mockResolvedValueOnce([
+			{ ...row(0), tags: ['Keep'], folder_override: 'Archive' },
+		]);
 		await inbox.search('', 'Lexical');
 		inbox.selectedId = 'message-0';
 		const target = document.createElement('div');
 		document.body.append(target);
 		const component = mount(InboxView, {
 			target,
-			props: { inbox, connected: true }
+			props: { inbox, connected: true },
 		});
 		flushSync();
-		expect(target.querySelector('[aria-label="Message state"]')?.textContent).toContain('Archive');
-		expect(target.querySelector('[aria-label="Message state"]')?.textContent).toContain('#Keep');
+		expect(
+			target.querySelector('[aria-label="Message state"]')?.textContent,
+		).toContain('Archive');
+		expect(
+			target.querySelector('[aria-label="Message state"]')?.textContent,
+		).toContain('#Keep');
 		await unmount(component);
 		inbox.dispose();
 		target.remove();
@@ -233,7 +243,7 @@ describe('inbox toolbar', () => {
 		document.body.append(target);
 		const component = mount(InboxView, {
 			target,
-			props: { inbox, connected: true }
+			props: { inbox, connected: true },
 		});
 		flushSync();
 		const input = target.querySelector<HTMLInputElement>('input[type=search]')!;
@@ -247,7 +257,7 @@ describe('inbox toolbar', () => {
 			query: 'invoice',
 			mode: 'Lexical',
 			limit: PAGE_SIZE,
-			offset: 0
+			offset: 0,
 		});
 		// Match selector is hidden by default when experimental semantic search is disabled
 		expect(target.querySelector('select')).toBeNull();
@@ -258,8 +268,8 @@ describe('inbox toolbar', () => {
 		const options = Array.from(select.options).map((opt) => opt.textContent);
 		expect(options).toEqual([
 			'Words',
-			'Semantic projection (Experimental)',
-			'Words + semantic projection (Experimental)'
+			'Meaning (local)',
+			'Words + meaning (local)',
 		]);
 		select.value = 'Hybrid';
 		select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -269,7 +279,7 @@ describe('inbox toolbar', () => {
 			query: 'invoice',
 			mode: 'Hybrid',
 			limit: PAGE_SIZE,
-			offset: 0
+			offset: 0,
 		});
 		await unmount(component);
 		inbox.dispose();
@@ -284,10 +294,12 @@ describe('inbox motion interactions', () => {
 		document.body.append(target);
 		const component = mount(InboxView, {
 			target,
-			props: { inbox, connected: true }
+			props: { inbox, connected: true },
 		});
 		flushSync();
-		const toggle = target.querySelector<HTMLButtonElement>('[aria-label="Toggle sidebar"]')!;
+		const toggle = target.querySelector<HTMLButtonElement>(
+			'[aria-label="Toggle sidebar"]',
+		)!;
 		const sidebar = target.querySelector<HTMLElement>('.inbox-sidebar')!;
 		toggle.click();
 		flushSync();
@@ -309,7 +321,7 @@ describe('inbox motion interactions', () => {
 		document.body.append(target);
 		const component = mount(InboxView, {
 			target,
-			props: { inbox, connected: true }
+			props: { inbox, connected: true },
 		});
 		flushSync();
 		inbox.selectedId = 'message-0';
@@ -319,14 +331,16 @@ describe('inbox motion interactions', () => {
 		expect(target.querySelectorAll('.overview-content')).toHaveLength(1);
 		expect(target.querySelector('h2')?.textContent).toContain('Subject 1');
 		const back = Array.from(target.querySelectorAll('button')).find((button) =>
-			button.textContent?.includes('‹ All Mail')
+			button.textContent?.includes('‹ All Mail'),
 		)!;
 		back.click();
 		flushSync();
 		await tick();
 		expect(inbox.selectedId).toBe(null);
 		await vi.waitFor(() =>
-			expect(document.activeElement).toBe(target.querySelector('[role=listbox]'))
+			expect(document.activeElement).toBe(
+				target.querySelector('[role=listbox]'),
+			),
 		);
 		await unmount(component);
 		inbox.dispose();

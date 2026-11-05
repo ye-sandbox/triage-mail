@@ -24,3 +24,5 @@ pub mod settings;
 pub mod worker;
 pub use dto::*;
 pub use service::{DesktopService, IpcError};
+
+mod embeddings;

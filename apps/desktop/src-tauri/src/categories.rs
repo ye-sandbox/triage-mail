@@ -83,13 +83,7 @@ impl DesktopService {
                 if !s.read_stored_settings()?.experimental_semantic_search {
                     return Err(IpcError::InvalidRequest);
                 }
-                Some(
-                    s.embedding
-                        .as_ref()
-                        .ok_or(IpcError::EmbeddingUnavailable)?
-                        .embed_int8(&query.query)
-                        .map_err(|_| IpcError::EmbeddingUnavailable)?,
-                )
+                Some(s.query_embedding(&query.query)?)
             };
             let scope = query.scope.clone();
             let query = query

@@ -98,6 +98,7 @@ pub struct DesktopService {
     pub(crate) remote: Arc<dyn RemoteMail>,
     pub(crate) embedding: Option<Arc<dyn EmbeddingProvider>>,
     pub events: Arc<EventBus>,
+    pub(crate) learned: Option<Arc<triage_ai::onnx::OnnxEmbeddingProvider>>,
     account_gate: Mutex<()>,
     pub(crate) settings_gate: Mutex<()>,
     pub(crate) download_gate: tokio::sync::Mutex<()>,
@@ -121,6 +122,7 @@ impl DesktopService {
             vault,
             remote,
             embedding,
+            learned: None,
             events: Arc::new(EventBus::default()),
             account_gate: Mutex::new(()),
             settings_gate: Mutex::new(()),
@@ -279,19 +281,7 @@ impl DesktopService {
         self.blocking(move |s| {
             let embedding = match query.mode {
                 SearchMode::Lexical => None,
-                _ => {
-                    let settings = s.read_stored_settings()?;
-                    if !settings.experimental_semantic_search {
-                        return Err(IpcError::InvalidRequest);
-                    }
-                    Some(
-                        s.embedding
-                            .as_ref()
-                            .ok_or(IpcError::EmbeddingUnavailable)?
-                            .embed_int8(&query.query)
-                            .map_err(|_| IpcError::EmbeddingUnavailable)?,
-                    )
-                }
+                _ => Some(s.query_embedding(&query.query)?),
             };
             let scope = query.scope.clone();
             let query = query
