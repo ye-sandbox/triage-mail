@@ -1,6 +1,7 @@
 use super::*;
 use std::{fs, process::Command};
 use sync_runtime::ownership::OwnershipError;
+use vault::{SecretStore, VaultKey};
 
 const PHRASE: &str = "synthetic ownership fixture passphrase";
 
@@ -111,6 +112,7 @@ fn failed_unlock_retry_and_cloned_credentials_preserve_ownership() {
         Err(OwnershipError::Busy)
     ));
     let detached_credentials = service.vault.clone();
+    let detached_storage = service.store.clone();
     drop(service);
     assert!(matches!(
         WriterOwnership::acquire(&path),
@@ -119,6 +121,12 @@ fn failed_unlock_retry_and_cloned_credentials_preserve_ownership() {
     let key = VaultKey::for_account("application", "database-key").unwrap();
     assert_eq!(detached_credentials.get_secret(&key).unwrap(), [29; 32]);
     drop(detached_credentials);
+    assert!(matches!(
+        WriterOwnership::acquire(&path),
+        Err(OwnershipError::Busy)
+    ));
+    detached_storage.list_account_connections().unwrap();
+    drop(detached_storage);
     assert!(acquire(&path).is_ok());
 }
 

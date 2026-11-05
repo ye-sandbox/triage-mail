@@ -92,8 +92,37 @@ impl Drop for IncomingCredentials {
     }
 }
 
+/// Repository handle preserving production ownership and explicit injected composition.
+#[derive(Clone)]
+pub(crate) struct ServiceStore(StoreHandle);
+
+#[derive(Clone)]
+enum StoreHandle {
+    Injected(Arc<SqliteMailStore>),
+    Owned(Arc<sync_runtime::bootstrap::OwnedStorage>),
+}
+impl From<Arc<SqliteMailStore>> for ServiceStore {
+    fn from(store: Arc<SqliteMailStore>) -> Self {
+        Self(StoreHandle::Injected(store))
+    }
+}
+impl From<Arc<sync_runtime::bootstrap::OwnedStorage>> for ServiceStore {
+    fn from(store: Arc<sync_runtime::bootstrap::OwnedStorage>) -> Self {
+        Self(StoreHandle::Owned(store))
+    }
+}
+impl std::ops::Deref for ServiceStore {
+    type Target = SqliteMailStore;
+    fn deref(&self) -> &Self::Target {
+        match &self.0 {
+            StoreHandle::Injected(store) => store,
+            StoreHandle::Owned(store) => store,
+        }
+    }
+}
+
 pub struct DesktopService {
-    pub(crate) store: Arc<SqliteMailStore>,
+    pub(crate) store: ServiceStore,
     pub(crate) vault: Arc<dyn SecretStore>,
     pub(crate) remote: Arc<dyn RemoteMail>,
     pub(crate) embedding: Option<Arc<dyn EmbeddingProvider>>,
@@ -118,6 +147,16 @@ impl DesktopService {
         remote: Arc<dyn RemoteMail>,
         embedding: Option<Arc<dyn EmbeddingProvider>>,
     ) -> Arc<Self> {
+        Self::new_with_store(store, vault, remote, embedding)
+    }
+
+    pub(crate) fn new_with_store(
+        store: impl Into<ServiceStore>,
+        vault: Arc<dyn SecretStore>,
+        remote: Arc<dyn RemoteMail>,
+        embedding: Option<Arc<dyn EmbeddingProvider>>,
+    ) -> Arc<Self> {
+        let store = store.into();
         crate::onboarding::clean_orphaned_staging(vault.as_ref());
         let _ = store.reconcile_expired_snoozes(storage::now_epoch_ms());
         Arc::new(Self {

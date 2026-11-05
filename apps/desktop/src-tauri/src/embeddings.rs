@@ -14,15 +14,16 @@ pub struct EmbeddingState {
 impl DesktopService {
     /// Production composition explicitly opts into generation-managed inference.
     pub(crate) fn new_learned(
-        store: Arc<storage::SqliteMailStore>,
+        store: impl Into<crate::service::ServiceStore>,
         vault: Arc<dyn vault::SecretStore>,
         remote: Arc<dyn crate::remote::RemoteMail>,
         provider: Option<Arc<triage_ai::onnx::OnnxEmbeddingProvider>>,
     ) -> Result<Arc<Self>, IpcError> {
+        let store = store.into();
         store
             .begin_embedding_generation(GENERATION, false)
             .map_err(|_| IpcError::StorageUnavailable)?;
-        let mut service = Self::new(
+        let mut service = Self::new_with_store(
             store,
             vault,
             remote,

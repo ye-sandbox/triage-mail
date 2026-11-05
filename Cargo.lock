@@ -4611,9 +4611,13 @@ name = "sync-runtime"
 version = "0.1.3"
 dependencies = [
  "async-trait",
+ "getrandom 0.2.17",
  "mail-engine",
  "storage",
+ "tempfile",
  "tokio",
+ "vault",
+ "zeroize",
 ]
 
 [[package]]

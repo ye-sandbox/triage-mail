@@ -7,8 +7,71 @@
 
 ## Active Task
 
-No active task — [00.6] completed. Active headless bootstrap, daemon lifecycle and
-writable container deployment remain unprioritized and require a separate plan.
+### Task [00.7]: Shared Local Installation Bootstrap
+
+- **Status:** RUNNING
+- **Selection:** Proposed after the user's `proceed` on 2026-11-05. [00.6] remains
+  complete. Extract local installation opening before adding an active headless host.
+- **Systems Involved:** Pure Rust sync-runtime bootstrap, desktop ownership adapter,
+  offline encrypted fixtures and architecture/contracts documentation.
+- **Problem:** Desktop ownership::bootstrap still combines installation permissions,
+  vault selection, database-key provisioning and storage opening with GUI-host service
+  composition. A future headless host must reuse these local safety rules without
+  importing desktop code or duplicating credential and recovery behavior.
+- **Scope:** Extract the existing local bootstrap and ownership-retaining secret-store
+  wrapper into sync-runtime. Desktop retains remote/provider/service composition and
+  all worker startup. No executable headless writer or new runtime behavior.
+
+#### Approved Implementation Plan (2026-11-05)
+
+1. Record an ADR for additive GUI-independent bootstrap types in sync-runtime. Use
+   existing workspace/cached vault, zeroize and randomness dependencies only, with
+   no downloads, unsafe code or Tauri/GTK/WebKit imports. Preserve existing traits,
+   schema, IPC and CLI interfaces; a new dependency requirement returns to planning.
+2. Extract installation permission setup, current keyring/fallback/recovery-marker
+   selection, database-key lookup/provisioning and SQLCipher opening. Require retained
+   WriterOwnership before mutations and bind bootstrap to its installation identity.
+   Keep passphrases/key buffers zeroized and errors fixed and free of private values.
+   Preserve refusal to generate a replacement key when an existing database lacks one.
+3. Return local storage/vault handles with explicit ownership lifetime guarantees.
+   Move the delegating owned-secret wrapper into the core boundary so detached vault
+   work retains the lock. Prevent storage handles exposed by the new API from silently
+   dropping ownership while still usable. Preserve runtime retry and cancellation
+   ordering, including recovery-gate retention through running blocking work.
+4. Adapt desktop bootstrap to compose NativeRemoteMail, optional learned embeddings
+   and DesktopService from the shared local installation. Keep desktop cleanup,
+   reconciliation, embedding setup, backup restore and worker startup in their existing
+   order and host. Do not introduce workers, inference loads or network calls in core
+   bootstrap; retain existing injected constructors for synthetic tests.
+5. Add offline encrypted-fixture and subprocess coverage for provision/reopen,
+   recovery fallback-only selection, invalid passphrase, missing/malformed existing
+   database keys, mismatched ownership identity, failed bootstrap/retry and lock
+   retention through independently retained storage/vault handles. Preserve desktop
+   ownership/recovery regressions and cached CLI committed-WAL reader compatibility.
+   Keyring tests use injection rather than a live user credential service.
+6. Run the full repository DoD, SPA build, applicable formatting and tracked-file
+   secret/PII scans with cached tools and offline dependencies. Preserve active
+   contracts and applicable knowledge. Use readme-standard if documented interfaces
+   or validation commands require paired README changes. Commit atomically and log
+   its hash; close only [00.7], without pushing or starting another task.
+
+- **Approval:** User approved with `proceed` on 2026-11-05.
+- **Approval boundary:** Shared local bootstrap and desktop adaptation only. No
+  active CLI/daemon, account setup, new credential format, schema/IPC change, worker
+  scheduling/delivery consent change, writable container, live provider validation,
+  package/model download or publication. Existing build sysroot may be reused offline;
+  missing validation prerequisites must be reported without downloading replacements.
+- **Open blockers:** None identified for this bounded proposal. Material behavior or
+  dependency changes return to planning before implementation.
+
+#### Closing Checklist — [00.7]
+
+- [x] Implementation plan approved.
+- [ ] Shared local bootstrap preserves vault, storage and ownership behavior.
+- [ ] Offline bootstrap/lifetime and desktop recovery regressions pass.
+- [ ] Full repository DoD, SPA build, formatting and secret/PII checks pass.
+- [ ] ADR, active contracts and applicable knowledge preserved.
+- [ ] Atomic Conventional Commit recorded; task closed without pushing.
 
 ---
 
