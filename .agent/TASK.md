@@ -7,9 +7,16 @@
 
 ## Active Task
 
+No active task — [00.4] completed. Active headless sync/daemon and its container
+deployment remain unprioritized and require a separate plan.
+
+---
+
+## Latest Completed Task
+
 ### Task [00.4]: Offline Cached-Mail CLI Container Packaging
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Selection:** Proposed from the unprioritized Docker runner backlog after the
   user's `proceed` on 2026-11-05. [00.3] remains complete.
 - **Systems Involved:** Container packaging, offline synthetic integration validation,
@@ -57,19 +64,56 @@
   command, live personal data test or writable database mount. Missing prerequisites
   or material security/architecture changes require an updated plan.
 
+#### Completion (2026-11-05)
+
+- **Commit:** `b1b4c21` (`feat(cli): package offline cache inspection in a minimal container`).
+- **Delivered:** Linux x86_64 GNU CLI image assembled from `scratch` using an explicit
+  locked/offline release target, four allowlisted ELF loader/runtime libraries and
+  license notices. Generated private context contains no source, mail, vault or models
+  and is removed on exit. Numeric non-root default, direct CLI entrypoint and help
+  default; no shell, desktop runtime, ONNX runtime, new dependencies or core changes.
+- **Runtime:** Documented read-only data/root mounts, nonzero authorized host UID/GID,
+  network none, dropped capabilities/no-new-privileges, disabled Docker logs and 16 MiB
+  private tmpfs. Existing fallback vault receives its passphrase through stdin only;
+  no host keyring socket, secret arguments/environment or provisioning is added.
+- **Validation:** Offline workspace check/test/fmt/all-target Clippy (-D warnings)
+  exit 0: 353 Rust tests pass; optional ONNX and Docker tests are ignored ordinarily.
+  The explicit Docker regression passes against the final image. Desktop check has
+  zero errors/warnings; all 184 frontend tests and SPA build pass. Five scanner tests
+  pass; 433 tracked text files have zero secret/PII/legacy-Svelte findings. Shell syntax,
+  README perimeter, applicable Markdown Prettier, legacy-prop and diff checks pass.
+- **Coverage:** Default help/non-root configuration; exact native/container accounts,
+  search and show JSON parity; recovered fallback unlock, wrong/empty passphrases,
+  missing vault/cache, unsupported schema, committed uncheckpointed WAL, missing-SHM
+  refusal and durable DB/WAL/vault bytes plus unread/queue/schema preservation. Image
+  contents were inspected. Native-reader SHM read-mark changes are excluded from byte
+  comparisons; the read-only container mount still enforces SHM write refusal.
+- **Artifact:** Local `triage-mail-cli:local`, image ID
+  `sha256:ffeaa375183008d42ff4fa03bb1715fcd0fc4d0fb12fcac23e3577a71238c43b`,
+  Docker-reported size 6,894,795 bytes. Host-derived runtime libraries/toolchain mean
+  cross-host reproducibility is not claimed. No image or Git changes were published.
+- **Perimeter:** EN/PT-BR READMEs updated under readme-standard, docs/cli.md includes
+  build/run/test commands and WAL restrictions, active contracts and k-037 preserved.
+  No downloads, provider/AI calls, personal data or live deliveries were used.
+- **Limits:** Linux x86_64/Docker Desktop validated only. Host Debian/Ubuntu-style runtime
+  license notices are required. Fallback-only unlock; initialized readable WAL/SHM
+  sidecars are needed on read-only mounts, otherwise fail closed. No active sync,
+  daemon, automation or new runtime network permission. No large-cache/native-platform
+  interoperability or performance claim.
+- **Next:** No prioritized successor is available. Active headless sync/daemon and its
+  container deployment remain unprioritized and need a separate plan. No task started.
+
 #### Closing Checklist — [00.4]
 
 - [x] Implementation plan approved.
-- [ ] Minimal non-root offline CLI image with bounded build context.
-- [ ] Actual offline container tests with synthetic encrypted cache and WAL cases.
-- [ ] Full repository DoD, SPA build, formatting and secret/PII checks.
-- [ ] EN/PT-BR documentation and applicable contract/knowledge preservation.
-- [ ] Atomic conventional commit with recorded hash; task closed without pushing.
+- [x] Minimal non-root offline CLI image with bounded build context.
+- [x] Actual offline container tests with synthetic encrypted cache and WAL cases.
+- [x] Full repository DoD, SPA build, formatting and secret/PII checks.
+- [x] EN/PT-BR documentation and applicable contract/knowledge preservation.
+- [x] Atomic conventional commit with recorded hash; task closed without pushing.
 
 
 ---
-
-## Latest Completed Task
 
 ### Task [00.3]: Offline Headless CLI for Cached Mail
 
@@ -1671,7 +1715,7 @@ All tasks inherit the repository DoD when implemented.
 
 ## Other Future Backlog / Ideas (Unprioritized)
 
-- Offline cached-mail CLI completed in [00.3]; active headless sync/daemon and Docker runner remain unprioritized
+- Offline cached-mail CLI [00.3] and offline CLI container [00.4] completed; active headless sync/daemon and its container deployment remain unprioritized
 - Outbound SMTP & lightweight Markdown/Plain-text reply composer (`v0.2+`)
 - Multi-folder sync (Archive/All Mail with Gmail dedup, Sent read-only): scoped into the proposed [04.1] mailbox queue; implementation pending approval
 - Real Tier 2 ONNX inference via `ort`: completed in [03.10].
