@@ -7,9 +7,16 @@
 
 ## Active Task
 
+No active task — [00.5] completed. Active headless sync/daemon and writable
+container deployment remain unprioritized and require a separate plan.
+
+---
+
+## Latest Completed Task
+
 ### Task [00.5]: Shared Headless Sync Orchestration Foundation
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Selection:** Proposed after the user's `proceed` on 2026-11-05. [00.4] remains
   complete. This is a prerequisite for the unprioritized active headless runner.
 - **Systems Involved:** New pure Rust `crates/sync-runtime`, desktop worker adapter,
@@ -65,18 +72,54 @@
 - **Open blockers:** None for this bounded proposal. Material dependencies or changes
   to the stated behavior/security boundary return to planning.
 
+#### Completion (2026-11-05)
+
+- **Commit:** `010a857` (`refactor(sync): share account sync orchestration through host adapters`).
+- **Delivered:** Pure Rust sync-runtime workspace crate with additive account-bound
+  SyncHost and single-pass coordinator. Desktop sync uses its host adapter while
+  retaining native transport/credentials, gate/blocking policy, ingestion/frontier
+  ordering, rules/reminders/index hooks and buffered progress. Existing schemas,
+  core traits, IPC and offline CLI/container interfaces remain unchanged.
+- **Validation:** Offline locked workspace check/test and all-target Clippy with
+  -D warnings pass; cargo fmt passes. All 364 Rust tests pass, with the existing
+  artifact-dependent ONNX and opt-in Docker tests ignored. Ten new coordinator
+  regressions and the file-backed encrypted desktop adapter probe pass. Desktop
+  typecheck reports zero errors/warnings; all 184 frontend tests and SPA build pass.
+  Five scanner regressions pass; 438 tracked text files yield zero secret/PII/legacy
+  findings. Changed Markdown passes cached Prettier; legacy-prop and diff checks pass.
+  Normal dependency closure contains no Tauri/GTK/WebKit. Final coordinator fixture
+  refinement passes its targeted suite and the repeated formatting/Clippy checks.
+- **Coverage:** Selectable folders, discovered INBOX priority, cached fallback/exact
+  comparison, best-effort catalog failure, sequential full/short batches, reset and
+  saturating frontier handling, fatal remote/storage errors, paused-clock deadline,
+  cancellation and checkpoint resume. Desktop regression checks encrypted reopen,
+  canonical duplicate identity, history/arrival rule and review frontiers, rule effects
+  before indexing, independent rule invalidation and final success ordering. Existing
+  batch interruption, reset, lazy-attachment and embedding failure regressions pass.
+- **Perimeter:** ADR-024, active contracts and k-038 preserve host ordering and
+  cancellation limits. No documented CLI flags, environment variables or validation
+  commands changed, so paired README edits were unnecessary. Existing cached
+  toolchain/native sysroot were used without downloads or live provider/AI/delivery
+  calls. No user mail, real credentials or image publication was involved.
+- **Limits:** Entire-pass work remains proportional to selected folders and batches;
+  only remote batch fetching has the existing 120-second deadline. Baseline/frontier
+  writes precede the message transaction. Dropped remote work is canceled, but
+  committed batches persist and already running host blocking work can continue.
+  This does not establish cross-process writer ownership or live interoperability.
+- **Next:** No prioritized successor is available. Active headless unlock/bootstrap,
+  process ownership, scheduler/delivery consent, daemon lifecycle and writable
+  container deployment require a separate plan. No successor started; nothing pushed.
+
 #### Closing Checklist — [00.5]
 
 - [x] Implementation plan approved.
-- [ ] Pure Rust reusable coordinator and desktop adapter preserve sync behavior.
-- [ ] Offline orchestration and encrypted-storage adapter regressions pass.
-- [ ] Full repository DoD, SPA build, formatting and secret/PII checks.
-- [ ] ADR, active contracts and applicable knowledge preserved.
-- [ ] Atomic Conventional Commit recorded; task closed without pushing.
+- [x] Pure Rust reusable coordinator and desktop adapter preserve sync behavior.
+- [x] Offline orchestration and encrypted-storage adapter regressions pass.
+- [x] Full repository DoD, SPA build, formatting and secret/PII checks.
+- [x] ADR, active contracts and applicable knowledge preserved.
+- [x] Atomic Conventional Commit recorded; task closed without pushing.
 
 ---
-
-## Latest Completed Task
 
 ### Task [00.4]: Offline Cached-Mail CLI Container Packaging
 
@@ -1779,7 +1822,7 @@ All tasks inherit the repository DoD when implemented.
 
 ## Other Future Backlog / Ideas (Unprioritized)
 
-- Offline cached-mail CLI [00.3] and offline CLI container [00.4] completed; active headless sync/daemon and its container deployment remain unprioritized
+- Offline cached-mail CLI [00.3], offline CLI container [00.4] and shared sync foundation [00.5] completed; active headless sync/daemon and writable container deployment remain unprioritized
 - Outbound SMTP & lightweight Markdown/Plain-text reply composer (`v0.2+`)
 - Multi-folder sync (Archive/All Mail with Gmail dedup, Sent read-only): scoped into the proposed [04.1] mailbox queue; implementation pending approval
 - Real Tier 2 ONNX inference via `ort`: completed in [03.10].
