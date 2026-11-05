@@ -7,9 +7,16 @@
 
 ## Active Task
 
+No active task — [00.3] completed. Active headless sync/daemon and Docker remain
+unprioritized and require a separate plan.
+
+---
+
+## Latest Completed Task
+
 ### Task [00.3]: Offline Headless CLI for Cached Mail
 
-- **Status:** RUNNING
+- **Status:** DONE
 - **Selection:** Proposed from the unprioritized headless CLI / Docker runner backlog
   after the user's `proceed` on 2026-11-05. [03.10] remains complete.
 - **Systems Involved:** New `apps/cli` Rust workspace member, additive read-only
@@ -61,18 +68,52 @@
   indexing or automation execution is included. Material dependencies or changes to
   the storage/vault security contract return to planning.
 
+#### Completion (2026-11-05)
+
+- **Commit:** `9910526` (`feat(cli): add offline read-only encrypted mail inspection`).
+- **Delivered:** Standalone `triage-mail-cli` Rust workspace executable with `accounts`,
+  lexical `search` and cached plain-text `show`; no desktop runtime dependency or workers.
+  Existing vault-only keys, explicit bounded non-terminal fallback unlock and recovery
+  marker gating; missing installations/keys fail without creation. Additive read-only
+  vault and SQLCipher readers preserve existing traits, migrations and IPC contracts.
+- **Storage/output:** READONLY and query_only enforce no logical writes; schema-11
+  validation/ranking/hydration share snapshots and include committed WAL. Stored
+  tokenizer and lexical ranking remain authoritative. Paginated account IDs impose
+  no account limit. Plain text is bounded to 64 KiB; complete JSON to 4 MiB, with
+  C0/DEL/C1 escaping, fixed errors and no oversized partial payload on stdout.
+- **Validation:** Offline workspace check/test/fmt/all-target Clippy (-D warnings)
+  exit 0: 353 Rust tests pass, one existing artifact-dependent ONNX smoke ignored.
+  Desktop check has zero errors/warnings, all 184 frontend tests and SPA build pass.
+  Five policy-scanner regressions pass; 429 tracked text files have zero secret/PII/
+  legacy-Svelte findings. Whitespace and legacy-prop checks pass; new Markdown files
+  pass cached Prettier. No frontend source changed. Standalone package build and
+  dependency/ldd inspection confirm no Tauri/GTK/WebKit dependency.
+- **Coverage:** Encrypted WAL/concurrent commits, write refusal even with query_only
+  disabled, lexical parity/tokenizer, scopes/pagination, read/queue preservation,
+  fallback/recovery unlock, wrong/missing keys, schemas, absent installations, direct
+  symlinks, UTF-8 bounds, escaped controls and output rejection. Full validation found
+  an early-exit BrokenPipe race in the test harness; only that expected pipe closure
+  is now tolerated, with child exit/output assertions retained.
+- **Perimeter:** ADR-023, active contracts, k-036, docs/cli.md and paired README usage
+  synchronized under readme-standard. Existing cached dependencies/sysroot were used;
+  no downloads, live mail/provider/AI calls or external deliveries. Nothing pushed.
+- **Limits:** Read-only logical storage can still need WAL/SHM sidecars/directory
+  permissions. Output caps do not bound all internal search hydration memory/latency.
+  Tests do not establish cross-platform native keyring/packaging interoperability.
+  Active sync, daemon/Docker, provisioning, mutations and semantic CLI remain deferred.
+- **Next:** No prioritized successor is available; remaining backlog needs selection
+  and planning. No additional task started.
+
 #### Closing Checklist — [00.3]
 
 - [x] Implementation plan approved.
-- [ ] Headless cached-mail commands with vault-only keys and read-only SQLCipher access.
-- [ ] Offline CLI/security regressions and GUI-free package build.
-- [ ] Full repository DoD, SPA build, formatting and secret/PII checks.
-- [ ] EN/PT-BR documentation, ADR/contracts and applicable knowledge preservation.
-- [ ] Atomic conventional commit with recorded hash; task closed without pushing.
+- [x] Headless cached-mail commands with vault-only keys and read-only SQLCipher access.
+- [x] Offline CLI/security regressions and GUI-free package build.
+- [x] Full repository DoD, SPA build, formatting and secret/PII checks.
+- [x] EN/PT-BR documentation, ADR/contracts and applicable knowledge preservation.
+- [x] Atomic conventional commit with recorded hash; task closed without pushing.
 
 ---
-
-## Latest Completed Task
 
 ### Task [03.10]: Real Local Tier 2 ONNX Embeddings
 
@@ -1573,7 +1614,7 @@ All tasks inherit the repository DoD when implemented.
 
 ## Other Future Backlog / Ideas (Unprioritized)
 
-- Headless CLI / Docker daemon runner consuming `crates/*` without GUI
+- Offline cached-mail CLI completed in [00.3]; active headless sync/daemon and Docker runner remain unprioritized
 - Outbound SMTP & lightweight Markdown/Plain-text reply composer (`v0.2+`)
 - Multi-folder sync (Archive/All Mail with Gmail dedup, Sent read-only): scoped into the proposed [04.1] mailbox queue; implementation pending approval
 - Real Tier 2 ONNX inference via `ort`: completed in [03.10].
