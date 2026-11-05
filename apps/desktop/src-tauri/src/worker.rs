@@ -52,6 +52,10 @@ impl WorkerSupervisor {
     }
 
     pub fn start_account(&self, config: AccountConfigDto) -> Result<(), IpcError> {
+        // INVARIANT: Recovered cached-only accounts have no endpoint or credentials.
+        if config.imap_host.is_empty() {
+            return Ok(());
+        }
         let mut accounts = self.accounts.lock().map_err(|_| IpcError::Internal)?;
         if accounts
             .get(&config.account_id)

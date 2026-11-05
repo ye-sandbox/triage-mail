@@ -9,6 +9,7 @@
 pub mod alerts;
 pub mod auth;
 pub mod auto_store;
+pub mod backup;
 pub mod cipher;
 pub mod fallback_store;
 pub mod keyring_store;

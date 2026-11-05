@@ -38,6 +38,14 @@ impl SqliteMailStore {
         config_json: &str,
     ) -> Result<(), StorageError> {
         self.transaction(|tx| {
+            // INVARIANT: Reconnection may update a cached-only recovered account,
+            // but cannot replace an existing connection or another account identity.
+            let cached: Option<String> = tx.query_row(
+                "SELECT id FROM accounts WHERE id=?1 AND email=?2 AND NOT EXISTS(SELECT 1 FROM account_connections WHERE account_id=?1)",
+                params![account.id, account.email], |r| r.get(0)).optional().map_err(query_error)?;
+            if cached.is_some() {
+                tx.execute("UPDATE accounts SET auth_type=?1,updated_at_epoch_ms=?2 WHERE id=?3", params![account.auth_type, account.updated_at_epoch_ms, account.id]).map_err(query_error)?;
+            } else {
             tx.execute(
                 "INSERT INTO accounts VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![
@@ -49,6 +57,7 @@ impl SqliteMailStore {
                 ],
             )
             .map_err(query_error)?;
+            }
             tx.execute(
                 "INSERT INTO account_connections VALUES (?1, ?2)",
                 params![account.id, config_json],
@@ -602,5 +611,16 @@ impl SqliteMailStore {
         )
         .optional()
         .map_err(query_error)
+    }
+}
+
+impl SqliteMailStore {
+    /// Cached-only identities have no endpoint and cannot start a network worker.
+    pub fn disconnected_accounts(&self) -> Result<Vec<(String, String)>, StorageError> {
+        self.transaction(|tx| {
+            let mut statement = tx.prepare("SELECT id,email FROM accounts WHERE NOT EXISTS(SELECT 1 FROM account_connections WHERE account_id=accounts.id) ORDER BY id").map_err(query_error)?;
+            let rows = statement.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).map_err(query_error)?.collect::<Result<_, _>>().map_err(query_error)?;
+            Ok(rows)
+        })
     }
 }

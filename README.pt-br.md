@@ -418,6 +418,23 @@ Desative ou exclua um destino para parar os envios locais. Revogue o token no Bo
 o webhook no Discord para revogar o acesso no provedor; este aplicativo não revoga credenciais
 compartilhadas remotamente. Nenhuma dessas operações recolhe mensagens já aceitas.
 
+### Backup criptografado e regras portáteis
+
+Em **Configurações → Backup**, crie um backup local protegido por senha ou
+exporte/importe regras e buscas salvas como JSON legível. A prévia de importação
+exige mapeamento explícito de contas e destinos; regras entram desativadas com novas
+identidades. Nomes, consultas e condições no JSON podem conter texto privado.
+
+A restauração aparece antes da configuração inicial, quando o diretório de dados
+do aplicativo ainda não existe. Cria um cofre local isolado, nunca substitui bancos
+ou cofres existentes e exige novamente a senha do backup para desbloquear.
+Reconecte contas em cache adicionando o mesmo endereço exato em Contas. Regras,
+lembretes e destinos ficam desativados; consentimentos de IA/rede e envios pendentes
+não são restaurados. Binários de anexos não baixados, arquivos externos de anexos,
+modelos, credenciais e URLs secretas de integrações estão ausentes. A seleção nativa
+de arquivos exige um portal de desktop Linux. Veja [conteúdo, limites e recuperação
+do backup](docs/backup.md) (em inglês).
+
 ## Development
 
 ### Estrutura do Repositório

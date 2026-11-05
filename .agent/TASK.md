@@ -7,7 +7,7 @@
 
 ## Active Task
 
-[01.4] Encrypted Backup & Portable Rule Export — READY FOR PLANNING
+[01.4] Encrypted Backup & Portable Rule Export — RUNNING
 
 ---
 
@@ -1128,7 +1128,7 @@ All tasks inherit the repository DoD when implemented.
 
 ### Task [01.4]: Encrypted Backup & Portable Rule Export
 
-- **Status:** READY FOR PLANNING
+- **Status:** RUNNING
 - **Priority:** 10
 - **Depends On:** [03.5], [04.10] for rule and saved-view formats.
 - **Systems Involved:** `crates/storage`, `crates/vault`, desktop import/export UI.
@@ -1140,6 +1140,49 @@ All tasks inherit the repository DoD when implemented.
   are excluded from portable exports; restored integrations require reconnection and
   remain disabled until confirmed. Restore never silently overwrites an existing vault
   or database. Clearly state that unfetched attachment binaries are absent from backup.
+
+#### Approved Plan (2026-11-04; user approved with `proceed`)
+
+1. Define versioned, strictly validated portable-definition and encrypted-backup
+   formats in the existing headless crates; record the recovery contract in an ADR.
+   Preserve existing migrations, traits and IPC contracts with additive APIs only.
+2. Export rules and saved views as bounded JSON with explicit account/destination
+   placeholders. Preview imports, require explicit reference mapping, allocate fresh
+   IDs/revisions, and import rules disabled in one transaction. Missing references
+   must never broaden account scope; imports never evaluate historical mail.
+   Disclose that user-authored names, queries and predicates can contain private text.
+3. Produce a consistent SQLite/WAL read snapshot into a fresh encrypted artifact,
+   copying only allowlisted supported data. Use vault-owned Argon2id key derivation
+   and authenticated version metadata; keep source database keys, vault contents,
+   credentials and secret integration URLs out of the artifact. Never write a
+   plaintext database staging file or copy the live database file without its WAL.
+   Validate the SQLCipher snapshot mechanism offline before building the UI.
+4. Include cached message bodies/headers, attachment metadata, mailbox membership,
+   tags/read/star/snooze state, rules, saved views, category corrections, sender-review
+   choices, dismissals and supported non-secret preferences. Rebuild derived search
+   and conversation indexes as needed. Exclude model files, external attachment files,
+   active authorization sessions and pending mutation/rule/reminder/alert/digest work.
+   Restored accounts require reconnection; rules, reminders, destinations and AI/network
+   permissions remain disabled until explicitly configured/confirmed. No restore replay.
+5. Restore only through a startup recovery flow before workers start, into a new
+   private staging directory and fresh vault/database identity. Authenticate and
+   validate versions, integrity and references before publication. Refuse existing
+   target data/vaults, symlinks and path traversal; interruption leaves the original
+   installation intact and incomplete recovery retryable. No in-place merge restore.
+6. Add native file-selection/import-preview APIs and EN/PT-BR Settings/startup UI
+   with passphrase confirmation, dirty/busy guards and transient secret cleanup.
+   Explain included data, omitted unfetched attachment binaries, reconnection and
+   lack of passphrase recovery. No browser persistence or network validation.
+7. Verify synthetic round-trips, WAL-only committed data, concurrent-write snapshot
+   consistency, wrong passphrase, tampering/truncation, unsupported versions, invalid
+   references, import rollback, occupied targets and interrupted recovery. Prove no
+   credentials or pending deliveries survive restoration. Run the full repository
+   DoD, frontend formatting/build and policy scans; document contracts/gotchas,
+   create one conventional commit, then log its hash. Do not push.
+
+- **Approval boundary:** This plan proposes fresh-target recovery and the explicit
+  supported-data perimeter above. Implementation authorized by the user. Execute only [01.4]; halt for unapproved dependencies or
+  material changes to the recovery/security contract.
 
 ---
 
