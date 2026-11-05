@@ -1,0 +1,101 @@
+# Offline cached-mail CLI
+
+Build the standalone Rust executable without the desktop dependency graph:
+
+```bash
+cargo build --release --locked -p triage-mail-cli
+cargo test --locked -p triage-mail-cli
+target/release/triage-mail-cli --help
+```
+
+The package needs the Rust/native C build tools used by SQLCipher's bundled OpenSSL,
+but no Node, Tauri, GTK or WebKit. Dependency installation is a development step;
+the executable itself makes no IMAP/HTTP calls, downloads or deliveries. It starts
+no background workers and never loads the ONNX runtime.
+
+## Existing installation
+
+Always supply `--data-dir PATH` pointing to the desktop's existing app-data directory
+containing `mail.db`. The CLI does not consult `.env`, infer a path or initialize an
+installation. It reads the existing `application/database-key` vault entry. Without
+`--unlock-stdin` it uses the OS keyring; local keyring IPC may be required. It never
+creates a key or changes a keyring entry.
+
+With `--unlock-stdin`, only the existing `vault.enc` is used. Supply the passphrase
+through a trusted password-manager pipe or private file descriptor, followed by EOF.
+No secret value is accepted through arguments or environment variables. Interactive
+terminal stdin is refused to avoid echo. Input is UTF-8, nonempty, at most 4,096 bytes
+including an optional final LF/CRLF, with no embedded newline, CR or NUL; spaces are
+preserved. Buffers are zeroized. Vault files are bounded to 16 MiB before parsing.
+The `recovered-local-vault` marker requires this fallback-only mode, just as in startup
+recovery. A missing, malformed or incorrectly unlocked vault fails without creation.
+Direct symlinks for the data directory, database, fallback vault and recovery marker
+are refused; this is not a security boundary against concurrent hostile filesystem
+replacement or symlinked ancestors. Use a trusted private local directory.
+
+## Commands and JSON
+
+```bash
+# OS-keyring-backed installation
+target/release/triage-mail-cli --data-dir /path/to/triage-mail accounts
+target/release/triage-mail-cli --data-dir /path/to/triage-mail search --query boleto --account acct-a --limit 20 --offset 0
+target/release/triage-mail-cli --data-dir /path/to/triage-mail show --message-id msg-a
+
+# Fallback vault; fd 3 was already opened privately by the caller
+target/release/triage-mail-cli --data-dir /path/to/triage-mail --unlock-stdin accounts <&3
+```
+
+| Command    | Output and options                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `accounts` | JSON array of opaque account IDs ordered by ID; no addresses or connection settings. `--limit` and `--offset` paginate without imposing an account limit.                                                                                                                                                                                                                                                                            |
+| `search`   | JSON array of existing `MessageRowSummary` objects: IDs, subject/sender, time, flags, category/extraction badges, tags and local folder/snooze state. `--query` defaults to empty (newest first); otherwise uses the existing literal lexical FTS phrase behavior and stored tokenizer. `--account` restricts by exact opaque account ID; an unknown account yields an empty array. No mailbox/category/review filtering is implied. |
+| `show`     | JSON object `{ "id": "msg-a", "account_id": "acct-a", "text_plain": "cached text", "truncated": false }`. Required `--message-id`; no HTML, headers or attachments. Missing cached plain text is `null`, including HTML-only mail; no fallback conversion or lazy fetch occurs.                                                                                                                                                      |
+
+`accounts` and `search` default to 100 rows; `--limit` accepts 1..500 and `--offset`
+accepts nonnegative decimal integers whose page end fits SQLite's signed 64-bit range.
+Queries are at most 32 KiB. Account/message arguments are nonempty opaque IDs at most
+256 UTF-8 bytes, without control characters or `@`. Unknown/duplicate options and
+options belonging to another command fail. `--help` alone needs no installation.
+
+`show` loads at most 64 KiB of body bytes, dropping an incomplete final UTF-8 scalar
+and reporting `truncated`. Each successful response is one JSON value plus LF,
+at most 4 MiB including that LF. Control characters are JSON-escaped. Serialization
+finishes before printing; oversized responses produce a fixed error and no partial
+mail JSON. The output ceiling does not bound all internal FTS/hydration memory or
+query latency. A broken stdout stream can still interrupt a response during writing.
+
+Stdout contains private mail. Keep pipes and destinations private; the CLI creates
+no plaintext output files or logs. Stderr contains fixed diagnostics, never query,
+path, passphrase, provider response or message values. Exit codes are stable:
+
+| Code | Meaning                                                                  |
+| ---- | ------------------------------------------------------------------------ |
+| 0    | Successful command or help                                               |
+| 2    | Invalid arguments                                                        |
+| 3    | Existing vault/key unavailable, malformed, or wrong passphrase           |
+| 4    | Cache/path unavailable, invalid key, query failure or unsupported schema |
+| 5    | Requested message absent from cache                                      |
+| 6    | Input/output unavailable or response/input exceeds bounds                |
+
+## Storage and compatibility
+
+The current executable accepts schema 11 only, validating the complete migration
+sequence in the same read snapshot as each command. Older/newer databases fail;
+open supported older data in a compatible desktop to migrate it first. It does not
+migrate, repair, rebuild indexes, mark messages read or process pending work.
+
+The reader uses SQLCipher `READONLY`, `query_only=ON`, memory temporary storage and
+a five-second SQLite busy timeout. It does not change journal mode. Committed WAL
+data is included; never copy `mail.db` alone while desktop writes are active. SQLite
+can require readable existing `-wal`/`-shm` sidecars or directory permissions to create
+shared-memory sidecars; logical read-only access does not promise byte-for-byte
+filesystem immutability. Do not use SQLite immutable mode to bypass this requirement.
+Concurrent commits appear on subsequent commands; pagination across invocations is
+not a pinned snapshot. Desktop schema upgrades can make a later command fail closed.
+
+Offline tests cover fallback unlock, recovery gating, wrong/missing keys, schema
+rejection, WAL visibility/concurrent writes, exact lexical behavior, account scopes,
+pagination, direct symlinks, control bytes and output bounds. They do not establish
+live OS-keyring interoperability on every platform or native platform packaging.
+Sync, daemon/Docker operation, account setup, mutations, semantic indexing and all
+external actions remain outside this executable's command surface.

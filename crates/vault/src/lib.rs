@@ -11,6 +11,7 @@ pub mod auth;
 pub mod auto_store;
 pub mod backup;
 pub mod cipher;
+pub mod existing;
 pub mod fallback_store;
 pub mod keyring_store;
 

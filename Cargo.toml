@@ -6,6 +6,7 @@ members = [
     "crates/mail-engine",
     "crates/triage-ai",
     "apps/desktop/src-tauri",
+    "apps/cli",
 ]
 
 [workspace.package]

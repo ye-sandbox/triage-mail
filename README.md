@@ -211,6 +211,26 @@ pnpm --filter desktop build
 cargo build --release --package triage-mail-desktop
 ```
 
+### Offline cached-mail CLI
+
+Build a GUI-free executable and inspect an existing encrypted cache:
+
+```bash
+cargo build --release --locked -p triage-mail-cli
+target/release/triage-mail-cli --data-dir /path/to/triage-mail accounts
+target/release/triage-mail-cli --data-dir /path/to/triage-mail search --query boleto --limit 20
+target/release/triage-mail-cli --data-dir /path/to/triage-mail show --message-id msg-a
+cargo test --locked -p triage-mail-cli
+```
+
+Keys remain in the existing vault. For fallback unlock, add `--unlock-stdin` and pipe
+the passphrase from a trusted password manager or private file descriptor; terminal
+stdin is refused. Recovered installations require fallback unlock. Stdout contains
+private mail as bounded JSON. The CLI accepts schema 11 only and performs local
+read-only queries, without initialization, migration, sync or automation. SQLite WAL
+access can require shared-memory sidecars/directory permissions. See the [CLI reference](docs/cli.md)
+for output shapes, limits, exit codes and compatibility.
+
 ### Conversations and thread triage
 
 Select **Conversations** above the message list to group cached mail within each account.
@@ -444,6 +464,7 @@ explicitly provisioned artifacts; ordinary workspace tests do not.
 .
 ├── .agent/                   # ADD governance, active contracts (NOTES.md), and task roadmap (TASK.md)
 ├── apps/
+│   ├── cli/                  # Offline Rust CLI for read-only cached-mail access
 │   └── desktop/              # SvelteKit 5 SPA frontend + Tauri v2 (src-tauri) entrypoint
 ├── crates/
 │   ├── mail-engine/          # Async IMAP, OAuth2 PKCE loopback, IDLE manager, RFC 5322 MIME parser

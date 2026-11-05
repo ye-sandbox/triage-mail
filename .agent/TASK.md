@@ -7,7 +7,68 @@
 
 ## Active Task
 
-No active task — [03.10] completed. Remaining backlog is unprioritized and requires planning.
+### Task [00.3]: Offline Headless CLI for Cached Mail
+
+- **Status:** RUNNING
+- **Selection:** Proposed from the unprioritized headless CLI / Docker runner backlog
+  after the user's `proceed` on 2026-11-05. [03.10] remains complete.
+- **Systems Involved:** New `apps/cli` Rust workspace member, additive read-only
+  storage/vault access where necessary, offline integration tests and documentation.
+- **Scope:** A first headless executable for existing encrypted cached mail: list
+  opaque account IDs, lexical search and explicit plain-text message inspection.
+  No daemon, Docker image, sync workers, remote actions or account provisioning.
+
+#### Approved Implementation Plan (2026-11-05)
+
+1. Add a pure Rust `triage-mail-cli` workspace executable with `#![forbid(unsafe_code)]`
+   and no dependency on Tauri or desktop runtime modules. Reuse cached dependencies;
+   record the composition and read-only boundary in an ADR. Preserve all existing
+   core traits, IPC payloads, migrations and exact search behavior.
+2. Require an explicit existing app-data directory. Retrieve the existing database
+   key through `vault` only; never generate a replacement key, initialize storage,
+   migrate a database or repair a missing installation. Respect recovered-vault
+   fallback-only semantics. Support explicit fallback unlock through bounded stdin,
+   zeroize input, and accept no secrets in command arguments or environment variables.
+   Missing keys, wrong passphrases and unsupported schemas fail with fixed errors.
+3. Add an additive read-only repository opener using SQLite read-only flags and
+   query-only enforcement, preserving encrypted WAL visibility without immutable-mode
+   assumptions. Reuse stored tokenizer configuration. Never mutate logical data,
+   queue work or change journal mode; document any SQLite WAL/SHM sidecar requirements.
+   Validate current supported schema before querying; do not run schema migrations.
+4. Implement `accounts`, `search` and `show` commands with stable bounded JSON output
+   and documented exit codes. Accounts exposes opaque IDs only. Search is lexical,
+   supports an optional exact account ID and bounded limit/offset, and returns cached
+   row summaries. Show explicitly returns cached plain text for one opaque message ID,
+   with size limits and truncation metadata; never fetch or render HTML/attachments.
+   JSON-escape control characters and keep private mail out of diagnostics.
+5. Test the executable against synthetic encrypted fixtures: correct/wrong/missing
+   keys, fallback unlock, recovered-vault selection, incompatible schemas, committed
+   WAL data, concurrent desktop-style writes, pagination/account isolation, malformed
+   arguments, output bounds and control characters. Assert no logical writes, schema
+   upgrades, new-installation creation or pending-work processing. Verify the CLI
+   package builds without Tauri/GTK/WebKit dependencies.
+6. Load `readme-standard` before paired README edits; locate the skill or stop if it
+   is unavailable. Document commands, secret input, private stdout, schema compatibility
+   and the cached-only scope in EN/PT-BR. Run the full repository DoD, SPA build,
+   applicable formatting and tracked-file secret/PII scans. Preserve active contracts
+   and relevant knowledge, make an atomic Conventional Commit, log its hash and close
+   only [00.3]. Do not push or start a daemon/Docker successor.
+
+- **Approval:** User approved this plan with `proceed` on 2026-11-05.
+- **Approval boundary:** This implementation adds
+  one workspace executable and additive local read APIs only. No network provisioning,
+  new runtime network permission, key export, desktop-runtime extraction, semantic
+  indexing or automation execution is included. Material dependencies or changes to
+  the storage/vault security contract return to planning.
+
+#### Closing Checklist — [00.3]
+
+- [x] Implementation plan approved.
+- [ ] Headless cached-mail commands with vault-only keys and read-only SQLCipher access.
+- [ ] Offline CLI/security regressions and GUI-free package build.
+- [ ] Full repository DoD, SPA build, formatting and secret/PII checks.
+- [ ] EN/PT-BR documentation, ADR/contracts and applicable knowledge preservation.
+- [ ] Atomic conventional commit with recorded hash; task closed without pushing.
 
 ---
 
