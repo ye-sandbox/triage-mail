@@ -11,6 +11,8 @@ workspace = true
 async-trait = "0.1.92"
 mail-engine = { workspace = true }
 storage = { workspace = true }
+triage-ai = { workspace = true }
+serde_json = { workspace = true }
 vault = { workspace = true }
 zeroize = "1.9.1"
 getrandom = "0.2"

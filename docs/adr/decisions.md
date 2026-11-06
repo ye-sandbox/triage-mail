@@ -766,3 +766,40 @@ type: architectural-decision-log
   hostile-replacement and unsupported-platform limits from ADR-025 remain. Offline
   injected keyring tests and real encrypted fallback/subprocess checks do not establish
   live keyring interoperability or platform support beyond Linux x86_64.
+
+### [2026-11-05] ADR-027: Shared Synchronous Local Batch Ingestion
+
+- **Context:** The shared coordinator delegates its commit operation to a host, but
+  desktop-only message conversion and persistence would force another host to
+  duplicate canonical identity, deterministic extraction and arrival-frontier policy.
+- **Decision:** Add `sync_runtime::ingestion::ingest_batch` using a borrowed
+  `SqliteMailStore`, the coordinator's checkpoint/result and a host-provided
+  millisecond clock. Reuse existing workspace triage-ai and serde_json dependencies;
+  preserve schemas, existing traits, IPC and CLI interfaces. No GUI import, unsafe
+  code, worker, transport, credential operation or learned inference is introduced.
+- **Ordering:** Establish the rule baseline, then sender-review frontier, before
+  converting any messages, including empty/reset/invalid-message batches. Those
+  writes remain separate transactions and can survive a failed conversion or batch
+  commit. Preserve storage's atomic messages/flags/checkpoint/reset transaction and
+  return its canonical records, including deduplicated IDs, for host hooks.
+- **Conversion:** Preserve JSON tuple identity, deterministic classification,
+  unsubscribe metadata, threading headers, default local fields and attachment
+  metadata only. Reject zero UID and attachment-size overflow. The clock is read
+  for missing received time and separately for creation time, preserving the
+  original lazy fallback evaluation. Flag matching remains case-insensitive.
+- **Host:** Desktop retains the mutation gate and blocking executor around ingestion
+  and post-commit triage/rule hooks, reminder scheduling, injected indexing and final
+  buffered progress. Independent rule invalidations and fatal/best-effort failures
+  retain their existing order. Production borrows through guarded ServiceStore;
+  neither the operation nor its returned records expose an owned repository handle.
+- **Limits:** Borrowing does not acquire writer ownership or serialize other callers.
+  Hosts retain ownership throughout blocking work, including canceled awaits, and
+  must run hooks after a successful return. A success means the local batch committed,
+  not that remote side effects or later hooks completed. The operation does not
+  validate remote state beyond the existing conversion/storage checks; the coordinator
+  still rejects zero remote UIDVALIDITY. Existing host timing/cancellation limits apply.
+- **Validation:** Offline encrypted fixtures cover conversion, clock/identity behavior,
+  duplicate membership/flags, interrupted history frontiers and injected final
+  checkpoint failures with rollback of messages, flags, jobs and reset deletions.
+  Existing desktop regressions cover post-commit effects and event order. Synthetic
+  fixtures do not establish live provider or all-platform interoperability.

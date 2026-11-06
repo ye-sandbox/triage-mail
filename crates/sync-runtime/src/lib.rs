@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 pub mod bootstrap;
+pub mod ingestion;
 pub mod ownership;
 
 use std::time::Duration;
