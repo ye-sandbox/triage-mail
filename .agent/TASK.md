@@ -7,12 +7,107 @@
 
 ## Active Task
 
-No active task — [00.7] completed. Active headless execution, daemon lifecycle and
+No active task — [00.8] completed. Active headless execution, daemon lifecycle and
 writable container deployment remain unprioritized and require a separate plan.
 
 ---
 
 ## Latest Completed Task
+
+### Task [00.8]: Shared Local Sync Batch Ingestion
+
+- **Status:** DONE
+- **Selection:** Proposed after the user's `proceed` on 2026-11-05. [00.7] remains
+  complete. Share local ingestion policy before introducing an active headless host.
+- **Systems Involved:** Pure Rust sync-runtime ingestion, desktop sync adapter,
+  offline encrypted fixtures and architecture/contracts documentation.
+- **Problem:** The shared coordinator still delegates message conversion and local
+  persistence to desktop-only code. A future host would otherwise duplicate canonical
+  identity, deterministic extraction, baseline/frontier setup and batch commit policy.
+- **Scope:** Extract message/flag conversion and local batch persistence into
+  sync-runtime. Desktop retains blocking execution, mutation gates, post-commit hooks,
+  event publication and all worker/provider composition.
+
+#### Approved Implementation Plan (2026-11-05)
+
+1. Record an additive ingestion boundary in an ADR. Reuse existing cached workspace
+   dependencies, including triage-ai and serde_json; add no dependency downloads,
+   unsafe code, GUI imports, schema changes or existing trait/signature changes.
+   Keep learned inference out of this path; deterministic extraction only.
+2. Extract ParsedInboundMessage-to-MessageRecord conversion and flag normalization.
+   Preserve canonical JSON identity, attachment metadata-only handling, category and
+   unsubscribe extraction, timestamps, defaults and fixed error classifications.
+   Make time an explicit injectable input/provider without changing production timing
+   semantics. Preserve UID-zero and attachment-size-overflow refusal.
+3. Add synchronous local ingestion using borrowed storage access from the retained
+   ownership-bound handle in production. Preserve rule baseline then sender-review
+   frontier establishment before conversion and the atomic message/flag/checkpoint
+   commit, including UIDVALIDITY reset and canonical deduplication. Return committed
+   records for host hooks; do not move hooks into the storage transaction or imply
+   rollback of separately established baselines/frontiers.
+4. Adapt DesktopSyncHost to the shared ingestion operation under its existing mutation
+   gate and blocking executor. Preserve triage/rule hooks, reminder scheduling,
+   injected indexing, independent rule invalidations and final buffered progress in
+   their existing order, including fatal versus best-effort failures. Retain guarded
+   resource and cancellation lifetimes; no worker or remote action is added.
+5. Add offline conversion and encrypted-fixture regressions for canonical identity,
+   lazy attachment metadata, invalid inputs, flag deltas, reset/checkpoint atomicity,
+   duplicates and rule/review baseline ordering. Preserve existing desktop encrypted
+   adapter/event-order and cancellation regressions. Demonstrate pure Rust dependency
+   boundaries without loading inference artifacts or contacting a credential service.
+6. Run the full repository DoD, SPA build, applicable formatting and tracked-file
+   secret/PII checks with cached offline tooling and the existing native sysroot.
+   Preserve active contracts and applicable knowledge; use readme-standard if paired
+   README changes become necessary. Commit atomically and log its hash; close only
+   [00.8], without pushing or starting another task.
+
+- **Approval:** User approved with `proceed` on 2026-11-05.
+- **Approval boundary:** Local ingestion extraction and desktop adaptation only. No
+  active CLI/daemon, transport/authentication extraction, account setup, new credential
+  format, schema/IPC change, automation scheduling/delivery consent change, writable
+  container, live validation, package/model download or publication. Missing cached
+  prerequisites or material behavior/dependency changes return to planning.
+- **Build exception:** User explicitly approved build-only toolchain, package and
+  dependency downloads on 2026-11-05 after the session prerequisite check. Restore
+  private temporary tooling/sysroot without changing runtime dependency versions or
+  system packages. No provider, AI/model or delivery traffic is authorized. This
+  exception supersedes the offline-only prerequisite restrictions above.
+- **Open blockers:** None; validation environment restoration is in progress.
+
+#### Completion (2026-11-06)
+
+- **Commit:** `90222ba` (`refactor(sync): share local batch ingestion and arrival frontiers`).
+- **Delivered:** Pure Rust `sync_runtime::ingestion::ingest_batch` with deterministic
+  triage extraction, case-insensitive flag normalization, arrival frontier establishment
+  (rule baseline followed by sender review) prior to message conversion, atomic
+  commit of messages, flags, checkpoint and UIDVALIDITY reset deletions, and return of
+  canonical deduplicated records for host hooks. Desktop sync adapter adapted to the
+  shared ingestion operation while retaining mutation gates, blocking execution, post-commit
+  triage/rule hooks, reminders, injected indexing and buffered progress.
+- **Validation:** Locked workspace check, test, clippy (`-D warnings`) and format check pass.
+  New conversion and encrypted-fixture unit/integration tests cover identity tuples,
+  injected clocks, invalid inputs, frontier retention on error, canonical duplicate identity,
+  and atomic rollback on checkpoint failure. All 30 desktop IPC integration tests pass.
+- **Frontend/perimeter:** Desktop `svelte-check` reports 0 errors and 0 warnings; all 184
+  frontend unit tests pass; SPA production build succeeds. CI policy scan reports 446
+  tracked text files with 0 findings; Svelte 5 runes invariant (`export let`) and clean
+  `git diff --check` pass.
+- **Perimeter:** ADR-027, active contracts and k-041 preserve arrival-frontier precedence,
+  clock injection semantics and canonical deduplication invariants.
+- **Next:** No prioritized successor is available. Active headless execution, daemon
+  lifecycle, writable container deployment and low-I/O resource hardening require
+  separate plans. Nothing pushed.
+
+#### Closing Checklist — [00.8]
+
+- [x] Implementation plan approved.
+- [x] Shared ingestion preserves conversion, baseline/frontier and commit behavior.
+- [x] Offline ingestion and desktop hook/event-order regressions pass.
+- [x] Full repository DoD, SPA build, formatting and secret/PII checks pass.
+- [x] ADR, active contracts and applicable knowledge preserved.
+- [x] Atomic Conventional Commit recorded; task closed without pushing.
+
+---
 
 ### Task [00.7]: Shared Local Installation Bootstrap
 
@@ -2034,6 +2129,28 @@ All tasks inherit the repository DoD when implemented.
 - [x] ADR-021, active contracts and k-033 knowledge preservation.
 - [x] Atomic conventional feature commit; hash recorded above.
 - [x] Task closed; no prioritized successor available to promote.
+
+---
+
+
+### Task [05.1]: Low-I/O Compilation & Test Suite Resource Hardening
+
+- **Status:** PLANNING
+- **Selection:** Proposed after the host environment resource baseline was established
+  on 2026-11-06. Aligns with ecosystem low-I/O governance to prevent rotational disk (HDD)
+  I/O queue saturation during agent compilation and automated test runs.
+- **Systems Involved:** Workspace Cargo profiles (`Cargo.toml`), frontend test runner
+  configuration (`apps/desktop/vitest.config.ts`), and offline regression suites.
+- **Problem:** Default Rust debug level (`debug = 2`) produces multi-gigabyte DWARF
+  intermediate artifacts, while Vitest concurrent workers trigger simultaneous random read
+  spikes across mechanical disk heads, resulting in queue saturation (>300 IO/s) and
+  avoidable test timeouts.
+- **Scope:**
+  1. Formalize `[profile.dev]` and `[profile.test]` with `debug = 1` in workspace `Cargo.toml`.
+  2. Configure `apps/desktop/vitest.config.ts` with bounded concurrency (`pool: 'forks'`,
+     `maxConcurrency: 1`, `fileParallelism: false`) to avoid disk contention during UI tests.
+  3. Validate that offline test suites, `cargo check`, clippy and `pnpm test` pass with zero
+     regression, retaining 100% stack trace precision (`RUST_BACKTRACE=1`).
 
 ---
 
