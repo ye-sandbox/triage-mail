@@ -4,14 +4,13 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use mail_engine::{AdaptivePollConfig, AdaptivePollSchedule, ParsedInboundMessage};
-use storage::{AttachmentRecord, FolderSyncState, MailRepository, MessageRecord};
+use mail_engine::{AdaptivePollConfig, AdaptivePollSchedule};
+use storage::{FolderSyncState, MailRepository, MessageRecord};
 use tokio::sync::watch;
-use triage_ai::{DefaultDeterministicTriage, DeterministicTriage};
 
 use crate::events::BatchEvents;
 use crate::remote::{MutationOutcome, RemoteMutation};
-use crate::service::{now_ms, storage_error};
+use crate::service::storage_error;
 use crate::{AccountConfigDto, DesktopService, IpcError, SyncProgressEvent, SyncState};
 
 /// Owns cancellation for desktop workers, independently of frontend channel subscriptions.
@@ -166,82 +165,6 @@ pub async fn sync_account_once(
             sync_runtime::SyncError::Host(error) => error,
             sync_runtime::SyncError::RemoteUnavailable => IpcError::RemoteUnavailable,
         })
-}
-
-fn message_record(
-    message: ParsedInboundMessage,
-    state: &FolderSyncState,
-) -> Result<MessageRecord, IpcError> {
-    if message.uid == 0 {
-        return Err(IpcError::InvalidRequest);
-    }
-    let id = serde_json::to_string(&(
-        &state.account_id,
-        &state.folder_name,
-        state.uidvalidity,
-        message.uid,
-    ))
-    .map_err(|_| IpcError::Internal)?;
-    let unsubscribe = message.unsubscribe;
-    let supported = unsubscribe
-        .as_ref()
-        .is_some_and(|u| u.supports_rfc8058_one_click);
-    let triage = DefaultDeterministicTriage.analyze(
-        &message.subject,
-        &message.sender,
-        message.text_plain.as_deref().unwrap_or_default(),
-        supported,
-    );
-    let attachments = message
-        .attachments
-        .into_iter()
-        .map(|a| {
-            Ok(AttachmentRecord {
-                id: format!("{id}:{}", a.part_id),
-                message_id: id.clone(),
-                part_id: a.part_id,
-                filename: a.filename,
-                content_type: a.mime_type,
-                size_bytes: a
-                    .size_bytes
-                    .try_into()
-                    .map_err(|_| IpcError::InvalidRequest)?,
-                content_id: a.content_id,
-                is_inline: a.is_inline,
-            })
-        })
-        .collect::<Result<Vec<_>, IpcError>>()?;
-    Ok(MessageRecord {
-        id,
-        account_id: state.account_id.clone(),
-        folder: state.folder_name.clone(),
-        uid: message.uid,
-        message_id_header: message.message_id_header,
-        in_reply_to: message.in_reply_to,
-        references_header: message.references_header,
-        subject: message.subject,
-        sender: message.sender,
-        recipients: message.recipients.join(", "),
-        received_at_epoch_ms: message.date_epoch_ms.unwrap_or_else(now_ms),
-        is_read: false,
-        has_attachments: !attachments.is_empty(),
-        category_badge: Some(format!("{:?}", triage.category)),
-        triage_badges: triage.badges,
-        raw_headers: message.raw_headers.unwrap_or_default(),
-        text_body: message.text_plain,
-        html_body: message.html_raw,
-        list_unsubscribe: unsubscribe
-            .as_ref()
-            .and_then(|u| u.raw_list_unsubscribe.clone()),
-        list_unsubscribe_post: unsubscribe.and_then(|u| u.raw_list_unsubscribe_post),
-        one_click_unsubscribe_supported: supported,
-        created_at_epoch_ms: now_ms(),
-        attachments,
-        tags: Vec::new(),
-        is_starred: false,
-        snooze_until_epoch_ms: None,
-        provider_message_id: message.provider_message_id,
-    })
 }
 
 async fn category_loop(service: Arc<DesktopService>) {

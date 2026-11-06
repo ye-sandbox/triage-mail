@@ -8,7 +8,7 @@ use std::sync::Arc;
 use storage::{FolderRecord, FolderSyncState, MessageRecord};
 use triage_ai::{DeterministicTriageResult, TriageCategory, TriageEventHook};
 
-use super::{checkpoint, index_injected_provider, message_record, status};
+use super::{checkpoint, index_injected_provider, status};
 use crate::events::BatchEvents;
 use crate::service::{now_ms, storage_error};
 use crate::{AccountConfigDto, DesktopService, IpcError, SyncState};
@@ -110,33 +110,17 @@ fn persist_batch(
     result: IncrementalSyncResult,
     events: Arc<BatchEvents>,
 ) -> Result<(), IpcError> {
-    s.store
-        .establish_rule_baseline(
-            &state.account_id,
-            &state.folder_name,
-            state.uidvalidity,
-            result.server_uidnext,
-        )
-        .map_err(storage_error)?;
-    s.store
-        .establish_review_frontier(
-            &state.account_id,
-            &state.folder_name,
-            state.uidvalidity,
-            result.server_uidnext,
-        )
-        .map_err(storage_error)?;
-    let records = result
-        .new_messages
-        .into_iter()
-        .map(|m| message_record(m, &state))
-        .collect::<Result<Vec<_>, _>>()?;
-    let flags = message_flags(result.flag_deltas);
-    let records = s
-        .store
-        .commit_sync_batch(&records, &flags, &state, result.uidvalidity_reset)
-        .map_err(storage_error)?;
-    finish_batch(s, &state, &records, &events, result.uidvalidity_reset)
+    let reset = result.uidvalidity_reset;
+    let records = sync_runtime::ingestion::ingest_batch(&s.store, &state, result, now_ms).map_err(
+        |error| match error {
+            sync_runtime::ingestion::IngestError::InvalidRequest => IpcError::InvalidRequest,
+            sync_runtime::ingestion::IngestError::StorageUnavailable => {
+                IpcError::StorageUnavailable
+            }
+            sync_runtime::ingestion::IngestError::Internal => IpcError::Internal,
+        },
+    )?;
+    finish_batch(s, &state, &records, &events, reset)
 }
 
 fn finish_batch(
@@ -201,21 +185,4 @@ fn triage_hooks(
         }
     }
     Ok(())
-}
-
-fn message_flags(deltas: Vec<mail_engine::protocol::UidFlags>) -> Vec<storage::MessageFlagsDelta> {
-    deltas
-        .into_iter()
-        .map(|delta| storage::MessageFlagsDelta {
-            uid: delta.uid,
-            is_read: delta
-                .flags
-                .iter()
-                .any(|flag| flag.eq_ignore_ascii_case("\\Seen")),
-            is_starred: delta
-                .flags
-                .iter()
-                .any(|flag| flag.eq_ignore_ascii_case("\\Flagged")),
-        })
-        .collect()
 }

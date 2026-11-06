@@ -4613,9 +4613,11 @@ dependencies = [
  "async-trait",
  "getrandom 0.2.17",
  "mail-engine",
+ "serde_json",
  "storage",
  "tempfile",
  "tokio",
+ "triage-ai",
  "vault",
  "zeroize",
 ]

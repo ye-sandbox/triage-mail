@@ -27,7 +27,7 @@ All core domain crates MUST remain pure Rust (zero dependency on `tauri`) so the
 | `crates/storage` | Single-file SQLite WAL + Full-DB SQLCipher + Configurable `FTS5` (default `unicode61 remove_diacritics 2`) + `sqlite-vec` (`int8` quantized KNN + pre-filtering) + IMAP `UIDVALIDITY`/`MODSEQ` sync state | `MailRepository`, `SearchEngine` (`HybridQuery` -> `<15ms`), `MigrationRunner` | `crates/vault` (`#![deny(unsafe_code)]` with isolated `#[allow(unsafe_code)]` only on `sqlite-vec` FFI init) |
 | `crates/mail-engine` | Agnostic IMAP transport (`ImapConnector` trait), incremental sync (`UIDVALIDITY`/`CONDSTORE`), transparent multi-auth (App Passwords, OAuth2 Public PKCE, user-supplied BYO OAuth `client_id`/`client_secret`, Proton Bridge), RFC 8058 One-Click Unsubscribe, `mail-parser` | `ImapConnector`, `IdleManager`, `MimeExtractor`, `SyncEventSink` trait | `crates/vault` (`#![forbid(unsafe_code)]`) |
 | `crates/triage-ai` | 3-Tier Triage: Tier 1 (Regex 2FA/OTP, Pix EMV/keys, FEBRABAN Boletos with exact BRL value & due date, NF-e metadata, Tracking, `List-Unsubscribe` + RFC 8058 One-Click), Tier 2 (Local CPU ONNX embeddings downloaded on demand to `$XDG_DATA_HOME`), Tier 3 (Ollama/BYOK HTTP) | `DeterministicTriage`, `EmbeddingProvider` trait, `LlmSummarizer` trait, `TriageEventHook` trait | None (pure data in/out, `#![forbid(unsafe_code)]`) |
-| `crates/sync-runtime` | Ownership-bound local bootstrap and single-account sync coordinator; host-owned workers/transport/hooks | Additive `bootstrap::open`, `WriterOwnership`, `SyncHost`, `sync_account_once` | `mail-engine`, `storage`, `vault`; no desktop/Tauri dependency |
+| `crates/sync-runtime` | Ownership-bound local bootstrap, batch ingestion and single-account sync coordinator; host-owned workers/transport/hooks | Additive `bootstrap::open`, `ingestion::ingest_batch`, `WriterOwnership`, `SyncHost`, `sync_account_once` | `mail-engine`, `storage`, `vault`, `triage-ai`; no desktop/Tauri dependency |
 | `apps/desktop/src-tauri` | Tauri v2 IPC bridge, system tray, native window lifecycle | Typed `#[tauri::command]` handlers & `tauri::ipc::Channel<SyncEvent>` | `mail-engine`, `storage`, `vault`, `triage-ai` |
 | `apps/cli` | Offline cached-mail inspection; no workers or remote actions | `accounts`, `search`, `show`; bounded JSON and fixed exit codes | `storage`, `vault`; no desktop/Tauri dependency |
 
@@ -964,3 +964,24 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
   headless command, worker/network/inference startup or new provisioning policy.
 - Bootstrap is synchronous; hosts supply blocking execution and cancellation lifetime
   management. Existing cooperative Unix/local-filesystem limits remain. See k-040.
+
+## Shared Local Sync Batch Ingestion ([00.8] / ADR-027)
+
+- Additive synchronous `sync_runtime::ingestion::ingest_batch` borrows storage and
+  takes checkpoint/result plus an injectable millisecond clock. Reuses triage-ai and
+  serde_json; no existing trait, schema, IPC or CLI interface changes.
+- Establish rule baseline then review frontier before conversion, even on empty,
+  reset or invalid-message batches. These separate writes may survive failure.
+  Messages/flags/checkpoint/reset remain one storage transaction. Return storage's
+  canonical records, including deduplicated IDs; do not substitute proposed IDs.
+- Preserve deterministic extraction, JSON identity, threading/unsubscribe fields,
+  metadata-only lazy attachments, invalid UID/size refusal and case-insensitive flags.
+  Missing Date reads the host clock before a separate created-time clock reading.
+  Fixed IngestError variants contain no storage/serialization/private details.
+- Desktop retains gate/blocking execution, triage/rule hooks, reminders, injected
+  indexing and final buffered progress, preserving fatal/best-effort behavior and
+  independent rule invalidation events. Borrow through retained guarded storage in
+  production. The shared operation acquires no ownership and starts no effects.
+- Hosts retain ownership/serialization through running blocking work and execute
+  their own post-commit hooks. No active CLI/daemon, transport extraction, scheduling
+  policy, inference load or writable container is added. See k-041 and ADR-027.
