@@ -600,3 +600,445 @@ fn daemon_runs_with_max_iterations_and_emits_ndjson() {
     assert!(lines[3].contains(r#""event":"stopping""#));
     assert!(lines[4].contains(r#""event":"stopped""#));
 }
+
+#[cfg(target_os = "linux")]
+const MOCK_IMAP_SCRIPT: &str = r#"
+import ssl, socket, sys, threading
+
+ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+ctx.load_cert_chain("/certs/cert.pem", "/certs/key.pem")
+
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind(("127.0.0.1", 1143))
+server.listen(5)
+print("READY", flush=True)
+
+def handle(raw):
+    try:
+        conn = ctx.wrap_socket(raw, server_side=True)
+        conn.sendall(b"* OK [CAPABILITY IMAP4rev1 IDLE MOVE] IMAP ready\r\n")
+        while True:
+            line = b""
+            while not line.endswith(b"\r\n"):
+                b = conn.recv(1)
+                if not b:
+                    return
+                line += b
+            cmd = line.decode("ascii", "ignore")
+            parts = cmd.strip().split()
+            if not parts:
+                continue
+            tag = parts[0]
+            action = " ".join(parts[1:]).upper()
+            if "CAPABILITY" in action:
+                conn.sendall(f"* CAPABILITY IMAP4rev1 IDLE MOVE\r\n{tag} OK CAPABILITY completed\r\n".encode())
+            elif "LOGIN" in action:
+                conn.sendall(f"{tag} OK LOGIN completed\r\n".encode())
+            elif "LIST" in action:
+                conn.sendall(f"* LIST (\\HasNoChildren) \"/\" \"INBOX\"\r\n{tag} OK LIST completed\r\n".encode())
+            elif "SELECT" in action:
+                conn.sendall(f"* 1 EXISTS\r\n* OK [UIDVALIDITY 100] UIDs valid\r\n* OK [UIDNEXT 2]\r\n{tag} OK [READ-WRITE] SELECT completed\r\n".encode())
+            elif "SEARCH" in action:
+                conn.sendall(f"* SEARCH 1\r\n{tag} OK UID SEARCH completed\r\n".encode())
+            elif "FETCH" in action and "BODYSTRUCTURE" in action:
+                hdr = "From: billing@example.org\r\nTo: user@example.com\r\nSubject: Synthetic Inbound Boleto\r\nMessage-ID: <invoice-101@example.org>\r\nDate: Mon, 01 Jan 2026 00:00:00 +0000\r\n\r\n"
+                bs = "(\"TEXT\" \"PLAIN\" (\"CHARSET\" \"UTF-8\") NIL NIL \"7BIT\" 14 1)"
+                conn.sendall(f"* 1 FETCH (UID 1 FLAGS (\\Seen) BODYSTRUCTURE {bs} BODY[HEADER] {{{len(hdr)}}}\r\n{hdr})\r\n{tag} OK UID FETCH completed\r\n".encode())
+            elif "FETCH" in action and ("BODY" in action or "PEEK" in action):
+                body = "Boleto payload"
+                conn.sendall(f"* 1 FETCH (UID 1 BODY[1] {{{len(body)}}}\r\n{body})\r\n{tag} OK UID FETCH completed\r\n".encode())
+            elif "FETCH" in action and "FLAGS" in action:
+                conn.sendall(f"* 1 FETCH (UID 1 FLAGS (\\Seen))\r\n{tag} OK UID FETCH completed\r\n".encode())
+            elif "LOGOUT" in action:
+                conn.sendall(f"* BYE Logging out\r\n{tag} OK LOGOUT completed\r\n".encode())
+                break
+            else:
+                conn.sendall(f"{tag} OK done\r\n".encode())
+    except Exception:
+        pass
+
+while True:
+    try:
+        r, _ = server.accept()
+        threading.Thread(target=handle, args=(r,)).start()
+    except Exception:
+        break
+"#;
+
+#[cfg(target_os = "linux")]
+struct MockImapServer {
+    container_name: String,
+    _cert_dir: tempfile::TempDir,
+    child: std::process::Child,
+    port: u16,
+}
+
+#[cfg(target_os = "linux")]
+impl MockImapServer {
+    fn start() -> Self {
+        use std::io::BufRead;
+        let cert_dir = tempfile::tempdir().unwrap();
+        let key_path = cert_dir.path().join("key.pem");
+        let cert_path = cert_dir.path().join("cert.pem");
+        let openssl = Command::new("openssl")
+            .args([
+                "req",
+                "-x509",
+                "-newkey",
+                "rsa:2048",
+                "-nodes",
+                "-keyout",
+                key_path.to_str().unwrap(),
+                "-out",
+                cert_path.to_str().unwrap(),
+                "-days",
+                "1",
+                "-subj",
+                "/CN=127.0.0.1",
+            ])
+            .output()
+            .expect("openssl required");
+        assert!(openssl.status.success(), "openssl cert generation failed");
+
+        let container_name = format!("mock-imap-{}", std::process::id());
+        let mut child = Command::new("docker")
+            .args([
+                "run",
+                "--rm",
+                &format!("--name={container_name}"),
+                "--pull=never",
+                "-v",
+                &format!("{}:/certs:ro", cert_dir.path().display()),
+                "python:3-alpine",
+                "python3",
+                "-c",
+                MOCK_IMAP_SCRIPT,
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .expect("docker python:3-alpine container required for opt-in mock IMAP test");
+
+        let stdout = child.stdout.as_mut().expect("piped stdout");
+        let mut reader = std::io::BufReader::new(stdout);
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .expect("read READY from mock IMAP");
+        assert!(line.contains("READY"), "mock IMAP failed to start: {line}");
+
+        Self {
+            container_name,
+            _cert_dir: cert_dir,
+            child,
+            port: 1143,
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for MockImapServer {
+    fn drop(&mut self) {
+        let _ = Command::new("docker")
+            .args(["stop", "-t", "1", &self.container_name])
+            .status();
+        let _ = self.child.wait();
+    }
+}
+
+#[cfg(target_os = "linux")]
+struct WritableFixture {
+    parent: tempfile::TempDir,
+    app_dir: std::path::PathBuf,
+    #[allow(dead_code)]
+    store: storage::SqliteMailStore,
+    key: storage::DatabaseKey,
+}
+
+#[cfg(target_os = "linux")]
+fn writable_fixture(port: u16) -> WritableFixture {
+    let parent = tempfile::tempdir().unwrap();
+    let app_dir = parent.path().join("app");
+    std::fs::create_dir_all(&app_dir).unwrap();
+    let key = storage::DatabaseKey::from_bytes([23; 32]);
+    let store =
+        storage::SqliteMailStore::open(app_dir.join("mail.db"), &key, Default::default()).unwrap();
+    let conn =
+        storage::connection::open_encrypted_connection(app_dir.join("mail.db"), &key).unwrap();
+    conn.execute_batch(&format!(
+        "PRAGMA wal_autocheckpoint=0;
+         INSERT INTO accounts VALUES ('acct-test','user@example.com','ProtonBridgeLocal',0,0);
+         INSERT INTO account_connections VALUES ('acct-test','{{\"account_id\":\"acct-test\",\"email_display\":\"user@example.com\",\"imap_host\":\"127.0.0.1\",\"imap_port\":{port},\"auth_method\":\"ProtonBridgeLocal\"}}');"
+    ))
+    .unwrap();
+    let cipher = Arc::new(vault::Argon2AesGcmCipher::from_passphrase(PHRASE));
+    let fallback =
+        vault::EncryptedFallbackStore::file_backed(app_dir.join("vault.enc"), cipher).unwrap();
+    fallback
+        .set_secret(
+            &VaultKey::for_account("application", "database-key").unwrap(),
+            &[23; 32],
+        )
+        .unwrap();
+    let auth = vault::AccountAuthMaterial::ProtonBridgeLocal {
+        bridge_password: "bridge-secret".to_string(),
+    };
+    fallback
+        .set_secret(
+            &VaultKey::for_account("acct-test", "imap-auth").unwrap(),
+            &auth.to_bytes().unwrap(),
+        )
+        .unwrap();
+    WritableFixture {
+        parent,
+        app_dir,
+        store,
+        key,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn invoke_writable_container(
+    image: &str,
+    parent_path: &Path,
+    app_rel: &str,
+    network: &str,
+    arguments: &[&str],
+    phrase: &[u8],
+) -> Output {
+    use std::os::unix::fs::MetadataExt;
+    let owner = std::fs::metadata(parent_path).unwrap();
+    let mut child = Command::new("docker")
+        .args([
+            "run",
+            "--rm",
+            "--pull=never",
+            &format!("--network={network}"),
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--log-driver=none",
+            "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777",
+            "--user",
+            &format!("{}:{}", owner.uid(), owner.gid()),
+            "--mount",
+            &format!("type=bind,src={},dst=/data", parent_path.display()),
+            "-i",
+            image,
+            "--data-dir",
+            &format!("/data/{app_rel}"),
+            "--unlock-stdin",
+        ])
+        .args(arguments)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    if let Err(error) = child.stdin.take().unwrap().write_all(phrase) {
+        assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe);
+    }
+    child.wait_with_output().unwrap()
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires local Docker and TRIAGE_CLI_TEST_IMAGE; see docs/cli.md"]
+fn container_writable_refuses_when_host_owns_lock() {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let image = std::env::var("TRIAGE_CLI_TEST_IMAGE").expect("local image required");
+    let fixture = writable_fixture(0);
+    let lock_path = fixture.parent.path().join(".triage-mail-writer-app.lock");
+    let ownership = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&lock_path)
+        .unwrap();
+    ownership.try_lock().unwrap();
+
+    let output = invoke_writable_container(
+        &image,
+        fixture.parent.path(),
+        "app",
+        "none",
+        &["sync"],
+        PHRASE,
+    );
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("installation already owned by another writer"));
+
+    let daemon_output = invoke_writable_container(
+        &image,
+        fixture.parent.path(),
+        "app",
+        "none",
+        &["daemon", "--interval-secs", "60"],
+        PHRASE,
+    );
+    assert_eq!(daemon_output.status.code(), Some(7), "{daemon_output:?}");
+    let daemon_stderr = String::from_utf8_lossy(&daemon_output.stderr);
+    assert!(daemon_stderr.contains("installation already owned by another writer"));
+
+    drop(ownership);
+    assert!(std::fs::read(&lock_path).unwrap().is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires local Docker and TRIAGE_CLI_TEST_IMAGE; see docs/cli.md"]
+fn container_daemon_runs_and_drains_on_sigterm() {
+    use std::io::{BufRead, Read};
+    use std::os::unix::fs::MetadataExt;
+
+    let image = std::env::var("TRIAGE_CLI_TEST_IMAGE").expect("local image required");
+    let fixture = writable_fixture(0);
+    let owner = std::fs::metadata(fixture.parent.path()).unwrap();
+    let container_name = format!("triage-cli-test-daemon-{}", std::process::id());
+
+    let mut child = Command::new("docker")
+        .args([
+            "run",
+            "--rm",
+            &format!("--name={container_name}"),
+            "--pull=never",
+            "--network=none",
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--log-driver=none",
+            "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777",
+            "--user",
+            &format!("{}:{}", owner.uid(), owner.gid()),
+            "--mount",
+            &format!(
+                "type=bind,src={},dst=/data",
+                fixture.parent.path().display()
+            ),
+            "-i",
+            &image,
+            "--data-dir",
+            "/data/app",
+            "--unlock-stdin",
+            "daemon",
+            "--interval-secs",
+            "60",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    child.stdin.take().unwrap().write_all(PHRASE).unwrap();
+
+    let stdout = child.stdout.take().unwrap();
+    let mut reader = std::io::BufReader::new(stdout);
+    let mut first_line = String::new();
+    reader.read_line(&mut first_line).unwrap();
+    assert!(
+        first_line.contains(r#""event":"started""#),
+        "expected started event, got: {first_line}"
+    );
+
+    let lock_path = fixture.parent.path().join(".triage-mail-writer-app.lock");
+    assert!(lock_path.exists());
+    let host_lock = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&lock_path)
+        .unwrap();
+    assert!(matches!(
+        host_lock.try_lock(),
+        Err(std::fs::TryLockError::WouldBlock)
+    ));
+
+    let stop = Command::new("docker")
+        .args(["stop", "-t", "10", &container_name])
+        .status()
+        .unwrap();
+    assert!(stop.success(), "docker stop failed");
+
+    let mut remaining = String::new();
+    reader.read_to_string(&mut remaining).unwrap();
+    let full_stdout = format!("{first_line}{remaining}");
+    assert!(full_stdout.contains(r#""event":"stopping""#));
+    assert!(full_stdout.contains(r#""event":"stopped""#));
+
+    let status = child.wait().unwrap();
+    assert!(
+        status.success(),
+        "child container did not exit with code 0: {status:?}"
+    );
+    assert!(
+        host_lock.try_lock().is_ok(),
+        "lock was not released on daemon shutdown"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires local Docker and TRIAGE_CLI_TEST_IMAGE; see docs/cli.md"]
+fn container_writable_sync_commits_and_releases_lock() {
+    let image = std::env::var("TRIAGE_CLI_TEST_IMAGE").expect("local image required");
+    let mock = MockImapServer::start();
+    let fixture = writable_fixture(mock.port);
+
+    let output = invoke_writable_container(
+        &image,
+        fixture.parent.path(),
+        "app",
+        &format!("container:{}", mock.container_name),
+        &["sync", "--account", "acct-test"],
+        PHRASE,
+    );
+    assert!(
+        output.status.success(),
+        "sync failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let summary: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(summary["total_synced_messages"], 1);
+    assert_eq!(summary["accounts"][0]["account_id"], "acct-test");
+    assert_eq!(summary["accounts"][0]["synced_messages"], 1);
+    assert!(summary["accounts"][0]["error"].is_null());
+
+    let conn = storage::connection::open_encrypted_connection(
+        fixture.app_dir.join("mail.db"),
+        &fixture.key,
+    )
+    .unwrap();
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM messages WHERE account_id='acct-test'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 1);
+
+    let subject: String = conn
+        .query_row(
+            "SELECT subject FROM messages WHERE account_id='acct-test'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(subject, "Synthetic Inbound Boleto");
+
+    let lock_path = fixture.parent.path().join(".triage-mail-writer-app.lock");
+    assert!(lock_path.exists());
+    let test_lock = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&lock_path)
+        .unwrap();
+    assert!(
+        test_lock.try_lock().is_ok(),
+        "lock was not released by sync"
+    );
+}
