@@ -32,3 +32,9 @@ storage = { path = "crates/storage" }
 mail-engine = { path = "crates/mail-engine" }
 triage-ai = { path = "crates/triage-ai" }
 sync-runtime = { path = "crates/sync-runtime" }
+
+[profile.dev]
+debug = 1
+
+[profile.test]
+debug = 1
