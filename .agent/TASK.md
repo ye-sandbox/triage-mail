@@ -7,8 +7,62 @@
 
 ## Active Task
 
-No active task — [00.10] completed. Writable container deployment, multi-folder sync, and
-outbound SMTP composer remain unprioritized and require separate plans.
+No active task — [00.11] completed. Multi-folder sync and outbound SMTP composer
+remain unprioritized and require separate plans.
+
+
+---
+
+## Latest Completed Task
+
+### Task [00.11]: Writable Headless Container Deployment
+
+- **Status:** DONE
+- **Selection:** Selected by user on 2026-11-07 from unprioritized backlog following completion of [00.10] Headless Background Daemon & Periodic Sync Scheduler.
+- **Systems Involved:** Container packaging (`packaging/cli/`, `scripts/build-cli-image.sh`), `apps/cli`, `crates/sync-runtime`, offline Docker regression suites, and documentation (`docs/cli.md`).
+- **Problem:** Task [00.4] packaged `triage-mail-cli` strictly as an offline, read-only inspection container (`--read-only`, `--network=none`, bind mounting readonly data). Now that [00.9] (`sync`) and [00.10] (`daemon`) provide active headless synchronization with exclusive writer ownership (`WriterOwnership`), users running in containerized/homelab environments (Docker Compose, headless servers, Kubernetes) need a verified pattern to run `sync` and `daemon` in containers with writable volume mounts, non-root user permissions, sibling lock file location compatibility, outbound IMAP TLS egress, and graceful `SIGTERM` drain without compromising security invariants.
+- **Scope:**
+  1. Define volume layout and ownership contract for writable container deployments (handling the sibling `.triage-mail-writer-<name>.lock` file inside mounted volumes or subpaths).
+  2. Verify and document container networking requirements: outbound TLS (port 993 / loopback 1143) using compiled-in `webpki-roots`, with no inbound listening ports or telemetry.
+  3. Validate PID 1 signal forwarding (`SIGTERM`) in container for graceful daemon drain and lock release on `docker stop`.
+  4. Ensure fallback vault unlock via stdin (`--unlock-stdin`) works deterministically in headless container pipelines.
+  5. Add opt-in Docker integration tests in `apps/cli/tests/offline.rs` covering writable container `sync`, `daemon`, lock contention rejection (exit 7), and signal shutdown.
+  6. Document writable container usage in `docs/cli.md` (CLI usage, Docker run examples, volume mounts, permission mapping).
+
+#### Approved Implementation Plan (2026-11-07)
+
+1. `[00.11.1]` **Container Volume Layout & Writer Ownership Invariant:**
+   Document and formalize volume layout for writable container execution under non-root users (`65532:65532` or `--user $(id -u):$(id -g)`). Ensure `--data-dir /path/to/data` has a writable parent directory for the sibling `.triage-mail-writer-<name>.lock` file (e.g. mounting `/var/lib/triage-mail` with `--data-dir /var/lib/triage-mail/app` or using a dedicated writable data volume), retaining mode `0o600` on the lock.
+2. `[00.11.2]` **Container Outbound Network & Root TLS Verification:**
+   Validate that `sync` and `daemon` outbound TLS traffic succeeds using compiled-in `webpki_roots::TLS_SERVER_ROOTS` without requiring host certificate mounts. Document loopback bridge requirements for local Proton Mail Bridge.
+3. `[00.11.3]` **Signal Propagation & Graceful Drain as PID 1:**
+   Verify `triage-mail-cli daemon` running as container PID 1 handles `SIGTERM` (delivered by `docker stop`), finishes in-flight ticks, releases `WriterOwnership`, and exits cleanly with code 0.
+4. `[00.11.4]` **Opt-in Docker Integration Test Suite (`apps/cli/tests/offline.rs`):**
+   Add offline tests under `#[ignore = "requires local Docker and TRIAGE_CLI_TEST_IMAGE; see docs/cli.md"]`:
+   - `container_writable_sync_commits_and_releases_lock`: runs one-shot `sync` with mock IMAP, commits messages to SQLite, and releases lock.
+   - `container_daemon_runs_and_drains_on_sigterm`: runs `daemon` in container, verifies structured NDJSON output, and tests clean `SIGTERM` / `docker stop` exit.
+   - `container_writable_refuses_when_host_owns_lock`: verifies lock contention exits with code 7 without corrupting database or vault.
+5. `[00.11.5]` **Documentation, Knowledge Card & Full DoD:**
+   Update `docs/cli.md` with writable container deployment patterns and examples. Create `.agent/knowledge/k-045-writable-headless-container-deployment.md`. Validate full workspace DoD.
+
+#### Completion (2026-11-07)
+
+- **Delivered:** Writable headless container packaging and integration test suite. Configured volume mount and sibling lock layout conventions (`--data-dir /data/app` with writable parent mount), documented outbound TLS via compiled-in `webpki-roots` and Proton Mail Bridge loopback bridge patterns, verified PID 1 `SIGTERM` / `docker stop` graceful drain and lock release, and added 3 new opt-in Docker integration tests in `apps/cli/tests/offline.rs` (`container_writable_refuses_when_host_owns_lock`, `container_daemon_runs_and_drains_on_sigterm`, and `container_writable_sync_commits_and_releases_lock`).
+- **Validation:** Full workspace `cargo test --workspace` passed; `cargo clippy --workspace --all-targets -- -D warnings` reported 0 warnings; `cargo fmt --all -- --check` passed; all 4 opt-in container tests passed in Docker (`container_daemon_runs_and_drains_on_sigterm`, `container_writable_refuses_when_host_owns_lock`, `container_writable_sync_commits_and_releases_lock`, and `container_reads_readonly_encrypted_wal_and_fails_closed`). Frontend checks (`pnpm --filter desktop check`, `pnpm --filter desktop test`, `pnpm --filter desktop build`) succeeded with 0 errors/warnings. Policy scan reported 457 tracked text files with 0 findings.
+- **Knowledge:** Recorded in `.agent/knowledge/k-045-writable-headless-container-deployment.md`.
+- **Next:** No active task. Multi-folder sync and outbound SMTP composer remain unprioritized.
+
+#### Closing Checklist — [00.11]
+
+- [x] Implementation plan approved.
+- [x] Volume layout and sibling lock invariant formalized and tested.
+- [x] Container outbound network and compiled-in TLS roots verified.
+- [x] PID 1 SIGTERM signal propagation and graceful drain verified with docker stop.
+- [x] Opt-in Docker integration test suite added in apps/cli/tests/offline.rs (lock contention, daemon drain, and sync commit).
+- [x] Documentation updated in docs/cli.md and knowledge card k-045 created.
+- [x] Full workspace DoD passed: cargo test, clippy, fmt, pnpm check/test/build, ci-guard policy scan.
+- [x] Atomic Conventional Commit ready; closed without pushing.
+
 
 ---
 

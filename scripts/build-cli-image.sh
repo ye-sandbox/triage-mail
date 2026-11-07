@@ -7,6 +7,7 @@ if [[ $# -gt 1 || $(uname -sm) != 'Linux x86_64' ]]; then
   exit 2
 fi
 image=${1:-triage-mail-cli:local}
+export LIBONNXRUNTIME_NO_PKG_CONFIG="${LIBONNXRUNTIME_NO_PKG_CONFIG:-1}"
 cargo build --offline --locked --release --target x86_64-unknown-linux-gnu -p triage-mail-cli
 # Cargo metadata honors CARGO_TARGET_DIR and local Cargo configuration.
 target_dir=$(cargo metadata --offline --locked --no-deps --format-version 1 |

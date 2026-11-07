@@ -141,12 +141,13 @@ updated trusted host libraries for runtime fixes. Inspect the resulting image ID
 before use. No image is published by the script. Redistribution requires the
 corresponding source and applicable dependency license compliance.
 
-Supply an existing private app-data directory as a **read-only** bind mount. Use a
+Supply an existing private app-data directory as a **read-only** bind mount for inspection commands (`accounts`, `search`, `show`). Use a
 nonzero host UID/GID with permission to read its files; do not change production
 permissions merely to satisfy the image's default UID. With fd 3 already privately
 opened by the caller to supply the fallback passphrase:
 
 ```bash
+# Read-only inspection
 docker run --rm --pull=never --network=none --read-only \
   --user "$(id -u):$(id -g)" --cap-drop=ALL \
   --security-opt=no-new-privileges --log-driver=none \
@@ -169,22 +170,85 @@ The same WAL/SHM requirements apply inside the container. Existing readable,
 initialized `mail.db-wal` and `mail.db-shm` allow committed WAL reads. Missing or
 unusable sidecars can cause exit 4 on a read-only mount, including a cleanly closed
 WAL-mode installation. Do not switch to a writable data mount or SQLite immutable
-mode. Use a supported existing installation with usable sidecars, or inspect it
-with the native CLI under its documented filesystem permissions. Never copy only
-the live main database, and never fabricate a SHM file. The container does not
-repair sidecars, checkpoint, migrate or initialize storage.
+mode to bypass sidecar initialization. Use a supported existing installation with
+usable sidecars, or inspect it with the native CLI under its documented filesystem
+permissions. Never copy only the live main database, and never fabricate a SHM file.
+The container does not repair sidecars, checkpoint, migrate or initialize storage.
 
-Opt-in Docker regression (uses synthetic encrypted data only; never pulls an image):
+### Writable container deployment (`sync` and `daemon`)
+
+For active background sync (`sync` or `daemon`), provide a **writable** volume mount
+and configure network egress:
 
 ```bash
-TRIAGE_CLI_TEST_IMAGE=triage-mail-cli:local cargo test --offline --locked -p triage-mail-cli --test offline container_reads_readonly_encrypted_wal_and_fails_closed -- --ignored --exact
+# One-shot sync with outbound network and writable data volume
+docker run --rm --pull=never --read-only \
+  --user "$(id -u):$(id -g)" --cap-drop=ALL \
+  --security-opt=no-new-privileges --log-driver=none \
+  --tmpfs=/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777 \
+  --mount type=bind,src=/var/lib/triage-mail,dst=/data \
+  -i triage-mail-cli:local --data-dir /data/app --unlock-stdin sync <&3
+
+# Persistent background daemon with graceful shutdown on docker stop
+docker run -d --name triage-mail-daemon --pull=never --read-only \
+  --user "$(id -u):$(id -g)" --cap-drop=ALL \
+  --security-opt=no-new-privileges --log-driver=none \
+  --tmpfs=/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777 \
+  --mount type=bind,src=/var/lib/triage-mail,dst=/data \
+  -i triage-mail-cli:local --data-dir /data/app --unlock-stdin daemon --interval-secs 60 <&3
+
+# Graceful drain: PID 1 catches SIGTERM, completes in-flight ticks, releases lock, and exits with code 0
+docker stop -t 30 triage-mail-daemon
 ```
 
-This covers default help/non-root image configuration, native/container JSON parity
-for all three commands, recovered fallback unlock, wrong/empty passphrases, missing
-vault/cache, unsupported schema, committed WAL visibility, missing SHM refusal and
-mail/queue preservation with read-only mounts. Ordinary workspace tests skip it
-when Docker is unavailable. Runtime validation has been performed on Linux x86_64
-with Docker Desktop; other architectures and native host keyrings are not covered.
-This container performs offline cached-mail inspection only. Active synchronization,
-daemon operation, account setup and automation still require separate work.
+#### Volume layout & writer ownership invariant
+
+The exclusive `WriterOwnership` protocol coordinates active writers by creating an empty
+sibling lock file named `.triage-mail-writer-<name>.lock` in the **parent directory** of
+`--data-dir` with file mode `0o600`.
+
+- When running in a container with a read-only rootfs (`--read-only`), never point
+  `--data-dir` directly to `/data` because its parent `/` is read-only and lock creation
+  will fail with exit code 4.
+- Always point `--data-dir` to a subpath inside the writable volume, such as
+  `--data-dir /data/app` (where `/data` is the writable volume or bind mount). The lock
+  will reside at `/data/.triage-mail-writer-app.lock`, retaining proper non-root
+  write permissions and host/container lock synchronization.
+- If another process on the host or in a sibling container owns the installation,
+  `sync` and `daemon` immediately fail with exit code 7 (lock contention) without
+  modifying the database or vault.
+
+#### Network & TLS certificate verification
+
+- **Remote IMAP (Port 993):** Outbound TLS traffic uses compiled-in Mozilla root
+  certificates from `webpki-roots`. No host certificate bundle mounts (`/etc/ssl/certs`)
+  are required. No inbound listening ports are opened.
+- **Local Proton Mail Bridge:** Loopback self-signed certificates are strictly permitted
+  for loopback destinations (`127.0.0.1`, `::1`, `localhost`). On Linux host networking,
+  use `--network=host`. In containerized bridge networks or Docker Compose, connect via a
+  dedicated loopback bridge or container network namespace (`--network=container:bridge`).
+
+#### PID 1 signal propagation & graceful drain
+
+`triage-mail-cli` installs a dedicated POSIX `SIGTERM` handler alongside `SIGINT`. When
+running as container PID 1, `docker stop` signals the process directly. The daemon halts
+subsequent iterations, awaits completion of any in-flight sync tick, safely drops
+`WriterOwnership`, emits `{"event":"stopping"}` and `{"event":"stopped"}`, and exits
+cleanly with code 0.
+
+### Opt-in Docker regression tests
+
+Opt-in regressions use synthetic encrypted data only; Docker never pulls an external image.
+Build the local container image first, then run the container tests:
+
+```bash
+scripts/build-cli-image.sh triage-mail-cli:local
+TRIAGE_CLI_TEST_IMAGE=triage-mail-cli:local cargo test --offline --locked -p triage-mail-cli --test offline container_ -- --ignored
+```
+
+This suite validates:
+- `container_reads_readonly_encrypted_wal_and_fails_closed`: read-only mounts, JSON parity, WAL visibility, missing SHM refusal, and schema checks.
+- `container_writable_refuses_when_host_owns_lock`: lock contention rejection (exit code 7) for `sync` and `daemon` when host owns the lock.
+- `container_daemon_runs_and_drains_on_sigterm`: daemon lifecycle, NDJSON stdout streaming, PID 1 `SIGTERM` / `docker stop` handling, and clean lock release.
+- `container_writable_sync_commits_and_releases_lock`: active one-shot `sync`, TLS handshake, message ingestion into SQLite, and lock release.
+
