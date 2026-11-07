@@ -7,12 +7,83 @@
 
 ## Active Task
 
-No active task — [00.8] completed. Active headless execution, daemon lifecycle and
+No active task — [05.1] completed. Active headless execution, daemon lifecycle and
 writable container deployment remain unprioritized and require a separate plan.
 
 ---
 
 ## Latest Completed Task
+
+### Task [05.1]: Low-I/O Compilation & Test Suite Resource Hardening
+
+- **Status:** DONE
+- **Selection:** Proposed after the host environment resource baseline was established
+  on 2026-11-06. Aligns with ecosystem low-I/O governance to prevent rotational disk (HDD)
+  I/O queue saturation during agent compilation and automated test runs.
+- **Systems Involved:** Workspace Cargo profiles (`Cargo.toml`), frontend test runner
+  configuration (`apps/desktop/vite.config.ts`), and offline regression suites.
+- **Problem:** Default Rust debug level (`debug = 2`) produces multi-gigabyte DWARF
+  intermediate artifacts, while Vitest concurrent workers trigger simultaneous random read
+  spikes across mechanical disk heads, resulting in queue saturation (>300 IO/s) and
+  avoidable test timeouts.
+- **Scope:**
+  1. Formalize `[profile.dev]` and `[profile.test]` with `debug = 1` in workspace `Cargo.toml`.
+  2. Configure `apps/desktop/vite.config.ts` with bounded concurrency (`pool: 'forks'`,
+     `maxConcurrency: 1`, `fileParallelism: false`) to avoid disk contention during UI tests.
+  3. Validate that offline test suites, `cargo check`, clippy and `pnpm test` pass with zero
+     regression, retaining 100% stack trace precision (`RUST_BACKTRACE=1`).
+
+#### Approved Implementation Plan (2026-11-07)
+
+1. `[05.1.1]` **Cargo workspace compilation profile hardening:** In workspace `Cargo.toml`,
+   add explicit `[profile.dev]` and `[profile.test]` configurations with `debug = 1`
+   (line-tables only). This emits file names and line numbers required for actionable stack
+   traces and crash dumps without dumping multi-gigabyte variable and type DWARF definitions,
+   sharply reducing disk write volume and intermediate target directory bloat.
+2. `[05.1.2]` **Frontend test concurrency and thread isolation:** In `apps/desktop/vite.config.ts`,
+   configure the `test` block with bounded sequential execution parameters:
+   `pool: 'forks'`, `maxConcurrency: 1`, and `fileParallelism: false`. This avoids concurrent
+   worker read storms across rotational disk blocks while preserving test isolation in jsdom.
+3. `[05.1.3]` **Stack trace and test precision verification:** Verify that stack trace
+   information remains fully actionable under `debug = 1` by testing backtrace output
+   (`RUST_BACKTRACE=1`). Validate that all unit and integration tests across the workspace
+   pass without regression under the serialized runner.
+4. `[05.1.4]` **Full repository DoD validation:** Run the full repository Definition of Done:
+   `cargo check --workspace`, `cargo test --workspace`, `cargo fmt --all -- --check`,
+   `cargo clippy --workspace --all-targets -- -D warnings`, `pnpm --filter desktop check`,
+   `pnpm --filter desktop test`, `pnpm --filter desktop build`, Svelte 5 `export let` invariant,
+   and secret/PII scanning. Commit atomically with Conventional Commits
+   (`perf(build): configure low-io cargo profiles and vitest concurrency`).
+
+#### Completion (2026-11-07)
+
+- **Commit:** `0f84710` (`perf(build): configure low-io cargo profiles and vitest concurrency`).
+- **Delivered:** Workspace `Cargo.toml` configured with `[profile.dev]` and `[profile.test]`
+  at `debug = 1` (line tables only), preserving `.debug_line` / `RUST_BACKTRACE=1` precision
+  while omitting multi-gigabyte variable and type DWARF debuginfo. Frontend test runner
+  in `apps/desktop/vite.config.ts` configured with `pool: 'forks'`, `maxConcurrency: 1`, and
+  `fileParallelism: false` to eliminate simultaneous random disk head read thrashing on rotational HDDs.
+- **Validation:** `cargo check --workspace`, `cargo test --workspace` (375 tests passed),
+  `cargo fmt --all -- --check`, and all-target `cargo clippy --workspace --all-targets -- -D warnings`
+  exited 0. Desktop `svelte-check` reported 0 errors and 0 warnings; all 184 frontend unit tests
+  passed sequentially across 32 test files in Vitest; SPA production build succeeded.
+  CI policy scan reported 449 tracked text files with 0 findings; Svelte 5 runes invariant
+  (`export let`) and clean `git diff --check` passed.
+- **Knowledge:** Recorded in `.agent/knowledge/k-042-low-io-compilation-and-vitest-concurrency.md`.
+- **Next:** No prioritized successor is available. Active headless execution, daemon
+  lifecycle, and writable container deployment require separate plans. Nothing pushed.
+
+#### Closing Checklist — [05.1]
+
+- [x] Implementation plan approved.
+- [x] Cargo dev/test profiles hardened with debug = 1 retaining line tables.
+- [x] Vitest bounded concurrency configured with serial file execution and fork isolation.
+- [x] Offline test suites, clippy (-D warnings), check, and frontend tests pass.
+- [x] Full repository DoD, SPA build, formatting, and secret/PII checks pass.
+- [x] Knowledge card k-042 created.
+- [x] Atomic Conventional Commit recorded; task closed without pushing.
+
+---
 
 ### Task [00.8]: Shared Local Sync Batch Ingestion
 
@@ -2129,28 +2200,6 @@ All tasks inherit the repository DoD when implemented.
 - [x] ADR-021, active contracts and k-033 knowledge preservation.
 - [x] Atomic conventional feature commit; hash recorded above.
 - [x] Task closed; no prioritized successor available to promote.
-
----
-
-
-### Task [05.1]: Low-I/O Compilation & Test Suite Resource Hardening
-
-- **Status:** PLANNING
-- **Selection:** Proposed after the host environment resource baseline was established
-  on 2026-11-06. Aligns with ecosystem low-I/O governance to prevent rotational disk (HDD)
-  I/O queue saturation during agent compilation and automated test runs.
-- **Systems Involved:** Workspace Cargo profiles (`Cargo.toml`), frontend test runner
-  configuration (`apps/desktop/vitest.config.ts`), and offline regression suites.
-- **Problem:** Default Rust debug level (`debug = 2`) produces multi-gigabyte DWARF
-  intermediate artifacts, while Vitest concurrent workers trigger simultaneous random read
-  spikes across mechanical disk heads, resulting in queue saturation (>300 IO/s) and
-  avoidable test timeouts.
-- **Scope:**
-  1. Formalize `[profile.dev]` and `[profile.test]` with `debug = 1` in workspace `Cargo.toml`.
-  2. Configure `apps/desktop/vitest.config.ts` with bounded concurrency (`pool: 'forks'`,
-     `maxConcurrency: 1`, `fileParallelism: false`) to avoid disk contention during UI tests.
-  3. Validate that offline test suites, `cargo check`, clippy and `pnpm test` pass with zero
-     regression, retaining 100% stack trace precision (`RUST_BACKTRACE=1`).
 
 ---
 
