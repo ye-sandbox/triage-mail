@@ -43,6 +43,7 @@ outbound SMTP composer remain unprioritized and require separate plans.
 
 #### Completion (2026-11-07)
 
+- **Commit:** `c410ff2` (`feat(cli): add headless background daemon and periodic sync scheduler`).
 - **Delivered:** Pure Rust `run_daemon` in `crates/sync-runtime::daemon` with `DaemonConfig` and `DaemonEvent` DTOs. Added `daemon` subcommand to `apps/cli` with continuous `WriterOwnership` retention, SIGINT/SIGTERM graceful drain, bounded `--interval-secs` and `--max-iterations`, and NDJSON lifecycle streaming to stdout.
 - **Validation:** Full workspace `cargo test --workspace` passed (all crates and integration suites); all-target `cargo clippy --workspace --all-targets -- -D warnings` reported 0 warnings; `cargo fmt --all -- --check` passed. Frontend checks (`pnpm --filter desktop check`, `pnpm --filter desktop test`, `pnpm --filter desktop build`) succeeded with 0 errors/warnings. CI policy scan reported 454 tracked text files with 0 findings; git diff clean.
 - **Knowledge:** Recorded in `.agent/knowledge/k-044-headless-background-daemon-and-signal-drain.md`.
