@@ -23,6 +23,7 @@ pub enum HeadlessSyncError {
     Ingest(IngestError),
     Json(serde_json::Error),
     AccountNotFound(String),
+    InvalidConfig(String),
 }
 
 impl std::fmt::Display for HeadlessSyncError {
@@ -33,6 +34,7 @@ impl std::fmt::Display for HeadlessSyncError {
             Self::Ingest(e) => write!(f, "ingest error: {e}"),
             Self::Json(e) => write!(f, "json error: {e}"),
             Self::AccountNotFound(id) => write!(f, "account `{id}` not found"),
+            Self::InvalidConfig(msg) => write!(f, "invalid config: {msg}"),
         }
     }
 }

@@ -3,11 +3,16 @@
 
 pub mod account;
 pub mod bootstrap;
+pub mod daemon;
 pub mod host;
 pub mod ingestion;
 pub mod ownership;
 
 pub use account::AccountConnectionConfig;
+pub use daemon::{
+    run_daemon, DaemonConfig, DaemonEvent, DEFAULT_INTERVAL_SECS, MAX_INTERVAL_SECS,
+    MIN_INTERVAL_SECS,
+};
 pub use host::{
     sync_accounts, AccountSyncOutcome, DefaultSyncTransport, HeadlessSyncError, HeadlessSyncHost,
     SyncRunSummary, SyncTransport,

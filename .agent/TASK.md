@@ -7,8 +7,57 @@
 
 ## Active Task
 
-No active task — [00.9] completed. Daemon lifecycle, background scheduler, and writable
-container deployment remain unprioritized and require separate plans.
+No active task — [00.10] completed. Writable container deployment, multi-folder sync, and
+outbound SMTP composer remain unprioritized and require separate plans.
+
+---
+
+## Latest Completed Task
+
+### Task [00.10]: Headless Background Daemon & Periodic Sync Scheduler
+
+- **Status:** DONE
+- **Selection:** Selected by user on 2026-11-07 following the completion of [00.9] Headless One-Shot Sync Host & CLI Sync Command.
+- **Systems Involved:** Pure Rust `crates/sync-runtime`, `apps/cli`, offline regression suites, and architecture documentation (`docs/cli.md`).
+- **Problem:** `apps/cli` only supported one-shot synchronization via `triage-mail-cli sync`. In headless server environments (such as systemd services, background daemons, or containers), a persistent background process was needed that continuously coordinates periodic sync passes across configured accounts, respects termination signals (`SIGINT`/`SIGTERM`) with graceful drain, retains exclusive writer ownership, and emits deterministic structured NDJSON events without requiring the Tauri GUI.
+- **Scope:**
+  1. Implement a headless daemon scheduler in `crates/sync-runtime::daemon` with configurable interval (`interval_secs`), optional account filter, and cancellation token / signal listening.
+  2. Wire `daemon` subcommand into `apps/cli` with `--interval-secs` (default 60s, bounds 1..86400), optional `--account`, and optional `--max-iterations` (for deterministic testing/bounded runs).
+  3. Wire POSIX signal handling (`tokio::signal::ctrl_c` and unix `SIGTERM`) for graceful drain, allowing in-flight sync passes to finish before releasing `WriterOwnership` and exiting cleanly.
+  4. Stream NDJSON lifecycle and tick events to stdout (`daemon_started`, `sync_tick`, `daemon_stopping`, `daemon_stopped`) with zero secret/PII leakage.
+  5. Build offline integration tests covering periodic ticks, graceful signal/token shutdown, lock contention refusal, and parameter bounds.
+  6. Update CLI documentation in `docs/cli.md` and validate full repository Definition of Done.
+
+#### Approved Implementation Plan (2026-11-07)
+
+1. `[00.10.1]` **Shared Headless Daemon Scheduler (`crates/sync-runtime`):**
+   In `crates/sync-runtime`, added module `daemon` with `DaemonConfig` (`interval_secs`, `account_filter`, `max_iterations`), `DaemonEvent` (structured lifecycle and sync events), and `run_daemon` taking storage, transport, config, and a cancellation receiver / `tokio::sync::watch::Receiver<bool>`.
+2. `[00.10.2]` **CLI Daemon Subcommand Parsing (`apps/cli`):**
+   In `apps/cli::args`, added `Command::Daemon { interval_secs: u64, account: Option<String>, max_iterations: Option<usize> }`, parsing `--interval-secs` (default 60, min 1, max 86400) and optional `--max-iterations`.
+3. `[00.10.3]` **Daemon Execution & Graceful Signal Handling (`apps/cli`):**
+   In `apps/cli::main`, acquired `WriterOwnership` and bootstrapped installation. Spawned signal listeners (`SIGINT` / `SIGTERM`) triggering graceful shutdown. Streamed NDJSON progress to stdout. Exits cleanly with code 0 on graceful shutdown, or code 7 on writer contention.
+4. `[00.10.4]` **Offline Daemon Regressions:**
+   In `crates/sync-runtime/tests/daemon.rs` and `apps/cli/tests/offline.rs`, added tests for multi-tick runs, graceful cancellation mid-interval and mid-sync, lock contention refusal, and argument validation.
+5. `[00.10.5]` **Documentation & Full DoD Validation:**
+   Updated `docs/cli.md` with daemon flags, signal handling, and examples. Validated `cargo check`, `cargo test`, `cargo fmt`, `cargo clippy`, `pnpm check`, `pnpm test`, `pnpm build`, and tracked-file secret scans.
+
+#### Completion (2026-11-07)
+
+- **Delivered:** Pure Rust `run_daemon` in `crates/sync-runtime::daemon` with `DaemonConfig` and `DaemonEvent` DTOs. Added `daemon` subcommand to `apps/cli` with continuous `WriterOwnership` retention, SIGINT/SIGTERM graceful drain, bounded `--interval-secs` and `--max-iterations`, and NDJSON lifecycle streaming to stdout.
+- **Validation:** Full workspace `cargo test --workspace` passed (all crates and integration suites); all-target `cargo clippy --workspace --all-targets -- -D warnings` reported 0 warnings; `cargo fmt --all -- --check` passed. Frontend checks (`pnpm --filter desktop check`, `pnpm --filter desktop test`, `pnpm --filter desktop build`) succeeded with 0 errors/warnings. CI policy scan reported 454 tracked text files with 0 findings; git diff clean.
+- **Knowledge:** Recorded in `.agent/knowledge/k-044-headless-background-daemon-and-signal-drain.md`.
+- **Next:** No active task. Writable container deployment, multi-folder sync, and outbound SMTP composer remain unprioritized.
+
+#### Closing Checklist — [00.10]
+
+- [x] Implementation plan approved.
+- [x] DaemonConfig, DaemonEvent, and run_daemon loop implemented in sync-runtime.
+- [x] CLI daemon command wired with continuous writer ownership, SIGINT/SIGTERM drain, and NDJSON output.
+- [x] Offline daemon and CLI integration tests passing.
+- [x] Full repository DoD, SPA build, formatting, and secret/PII checks pass.
+- [x] Knowledge card k-044 created and docs/cli.md updated.
+- [x] Atomic Conventional Commit ready; closed without pushing.
+
 
 ---
 
