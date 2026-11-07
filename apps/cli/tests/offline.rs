@@ -510,6 +510,93 @@ fn sync_help_text_displays_synopsis_and_exit_codes() {
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("sync: [--account OPAQUE_ID]"));
+    assert!(stdout.contains("daemon: [--interval-secs 1..86400 (default 60)]"));
     assert!(stdout.contains("7 lock contention"));
     assert!(stdout.contains("8 remote error"));
+}
+
+#[cfg(unix)]
+#[test]
+fn daemon_refuses_with_exit_code_7_when_installation_is_already_owned() {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let fixture = fixture();
+    let path = fixture.dir.path();
+    let mut name = std::ffi::OsString::from(".triage-mail-writer-");
+    name.push(path.file_name().unwrap());
+    name.push(".lock");
+    let lock_path = path.parent().unwrap().join(name);
+    let ownership = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&lock_path)
+        .unwrap();
+    ownership.try_lock().unwrap();
+
+    let output = invoke(path, &["daemon", "--interval-secs", "60"], PHRASE);
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("installation already owned by another writer"));
+
+    drop(ownership);
+    let _ = std::fs::remove_file(lock_path);
+}
+
+#[test]
+fn daemon_refuses_unknown_account_with_exit_code_5() {
+    let fixture = fixture();
+    let path = fixture.dir.path();
+
+    let output = invoke(
+        path,
+        &[
+            "daemon",
+            "--account",
+            "non-existent-account",
+            "--max-iterations",
+            "1",
+        ],
+        PHRASE,
+    );
+    assert_eq!(output.status.code(), Some(5), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("cached message or account not found"));
+}
+
+#[test]
+fn daemon_refuses_invalid_interval_with_exit_code_2() {
+    let fixture = fixture();
+    let path = fixture.dir.path();
+
+    let output = invoke(path, &["daemon", "--interval-secs", "0"], PHRASE);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+}
+
+#[test]
+fn daemon_runs_with_max_iterations_and_emits_ndjson() {
+    let fixture = fixture();
+    let path = fixture.dir.path();
+
+    let output = invoke(
+        path,
+        &["daemon", "--interval-secs", "1", "--max-iterations", "2"],
+        PHRASE,
+    );
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert!(
+        lines.len() >= 4,
+        "expected at least 4 NDJSON lines, got {lines:?}"
+    );
+
+    assert!(lines[0].contains(r#""event":"started""#));
+    assert!(lines[1].contains(r#""event":"sync_tick""#));
+    assert!(lines[1].contains(r#""iteration":1"#));
+    assert!(lines[2].contains(r#""event":"sync_tick""#));
+    assert!(lines[2].contains(r#""iteration":2"#));
+    assert!(lines[3].contains(r#""event":"stopping""#));
+    assert!(lines[4].contains(r#""event":"stopped""#));
 }

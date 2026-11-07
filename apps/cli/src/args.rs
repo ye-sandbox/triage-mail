@@ -14,6 +14,11 @@ pub enum Command {
     Sync {
         account: Option<String>,
     },
+    Daemon {
+        interval_secs: u64,
+        account: Option<String>,
+        max_iterations: Option<usize>,
+    },
 }
 
 pub struct Options {
@@ -41,7 +46,7 @@ pub fn parse(args: impl Iterator<Item = OsString>) -> Result<Option<Options>, Er
         return Err(Error::Arguments);
     }
     let unlock_stdin = flags.remove("--unlock-stdin").is_some();
-    let (limit, offset) = if command == "show" || command == "sync" {
+    let (limit, offset) = if command == "show" || command == "sync" || command == "daemon" {
         (100, 0)
     } else {
         (
@@ -69,6 +74,35 @@ pub fn parse(args: impl Iterator<Item = OsString>) -> Result<Option<Options>, Er
         "sync" => Command::Sync {
             account: flags.remove("--account").map(identity).transpose()?,
         },
+        "daemon" => {
+            let interval_secs = match flags.remove("--interval-secs") {
+                Some(s) => {
+                    let val = s.parse::<u64>().map_err(|_| Error::Arguments)?;
+                    if !(sync_runtime::MIN_INTERVAL_SECS..=sync_runtime::MAX_INTERVAL_SECS)
+                        .contains(&val)
+                    {
+                        return Err(Error::Arguments);
+                    }
+                    val
+                }
+                None => sync_runtime::DEFAULT_INTERVAL_SECS,
+            };
+            let max_iterations = match flags.remove("--max-iterations") {
+                Some(s) => {
+                    let val = s.parse::<usize>().map_err(|_| Error::Arguments)?;
+                    if val == 0 || val > 1_000_000 {
+                        return Err(Error::Arguments);
+                    }
+                    Some(val)
+                }
+                None => None,
+            };
+            Command::Daemon {
+                interval_secs,
+                account: flags.remove("--account").map(identity).transpose()?,
+                max_iterations,
+            }
+        }
         _ => return Err(Error::Arguments),
     };
     if !flags.is_empty() {
@@ -96,7 +130,8 @@ fn flags(args: &[String]) -> Result<(BTreeMap<String, String>, String), Error> {
         }
         let value = match arg.as_str() {
             "--unlock-stdin" => String::new(),
-            "--data-dir" | "--query" | "--account" | "--message-id" | "--limit" | "--offset" => {
+            "--data-dir" | "--query" | "--account" | "--message-id" | "--limit" | "--offset"
+            | "--interval-secs" | "--max-iterations" => {
                 iter.next().ok_or(Error::Arguments)?.clone()
             }
             _ => return Err(Error::Arguments),
@@ -195,5 +230,34 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_eq!((options.limit, options.offset), (5, 10));
+
+        let daemon = parsed(&[
+            "daemon",
+            "--data-dir",
+            "cache",
+            "--interval-secs",
+            "120",
+            "--account",
+            "acc1",
+            "--max-iterations",
+            "10",
+        ])
+        .unwrap()
+        .unwrap();
+        match daemon.command {
+            Command::Daemon {
+                interval_secs,
+                account,
+                max_iterations,
+            } => {
+                assert_eq!(interval_secs, 120);
+                assert_eq!(account.as_deref(), Some("acc1"));
+                assert_eq!(max_iterations, Some(10));
+            }
+            _ => panic!("expected daemon command"),
+        }
+
+        assert!(parsed(&["daemon", "--data-dir", "cache", "--interval-secs", "0",]).is_err());
+        assert!(parsed(&["daemon", "--data-dir", "cache", "--interval-secs", "86401",]).is_err());
     }
 }
