@@ -7,8 +7,76 @@
 
 ## Active Task
 
-No active task — [05.1] completed. Active headless execution, daemon lifecycle and
-writable container deployment remain unprioritized and require a separate plan.
+No active task — [00.9] completed. Daemon lifecycle, background scheduler, and writable
+container deployment remain unprioritized and require separate plans.
+
+---
+
+## Latest Completed Task
+
+### Task [00.9]: Headless One-Shot Sync Host & CLI Sync Command
+
+- **Status:** DONE
+- **Selection:** Selected by user on 2026-11-07 following the completion of resource hardening [05.1]
+  and the shared sync foundation sequence ([00.5] coordinator, [00.6] exclusive writer ownership,
+  [00.7] shared installation bootstrap, and [00.8] shared batch ingestion).
+- **Systems Involved:** Pure Rust `crates/sync-runtime`, `apps/cli`, `crates/mail-engine`, `crates/storage`,
+  offline regression suites, and architecture documentation.
+- **Problem:** All foundational sync primitives are shared in `crates/sync-runtime`, but active IMAP
+  connection lifecycle, credential lookup, and `SyncHost` composition currently reside exclusively
+  in `apps/desktop/src-tauri`. `apps/cli` only provides read-only inspection (`accounts`, `search`, `show`).
+  Headless environments (CLI, cron, and headless daemons) cannot execute an inbound sync pass for
+  configured accounts without launching the Tauri GUI.
+- **Scope:**
+  1. Define a pure Rust headless `SyncHost` in `crates/sync-runtime` that resolves account connection
+     configs from `storage::SqliteMailStore` (`account_connections`) and credentials from `vault::SecretStore`.
+  2. Implement an agnostic IMAP sync host adapter utilizing `mail_engine::sync::execute_incremental_sync`
+     and `mail_engine::DefaultImapConnector` behind `#![forbid(unsafe_code)]`.
+  3. Add `sync` command to `apps/cli` (`triage-mail-cli --data-dir PATH [--unlock-stdin] sync [--account OPAQUE_ID]`),
+     safely acquiring `WriterOwnership` before connecting and committing batches.
+  4. Emit bounded JSON execution summary (account IDs, folder names, new messages, duration) to stdout;
+     exit with deterministic status codes without leaking passwords, tokens, or PII.
+  5. Build offline mock-IMAP regression tests covering successful one-shot sync passes, account filtering,
+     lock contention refusal, and credential-missing failure modes.
+
+#### Approved Implementation Plan (2026-11-07)
+
+1. `[00.9.1]` **Shared Headless Account Connection Model:** In `crates/sync-runtime`,
+   formalized the headless `AccountConnectionConfig` matching `account_connections`
+   (`account_id`, `email_display`, `imap_host`, `imap_port`, `auth_method`).
+2. `[00.9.2]` **Headless SyncHost Implementation:** Implemented `HeadlessSyncHost` in `crates/sync-runtime`
+   implementing `sync_runtime::SyncHost` with decoupled `SyncTransport` trait and `DefaultSyncTransport`.
+3. `[00.9.3]` **CLI Sync Subcommand Wiring:** Added `sync` subcommand to `apps/cli` with optional `--account`,
+   enforcing exclusive runtime writer ownership via `sync_runtime::ownership::WriterOwnership::acquire`
+   and bootstrap via `sync_runtime::bootstrap::open`.
+4. `[00.9.4]` **Output Serialization & Error Handling:** Serialized outcomes to bounded JSON on stdout,
+   mapping lock contention to exit code 7 and remote errors to exit code 8.
+5. `[00.9.5]` **Offline Regressions & Invariant Tests:** Added integration tests in `crates/sync-runtime/tests/host.rs`
+   and `apps/cli/tests/offline.rs` covering multi-account/filtered sync, lock contention, and unknown account refusal.
+6. `[00.9.6]` **Full Repository DoD Validation:** Ran full DoD checks (`cargo check`, `cargo test`, `cargo fmt`,
+   `cargo clippy`, `pnpm check`, `pnpm test`, `pnpm build`, `ci-guard`).
+
+#### Completion (2026-11-07)
+
+- **Delivered:** Pure Rust `HeadlessSyncHost` in `crates/sync-runtime` with injectable `SyncTransport` and
+  production `DefaultSyncTransport`. Added `sync` subcommand to `apps/cli` with exclusive `WriterOwnership`
+  enforcement, bounded JSON reporting, and deterministic exit codes.
+- **Validation:** Workspace `cargo test --workspace` passed; `cargo clippy --workspace --all-targets -- -D warnings`
+  reported 0 warnings; `cargo fmt --all -- --check` passed. Frontend checks (`pnpm --filter desktop check`,
+  `pnpm --filter desktop test`, `pnpm --filter desktop build`) succeeded. CI policy scan reported 450 tracked
+  text files with 0 findings; git diff clean.
+- **Knowledge:** Recorded in `.agent/knowledge/k-043-headless-sync-host-and-cli-sync.md`.
+- **Next:** No active task. Daemon lifecycle, background scheduler, and writable container deployment require separate plans.
+
+#### Closing Checklist — [00.9]
+
+- [x] Implementation plan approved.
+- [x] Headless AccountConnectionConfig and HeadlessSyncHost implemented in sync-runtime.
+- [x] CLI sync command wired with exclusive writer ownership and bounded JSON output.
+- [x] Offline host and CLI sync integration tests passing.
+- [x] Full repository DoD, SPA build, formatting, and secret/PII checks pass.
+- [x] Knowledge card k-043 created and docs/cli.md updated.
+- [x] Atomic Conventional Commit ready; closed without pushing.
 
 ---
 

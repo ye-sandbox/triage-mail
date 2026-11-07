@@ -11,13 +11,14 @@ use storage::cached::CachedMailReader;
 use args::{Command, Options};
 
 const HELP: &str = "triage-mail-cli --data-dir PATH [--unlock-stdin] COMMAND [OPTIONS]
-Commands: accounts | search | show
+Commands: accounts | search | show | sync
 accounts/search: --limit 1..500 (default 100), --offset N (default 0)
 search: --query TEXT (default empty), --account OPAQUE_ID
 show: --message-id OPAQUE_ID
+sync: [--account OPAQUE_ID]
 --unlock-stdin reads an existing fallback-vault passphrase from non-terminal stdin.
-Outputs bounded JSON containing private cached mail; no sync or network requests.
-Exit codes: 0 success, 2 arguments, 3 vault, 4 cache/schema, 5 not found, 6 output/input.
+Outputs bounded JSON containing private cached mail; accounts/search/show perform no network requests.
+Exit codes: 0 success, 2 arguments, 3 vault, 4 cache/schema, 5 not found, 6 output/input, 7 lock contention, 8 remote error.
 ";
 
 #[derive(Clone, Copy, Debug)]
@@ -27,6 +28,8 @@ pub(crate) enum Error {
     Cache,
     NotFound,
     Output,
+    Contention,
+    Remote,
 }
 
 impl Error {
@@ -37,6 +40,8 @@ impl Error {
             Self::Cache => 4,
             Self::NotFound => 5,
             Self::Output => 6,
+            Self::Contention => 7,
+            Self::Remote => 8,
         }
     }
     fn message(self) -> &'static str {
@@ -44,8 +49,10 @@ impl Error {
             Self::Arguments => "invalid arguments; use --help",
             Self::Vault => "existing vault unavailable",
             Self::Cache => "cached mail unavailable or unsupported schema",
-            Self::NotFound => "cached message not found",
+            Self::NotFound => "cached message or account not found",
             Self::Output => "input or output unavailable or exceeds limits",
+            Self::Contention => "installation already owned by another writer",
+            Self::Remote => "remote IMAP sync failed",
         }
     }
 }
@@ -68,10 +75,66 @@ fn run() -> Result<(), Error> {
             .write_all(HELP.as_bytes())
             .map_err(|_| Error::Output);
     };
+    if matches!(options.command, Command::Sync { .. }) {
+        return sync(options);
+    }
     let key = unlock::existing_key(&options)?;
     let reader = CachedMailReader::open(&options.data_dir.join("mail.db"), &key)
         .map_err(|_| Error::Cache)?;
     execute(&reader, options)
+}
+
+fn sync(options: Options) -> Result<(), Error> {
+    let account = match options.command {
+        Command::Sync { account } => account,
+        _ => None,
+    };
+    let ownership = match sync_runtime::ownership::WriterOwnership::acquire(&options.data_dir) {
+        Ok(guard) => std::sync::Arc::new(guard),
+        Err(sync_runtime::ownership::OwnershipError::Busy) => return Err(Error::Contention),
+        Err(sync_runtime::ownership::OwnershipError::Unavailable) => return Err(Error::Cache),
+    };
+    let passphrase = if options.unlock_stdin {
+        Some(unlock::read_stdin_passphrase()?)
+    } else {
+        None
+    };
+    let installation = sync_runtime::bootstrap::open(&options.data_dir, passphrase, ownership)
+        .map_err(|e| match e {
+            sync_runtime::bootstrap::BootstrapError::VaultUnavailable => Error::Vault,
+            sync_runtime::bootstrap::BootstrapError::StorageUnavailable => Error::Cache,
+            sync_runtime::bootstrap::BootstrapError::InvalidRequest => Error::Arguments,
+            sync_runtime::bootstrap::BootstrapError::Internal => Error::Cache,
+        })?;
+    let transport = sync_runtime::DefaultSyncTransport::new(installation.vault.clone());
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|_| Error::Cache)?;
+    let summary = rt
+        .block_on(async {
+            sync_runtime::sync_accounts(&installation.store, &transport, account.as_deref()).await
+        })
+        .map_err(|e| match e {
+            sync_runtime::HeadlessSyncError::AccountNotFound(_) => Error::NotFound,
+            sync_runtime::HeadlessSyncError::Storage(_)
+            | sync_runtime::HeadlessSyncError::Ingest(_)
+            | sync_runtime::HeadlessSyncError::Json(_) => Error::Cache,
+            sync_runtime::HeadlessSyncError::Engine(_) => Error::Remote,
+        })?;
+
+    let bytes = json(&summary)?;
+    io::stdout()
+        .lock()
+        .write_all(&bytes)
+        .map_err(|_| Error::Output)?;
+
+    let all_failed =
+        !summary.accounts.is_empty() && summary.accounts.iter().all(|a| a.error.is_some());
+    if all_failed {
+        return Err(Error::Remote);
+    }
+    Ok(())
 }
 
 fn execute(reader: &CachedMailReader, options: Options) -> Result<(), Error> {
@@ -92,6 +155,7 @@ fn execute(reader: &CachedMailReader, options: Options) -> Result<(), Error> {
                 .map_err(|_| Error::Cache)?
                 .ok_or(Error::NotFound)?,
         )?,
+        Command::Sync { .. } => unreachable!(),
     };
     // INVARIANT: Complete bounded serialization precedes stdout, so oversized responses
     // cannot expose a partial JSON mail payload. JSON escapes terminal control bytes.

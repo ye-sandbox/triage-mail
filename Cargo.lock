@@ -4613,6 +4613,7 @@ dependencies = [
  "async-trait",
  "getrandom 0.2.17",
  "mail-engine",
+ "serde",
  "serde_json",
  "storage",
  "tempfile",
@@ -5332,10 +5333,13 @@ dependencies = [
 name = "triage-mail-cli"
 version = "0.1.3"
 dependencies = [
+ "mail-engine",
  "serde",
  "serde_json",
  "storage",
+ "sync-runtime",
  "tempfile",
+ "tokio",
  "vault",
  "zeroize",
 ]

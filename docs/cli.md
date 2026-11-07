@@ -45,6 +45,7 @@ replacement or symlinked ancestors. Use a trusted private local directory.
 target/release/triage-mail-cli --data-dir /path/to/triage-mail accounts
 target/release/triage-mail-cli --data-dir /path/to/triage-mail search --query boleto --account acct-a --limit 20 --offset 0
 target/release/triage-mail-cli --data-dir /path/to/triage-mail show --message-id msg-a
+target/release/triage-mail-cli --data-dir /path/to/triage-mail sync --account acct-a
 
 # Fallback vault; fd 3 was already opened privately by the caller
 target/release/triage-mail-cli --data-dir /path/to/triage-mail --unlock-stdin accounts <&3
@@ -55,6 +56,7 @@ target/release/triage-mail-cli --data-dir /path/to/triage-mail --unlock-stdin ac
 | `accounts` | JSON array of opaque account IDs ordered by ID; no addresses or connection settings. `--limit` and `--offset` paginate without imposing an account limit.                                                                                                                                                                                                                                                                            |
 | `search`   | JSON array of existing `MessageRowSummary` objects: IDs, subject/sender, time, flags, category/extraction badges, tags and local folder/snooze state. `--query` defaults to empty (newest first); otherwise uses the existing literal lexical FTS phrase behavior and stored tokenizer. `--account` restricts by exact opaque account ID; an unknown account yields an empty array. No mailbox/category/review filtering is implied. |
 | `show`     | JSON object `{ "id": "msg-a", "account_id": "acct-a", "text_plain": "cached text", "truncated": false }`. Required `--message-id`; no HTML, headers or attachments. Missing cached plain text is `null`, including HTML-only mail; no fallback conversion or lazy fetch occurs.                                                                                                                                                      |
+| `sync`     | JSON execution summary `{ "accounts": [...], "total_synced_messages": N, "duration_ms": M }`. Optional `--account` synchronizes a single account; defaults to all configured accounts. Safely acquires exclusive `WriterOwnership` during the pass.                                                                                                                                                                                 |
 
 `accounts` and `search` default to 100 rows; `--limit` accepts 1..500 and `--offset`
 accepts nonnegative decimal integers whose page end fits SQLite's signed 64-bit range.
@@ -81,6 +83,8 @@ path, passphrase, provider response or message values. Exit codes are stable:
 | 4    | Cache/path unavailable, invalid key, query failure or unsupported schema |
 | 5    | Requested message absent from cache                                      |
 | 6    | Input/output unavailable or response/input exceeds bounds                |
+| 7    | Installation already owned by another writer (lock contention)           |
+| 8    | Remote IMAP sync failed                                                  |
 
 ## Storage and compatibility
 

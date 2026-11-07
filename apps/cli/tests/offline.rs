@@ -460,3 +460,56 @@ fn assert_container_refuses_missing_and_schema(image: &str, path: &Path) {
     );
     assert_eq!(std::fs::read_dir(empty.path()).unwrap().count(), 0);
 }
+
+#[cfg(unix)]
+#[test]
+fn sync_refuses_with_exit_code_7_when_installation_is_already_owned() {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let fixture = fixture();
+    let path = fixture.dir.path();
+    let mut name = std::ffi::OsString::from(".triage-mail-writer-");
+    name.push(path.file_name().unwrap());
+    name.push(".lock");
+    let lock_path = path.parent().unwrap().join(name);
+    let ownership = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&lock_path)
+        .unwrap();
+    ownership.try_lock().unwrap();
+
+    let output = invoke(path, &["sync"], PHRASE);
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("installation already owned by another writer"));
+
+    drop(ownership);
+    let _ = std::fs::remove_file(lock_path);
+}
+
+#[test]
+fn sync_refuses_unknown_account_with_exit_code_5() {
+    let fixture = fixture();
+    let path = fixture.dir.path();
+
+    let output = invoke(path, &["sync", "--account", "non-existent-account"], PHRASE);
+    assert_eq!(output.status.code(), Some(5), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("cached message or account not found"));
+}
+
+#[test]
+fn sync_help_text_displays_synopsis_and_exit_codes() {
+    let output = Command::new(env!("CARGO_BIN_EXE_triage-mail-cli"))
+        .arg("--help")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("sync: [--account OPAQUE_ID]"));
+    assert!(stdout.contains("7 lock contention"));
+    assert!(stdout.contains("8 remote error"));
+}

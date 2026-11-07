@@ -11,6 +11,9 @@ pub enum Command {
     Show {
         id: String,
     },
+    Sync {
+        account: Option<String>,
+    },
 }
 
 pub struct Options {
@@ -38,7 +41,7 @@ pub fn parse(args: impl Iterator<Item = OsString>) -> Result<Option<Options>, Er
         return Err(Error::Arguments);
     }
     let unlock_stdin = flags.remove("--unlock-stdin").is_some();
-    let (limit, offset) = if command == "show" {
+    let (limit, offset) = if command == "show" || command == "sync" {
         (100, 0)
     } else {
         (
@@ -62,6 +65,9 @@ pub fn parse(args: impl Iterator<Item = OsString>) -> Result<Option<Options>, Er
         },
         "show" => Command::Show {
             id: identity(flags.remove("--message-id").ok_or(Error::Arguments)?)?,
+        },
+        "sync" => Command::Sync {
+            account: flags.remove("--account").map(identity).transpose()?,
         },
         _ => return Err(Error::Arguments),
     };

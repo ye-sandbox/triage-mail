@@ -47,6 +47,8 @@ pub use protocol::{
     decode_modified_utf7, parse_list_line, DiscoveredFolder, FolderStatus, IdleNotification,
     IdleWaitOutcome, ImapSession, RawFetchedMessage, TaggedStatus, UidFlags,
 };
+pub type NativeSession =
+    protocol::ImapSession<tokio_rustls::client::TlsStream<tokio::net::TcpStream>>;
 pub use provider::{
     classify_folder, is_gmail_virtual_all_mail, ProviderKind, ServerCapabilities, SpecialFolderRole,
 };
