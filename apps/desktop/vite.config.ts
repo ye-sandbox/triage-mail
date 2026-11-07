@@ -7,6 +7,9 @@ export default defineConfig(({ mode }) => ({
 	...(mode === 'test' ? { resolve: { conditions: ['browser'] } } : {}),
 	test: {
 		environment: 'jsdom',
-		include: ['src/**/*.{test,spec}.{js,ts}']
+		include: ['src/**/*.{test,spec}.{js,ts}'],
+		pool: 'forks',
+		maxConcurrency: 1,
+		fileParallelism: false
 	}
 }));
