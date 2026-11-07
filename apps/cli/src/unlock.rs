@@ -64,6 +64,12 @@ fn require_file(path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
+pub fn read_stdin_passphrase() -> Result<Zeroizing<String>, Error> {
+    let bytes = read_passphrase(io::stdin().lock(), io::stdin().is_terminal())?;
+    let s = String::from_utf8(bytes.to_vec()).map_err(|_| Error::Vault)?;
+    Ok(Zeroizing::new(s))
+}
+
 fn read_passphrase(input: impl Read, terminal: bool) -> Result<Zeroizing<Vec<u8>>, Error> {
     // INVARIANT: Refuse terminal input to avoid echo; never accept secrets in argv/env.
     if terminal {

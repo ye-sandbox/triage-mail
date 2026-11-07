@@ -10,9 +10,12 @@ workspace = true
 [dependencies]
 storage = { workspace = true }
 vault = { workspace = true }
+sync-runtime = { workspace = true }
+mail-engine = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 zeroize = "1.9.1"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }
 
 [dev-dependencies]
 tempfile = "3"

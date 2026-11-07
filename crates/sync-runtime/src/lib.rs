@@ -1,9 +1,17 @@
 //! Shared local bootstrap and incremental sync without workers or GUI dependencies.
 #![forbid(unsafe_code)]
 
+pub mod account;
 pub mod bootstrap;
+pub mod host;
 pub mod ingestion;
 pub mod ownership;
+
+pub use account::AccountConnectionConfig;
+pub use host::{
+    sync_accounts, AccountSyncOutcome, DefaultSyncTransport, HeadlessSyncError, HeadlessSyncHost,
+    SyncRunSummary, SyncTransport,
+};
 
 use std::time::Duration;
 

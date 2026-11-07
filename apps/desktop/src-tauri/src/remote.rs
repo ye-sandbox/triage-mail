@@ -64,8 +64,7 @@ pub trait RemoteMail: Send + Sync {
     ) -> Result<Vec<mail_engine::DiscoveredFolder>, IpcError>;
 }
 
-type NativeSession =
-    mail_engine::protocol::ImapSession<tokio_rustls::client::TlsStream<tokio::net::TcpStream>>;
+pub use mail_engine::NativeSession;
 
 pub struct NativeRemoteMail {
     vault: Arc<dyn SecretStore>,
