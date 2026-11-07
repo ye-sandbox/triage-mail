@@ -251,4 +251,3 @@ This suite validates:
 - `container_writable_refuses_when_host_owns_lock`: lock contention rejection (exit code 7) for `sync` and `daemon` when host owns the lock.
 - `container_daemon_runs_and_drains_on_sigterm`: daemon lifecycle, NDJSON stdout streaming, PID 1 `SIGTERM` / `docker stop` handling, and clean lock release.
 - `container_writable_sync_commits_and_releases_lock`: active one-shot `sync`, TLS handshake, message ingestion into SQLite, and lock release.
-
