@@ -1,6 +1,5 @@
 //! Shared local bootstrap and incremental sync without workers or GUI dependencies.
 #![forbid(unsafe_code)]
-#![cfg_attr(windows, feature(windows_by_handle))]
 
 pub mod account;
 pub mod bootstrap;

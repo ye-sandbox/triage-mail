@@ -27,8 +27,6 @@ affected_components: ["crates/sync-runtime", "apps/desktop/src-tauri"]
      converge on identical sibling lock targets while keeping literal destination names.
   3. `valid`: validates that the lock file is an ordinary file (`meta.is_file()`),
      not a symlink (`!meta.file_type().is_symlink()`), has no reparse point attribute
-     (`meta.file_attributes() & 0x400 == 0`), is empty (`meta.len() == 0`), and has exactly
-     one link (`meta.number_of_links() == Some(1)`).
-  4. Identity validation: compares open handle metadata against named path metadata
-     using `volume_serial_number()` and `file_index()` to prevent symlink and junction
-     swapping races.
+     (`meta.file_attributes() & 0x400 == 0`), and is empty (`meta.len() == 0`).
+  4. Stable safe Rust: operates on stable standard library `MetadataExt` without
+     nightly `#![feature(windows_by_handle)]` or unsafe Win32 calls.

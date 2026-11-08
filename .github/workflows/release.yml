@@ -79,5 +79,6 @@ jobs:
         with:
           projectPath: 'apps/desktop'
           tagName: ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: 'triage-mail ${{ github.event.inputs.tag || github.ref_name }}'
           releaseDraft: false
           args: ${{ matrix.args }}
