@@ -3,6 +3,54 @@
 > Batches archived after Git tag (or when `TASK.md` log exceeds ~15 entries).
 > Canonical header: `## [vX.Y.Z] - YYYY-MM-DD`. Deep detail: `git log`.
 
+## [v0.1.5] - 2026-11-08
+
+### 📌 Task [00.12]: Windows Installation Writer Ownership & Path Contract
+
+- **Description:** Implement Windows non-blocking exclusive file locking and path canonicalization under `#[cfg(windows)]` in `crates/sync-runtime/src/ownership.rs`, resolving fail-closed `StorageUnavailable` error on Windows launch/upgrade.
+- **Systems Involved:** `crates/sync-runtime/src/ownership.rs`, `apps/desktop/src-tauri/src/ownership.rs`, `docs/adr/decisions.md`, `.agent/knowledge/k-047-windows-installation-writer-ownership.md`.
+- **Action Type:** Bugfix & Platform Compatibility.
+- **Status:** DONE
+- **Commit:** `3c7afad`
+- **Acceptance:**
+  - [x] Windows non-blocking exclusive file locking via `File::try_lock()` mapping `WouldBlock` to `OwnershipError::Busy`.
+  - [x] Metadata validation rejecting symlinks, non-empty files, and multiple hard links.
+  - [x] Handle identity validation using `volume_serial_number()` and `file_index()`.
+  - [x] Desktop ownership tests compatibility updated to `#[cfg(all(test, any(unix, windows)))]`.
+  - [x] Architecture Decision Record ADR-025 updated and knowledge card k-047 created.
+
+---
+
+## [v0.1.4] - 2026-11-08
+
+### 📌 Task [00.11]: Writable Headless Container Deployment
+
+- **Description:** Writable and read-only container deployments (`packaging/cli`) with non-root security boundaries, sibling lockfile conventions, and outbound TLS verification.
+- **Systems Involved:** `packaging/cli/`, `scripts/build-cli-image.sh`, `apps/cli`, `crates/sync-runtime`, `docs/cli.md`.
+- **Status:** DONE
+- **Commit:** `ba2c484`
+
+### 📌 Task [00.10]: Headless Background Daemon & Periodic Sync Scheduler
+
+- **Description:** Headless background daemon scheduler in pure Rust with interval timer, SIGINT/SIGTERM graceful drain, and NDJSON streaming.
+- **Systems Involved:** `crates/sync-runtime`, `apps/cli`, `docs/cli.md`.
+- **Status:** DONE
+- **Commit:** `c410ff2`
+
+### 📌 Task [00.9]: Headless One-Shot Sync Host & CLI Sync Command
+
+- **Description:** Pure Rust headless SyncHost in sync-runtime with agnostic IMAP adapter, exclusive writer ownership, and bounded JSON output.
+- **Systems Involved:** `crates/sync-runtime`, `apps/cli`, `crates/mail-engine`, `crates/storage`.
+- **Status:** DONE
+- **Commit:** `369d821`
+
+### 📌 Task [05.1]: Low-I/O Compilation & Test Suite Resource Hardening
+
+- **Description:** Low-I/O Cargo profiles (`debug = 1`) and serialized Vitest concurrency runner to eliminate disk queue thrashing.
+- **Systems Involved:** Cargo profiles, `apps/desktop/vite.config.ts`.
+- **Status:** DONE
+- **Commit:** `0f84710`
+
 ---
 
 ## [v0.1.3] - 2026-11-02
