@@ -689,11 +689,14 @@ type: architectural-decision-log
   cannot exclude another process. An active headless host needs a reusable guard.
 - **Decision:** Add `sync_runtime::ownership::WriterOwnership` using safe standard
   library nonblocking file locking, without new dependencies or unsafe code. Unix
-  hosts use an empty mode-0600 single-link regular sibling file named
-  `.triage-mail-writer-<installation-name>.lock` under the canonical parent. Parent
-  directories may be created; acquisition never creates the installation itself.
-  Reject direct installation symlinks/non-directories, relative/traversal paths,
-  malformed lock files and unsupported platforms. Errors contain no private values.
+  and Windows hosts use an empty regular sibling file named
+  `.triage-mail-writer-<installation-name>.lock` under the canonical parent. Unix
+  hosts require mode-0600 and a single link; Windows hosts require an empty,
+  non-reparse-point single-link regular file validated against symlink/junction races
+  using `volume_serial_number()` and `file_index()`. Parent directories may be
+  created; acquisition never creates the installation itself. Reject direct installation
+  symlinks/non-directories, relative/traversal paths, malformed lock files and
+  unsupported platforms. Errors contain no private values.
 - **Identity:** Canonical parent aliases converge on the same lock; the final
   installation component remains literal so absent-target restore has the same
   identity before and after publication. The persistent lock file is never removed,
@@ -717,9 +720,9 @@ type: architectural-decision-log
 - **Limits:** Advisory protection covers cooperating current hosts on local
   filesystems. Older binaries, direct storage/vault consumers, hostile path/inode
   replacement, bind-mount aliases and network filesystems are outside the guarantee.
-  Unix path/permission behavior is implemented; Linux subprocess validation does not
-  establish other-platform interoperability. Unsupported platforms fail closed.
-  Parent-directory write access is required even for an existing installation.
+  Unix and Windows path/locking behavior is implemented with 100% safe Rust
+  (`#![forbid(unsafe_code)]`); unsupported platforms fail closed. Parent-directory
+  write access is required even for an existing installation.
 - **Alternatives:** Reject PID/existence sentinels, lock-file unlinking, relying on
   SQLite alone, implicit stale-lock deletion, blocking contention waits, or acquiring
   after vault/bootstrap changes. Headless bootstrap, scheduling/delivery consent,

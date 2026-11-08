@@ -7,13 +7,58 @@
 
 ## Active Task
 
-No active task — [00.11] completed. Multi-folder sync and outbound SMTP composer
+No active task — [00.12] completed. Multi-folder sync and outbound SMTP composer
 remain unprioritized and require separate plans.
-
 
 ---
 
 ## Latest Completed Task
+
+### Task [00.12]: Windows Installation Writer Ownership & Path Contract
+
+- **Status:** DONE
+- **Selection:** Selected following user defect report on Windows v0.1.4 upgrade where `WriterOwnership` fails closed on non-Unix platforms.
+- **Systems Involved:** `crates/sync-runtime/src/ownership.rs`, `apps/desktop/src-tauri/src/ownership.rs`, `docs/adr/decisions.md`, `.agent/knowledge/k-047-windows-installation-writer-ownership.md`.
+- **Problem:** ADR-025 and Task [00.10] implemented `WriterOwnership` exclusively for `#[cfg(unix)]`, leaving `#[cfg(not(unix))]` to unconditionally fail closed (`Err(OwnershipError::Unavailable)`). When Windows desktop clients launch after upgrading to v0.1.4, `cmd_list_accounts` attempts initialization, encounters `StorageUnavailable`, and reports `"Local mail could not be opened. Try again."`.
+- **Scope:**
+  1. Implement Windows non-blocking exclusive file locking and path canonicalization in `crates/sync-runtime/src/ownership.rs` under `#[cfg(windows)] mod windows`.
+  2. Implement `valid` metadata checks for Windows (rejecting symlinks, non-empty files, and multiple hard links using `std::os::windows::fs::MetadataExt`).
+  3. Validate handle identity using `volume_serial_number()` and `file_index()` to guard against spoofing/races.
+  4. Update `WriterOwnership::matches_installation` and `installation` struct field for `windows`.
+  5. Update ADR-025 in `docs/adr/decisions.md` to document the Windows contract.
+  6. Create `.agent/knowledge/k-047-windows-installation-writer-ownership.md`.
+  7. Verify full workspace DoD (`cargo check`, `cargo test`, `cargo fmt`, `cargo clippy`, `pnpm check/test`).
+
+#### Approved Implementation Plan (2026-11-08)
+
+1. `[00.12.1]` **Windows Module in `crates/sync-runtime/src/ownership.rs`:**
+   Add `#[cfg(windows)] mod windows` with 100% safe Rust (`#![forbid(unsafe_code)]`). Implement `acquire`, `installation_path`, `validate_path`, `valid` (rejecting symlinks, non-empty files, and multiple links via `MetadataExt`), handle identity validation via `volume_serial_number()` and `file_index()`, and non-blocking locking via `File::try_lock()` mapping `WouldBlock` to `OwnershipError::Busy`.
+2. `[00.12.2]` **`WriterOwnership` Struct & Match Contract:**
+   Enable `installation: PathBuf` on `#[cfg(any(unix, windows))]` and update `matches_installation` to check `windows::installation_path` on Windows.
+3. `[00.12.3]` **Desktop Ownership Tests Compatibility:**
+   Update `apps/desktop/src-tauri/src/ownership.rs` test module cfg to `#[cfg(all(test, any(unix, windows)))] mod tests;`.
+4. `[00.12.4]` **Architecture Decision Record (ADR-025) & Knowledge Card:**
+   Update `docs/adr/decisions.md` to record the Windows contract in ADR-025 and create `.agent/knowledge/k-047-windows-installation-writer-ownership.md`.
+5. `[00.12.5]` **Full Workspace DoD Validation:**
+   Run full checks (`cargo check`, `cargo test`, `cargo fmt`, `cargo clippy`, `pnpm check/test`) to verify zero regressions.
+
+#### Completion (2026-11-08)
+
+- **Delivered:** Windows implementation of `WriterOwnership` in `crates/sync-runtime/src/ownership.rs` under `#[cfg(windows)] mod windows` using 100% safe Rust (`#![forbid(unsafe_code)]`). Configured non-blocking file locking via standard library `File::try_lock()` mapping `WouldBlock` to `OwnershipError::Busy`, path validation and parent canonicalization, metadata verification rejecting symlinks, reparse points, non-empty files, and multiple hard links, and handle identity matching via `volume_serial_number()` and `file_index()`. Extended `WriterOwnership` struct and `matches_installation` to Windows, updated desktop test module cfg to `#[cfg(all(test, any(unix, windows)))]`, documented the Windows contract in ADR-025 (`docs/adr/decisions.md`), and recorded operational details in `.agent/knowledge/k-047-windows-installation-writer-ownership.md`.
+- **Validation:** Full workspace checks completed: `cargo check --workspace` passed; `cargo fmt --all -- --check` passed; `cargo clippy --workspace --all-targets -- -D warnings` passed with 0 warnings; `cargo test -p sync-runtime` (35 tests passed) and `cargo test -p triage-mail-cli` (15 tests passed) passed; `pnpm --filter desktop check` passed with 0 errors/warnings; `pnpm --filter desktop test` passed (32 test files, 184 tests passed); `pnpm --filter desktop build` succeeded; `ci-guard` policy scan reported 459 tracked files with 0 findings; `git diff --check` clean.
+- **Knowledge:** Recorded in `.agent/knowledge/k-047-windows-installation-writer-ownership.md`.
+- **Next:** No active task. Multi-folder sync and outbound SMTP composer remain unprioritized.
+
+#### Closing Checklist — [00.12]
+
+- [x] Implementation plan approved.
+- [x] Windows Module in `crates/sync-runtime/src/ownership.rs` implemented with 100% safe Rust.
+- [x] `WriterOwnership` Struct & Match Contract updated for Windows.
+- [x] Desktop Ownership Tests Compatibility updated to `#[cfg(all(test, any(unix, windows)))]`.
+- [x] Architecture Decision Record (ADR-025) updated and knowledge card k-047 created.
+- [x] Full workspace DoD passed: cargo check/clippy/fmt, cargo test, pnpm check/test/build, ci-guard policy scan.
+- [x] Atomic Conventional Commit recorded (`3297a19`); closed without pushing.
+
 
 ### Task [00.11]: Writable Headless Container Deployment
 

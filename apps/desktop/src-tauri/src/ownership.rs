@@ -13,7 +13,7 @@ use crate::IpcError;
 #[cfg(any(feature = "native-runtime", test))]
 use zeroize::Zeroizing;
 
-#[cfg(all(test, unix))]
+#[cfg(all(test, any(unix, windows)))]
 mod tests;
 
 pub(crate) fn acquire(path: &std::path::Path) -> Result<Arc<WriterOwnership>, IpcError> {
