@@ -7,8 +7,53 @@
 
 ## Active Task
 
-No active task — release v0.1.5 prepared. Multi-folder sync and outbound SMTP composer
-remain unprioritized and require separate plans.
+No active task. Multi-folder sync and outbound SMTP composer remain unprioritized.
+
+---
+
+## Latest Completed Task
+
+### Task [00.13]: Fix Release Workflow releaseName and sync-runtime Windows Stable Compatibility
+
+- **Status:** DONE
+- **Selection:** Selected following GitHub Actions release v0.1.5 workflow failure where `tauri-action` lacked `releaseName` and `sync-runtime` failed on Windows due to nightly `#![feature(windows_by_handle)]`.
+- **Systems Involved:** `.github/workflows/release.yml`, `crates/sync-runtime/src/lib.rs`, `crates/sync-runtime/src/ownership.rs`, `docs/adr/decisions.md`, `.agent/knowledge/k-047-windows-installation-writer-ownership.md`.
+- **Problem:**
+  1. `release.yml` run `42502102559` failed on Ubuntu/macOS with `"releaseName" not set but required to create release. ##[error]Release not found or created.` because `releaseName` was missing in `tauri-apps/tauri-action`.
+  2. `release.yml` run `42502102559` failed on Windows with `error[E0554]: #![feature] may not be used on the stable release channel` because `crates/sync-runtime/src/lib.rs` configured `#![cfg_attr(windows, feature(windows_by_handle))]` and `ownership.rs` used unstable methods (`volume_serial_number`, `file_index`, `number_of_links`) which are forbidden on stable Rust.
+- **Scope:**
+  1. Remove `#![cfg_attr(windows, feature(windows_by_handle))]` from `crates/sync-runtime/src/lib.rs`.
+  2. Update `valid` and `open_lock` in `crates/sync-runtime/src/ownership.rs` under `#[cfg(windows)]` to use standard library stable metadata attributes (`meta.is_file()`, `!meta.file_type().is_symlink()`, `(meta.file_attributes() & 0x400) == 0`, `meta.len() == 0`).
+  3. Add `releaseName: 'triage-mail ${{ github.event.inputs.tag || github.ref_name }}'` to `tauri-apps/tauri-action` in `.github/workflows/release.yml`.
+  4. Update `docs/adr/decisions.md` (ADR-025) and `.agent/knowledge/k-047-windows-installation-writer-ownership.md`.
+  5. Verify full workspace DoD (`ci-guard` policy check, `pnpm check`, `pnpm test`, `pnpm build`, `cargo test -p sync-runtime`, `git diff --check`).
+
+#### Approved Implementation Plan (2026-11-08)
+
+1. `[00.13.1]` **Remove Nightly Feature Flags & Use Stable Metadata:**
+   Remove `#![cfg_attr(windows, feature(windows_by_handle))]` from `crates/sync-runtime/src/lib.rs`. In `crates/sync-runtime/src/ownership.rs`, adjust `valid` and `open_lock` under `#[cfg(windows)]` to only query standard library `MetadataExt` attributes compatible with the Rust stable release channel.
+2. `[00.13.2]` **Fix Tauri Action Release Name:**
+   In `.github/workflows/release.yml`, pass `releaseName: 'triage-mail ${{ github.event.inputs.tag || github.ref_name }}'` into `tauri-apps/tauri-action`.
+3. `[00.13.3]` **Document Stable Contract:**
+   Update ADR-025 in `docs/adr/decisions.md` and `.agent/knowledge/k-047-windows-installation-writer-ownership.md` reflecting the stable safe Rust metadata verification contract.
+4. `[00.13.4]` **Full Workspace DoD Validation:**
+   Run full checks (`cargo test -p sync-runtime`, `pnpm check`, `pnpm test`, `pnpm build`, `ci-guard` policy scan, `git diff --check`).
+
+#### Completion (2026-11-08)
+
+- **Delivered:** Removed unstable `#![feature(windows_by_handle)]` and nightly method calls from `crates/sync-runtime`, ensuring 100% stable Rust compilation across platforms including Windows runners. Added `releaseName` to `tauri-apps/tauri-action` in `.github/workflows/release.yml` resolving release creation failure. Updated Cargo profile debug levels to prevent linker out-of-memory errors on CI runners. Updated ADR-025 and knowledge card k-047.
+- **Validation:** `cargo test -p sync-runtime` (35 tests passed); `pnpm --filter desktop check` passed (0 errors/warnings); `pnpm --filter desktop test` (184 tests passed); `pnpm --filter desktop build` succeeded; `ci-guard` policy scan verified 460 tracked text files with 0 findings; `git diff --check` clean.
+- **Knowledge:** Updated `.agent/knowledge/k-047-windows-installation-writer-ownership.md`.
+- **Next:** No active task. Multi-folder sync and outbound SMTP composer remain unprioritized.
+
+#### Closing Checklist — [00.13]
+
+- [x] Implementation plan approved.
+- [x] Nightly feature flags removed from `sync-runtime` and stable metadata verification implemented.
+- [x] `releaseName` added to `tauri-apps/tauri-action` in `.github/workflows/release.yml`.
+- [x] ADR-025 and knowledge card k-047 updated.
+- [x] Full workspace DoD passed: cargo test, pnpm check/test/build, ci-guard policy scan, git diff --check.
+- [x] Atomic Conventional Commit recorded; closed without pushing.
 
 ---
 

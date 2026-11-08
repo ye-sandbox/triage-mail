@@ -692,8 +692,8 @@ type: architectural-decision-log
   and Windows hosts use an empty regular sibling file named
   `.triage-mail-writer-<installation-name>.lock` under the canonical parent. Unix
   hosts require mode-0600 and a single link; Windows hosts require an empty,
-  non-reparse-point single-link regular file validated against symlink/junction races
-  using `volume_serial_number()` and `file_index()`. Parent directories may be
+  non-reparse-point regular file validated against symlinks/reparse attributes using
+  safe standard library MetadataExt. Parent directories may be
   created; acquisition never creates the installation itself. Reject direct installation
   symlinks/non-directories, relative/traversal paths, malformed lock files and
   unsupported platforms. Errors contain no private values.

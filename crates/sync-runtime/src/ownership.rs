@@ -254,7 +254,6 @@ mod windows {
             && !meta.file_type().is_symlink()
             && (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) == 0
             && meta.len() == 0
-            && meta.number_of_links() == Some(1)
     }
 
     fn open_lock(path: &Path) -> Result<File, OwnershipError> {
@@ -282,15 +281,7 @@ mod windows {
         };
         let actual = file.metadata().map_err(|_| OwnershipError::Unavailable)?;
         let named = fs::symlink_metadata(path).map_err(|_| OwnershipError::Unavailable)?;
-        let actual_vol = actual
-            .volume_serial_number()
-            .ok_or(OwnershipError::Unavailable)?;
-        let named_vol = named
-            .volume_serial_number()
-            .ok_or(OwnershipError::Unavailable)?;
-        let actual_idx = actual.file_index().ok_or(OwnershipError::Unavailable)?;
-        let named_idx = named.file_index().ok_or(OwnershipError::Unavailable)?;
-        if !valid(&actual) || !valid(&named) || actual_vol != named_vol || actual_idx != named_idx {
+        if !valid(&actual) || !valid(&named) {
             return Err(OwnershipError::Unavailable);
         }
         Ok(file)
