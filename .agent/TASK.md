@@ -7,7 +7,7 @@
 
 ## Active Task
 
-No active task. Multi-folder sync and outbound SMTP composer remain unprioritized.
+No active task — release v0.1.6 prepared. Multi-folder sync and outbound SMTP composer remain unprioritized.
 
 ---
 

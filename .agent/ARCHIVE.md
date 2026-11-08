@@ -3,6 +3,25 @@
 > Batches archived after Git tag (or when `TASK.md` log exceeds ~15 entries).
 > Canonical header: `## [vX.Y.Z] - YYYY-MM-DD`. Deep detail: `git log`.
 
+## [v0.1.6] - 2026-11-08
+
+### 📌 Task [00.13]: Fix Release Workflow releaseName and sync-runtime Windows Stable Compatibility
+
+- **Description:** Fix GitHub Actions release v0.1.5 workflow failure by adding `releaseName` to `tauri-apps/tauri-action`, removing nightly `#![feature(windows_by_handle)]` in favor of standard library stable metadata attributes (`MetadataExt`), and setting `debug = 0` for dependencies in Cargo dev/test profiles.
+- **Systems Involved:** `.github/workflows/release.yml`, `crates/sync-runtime/src/lib.rs`, `crates/sync-runtime/src/ownership.rs`, `Cargo.toml`, `docs/adr/decisions.md`, `.agent/knowledge/k-047-windows-installation-writer-ownership.md`.
+- **Action Type:** Bugfix & CI/CD Pipeline.
+- **Status:** DONE
+- **Commit:** `461f0a8`
+- **Acceptance:**
+  - [x] Removed `#![cfg_attr(windows, feature(windows_by_handle))]` and nightly methods from `crates/sync-runtime`.
+  - [x] Stable safe Rust metadata validation implemented in `crates/sync-runtime/src/ownership.rs` under `#[cfg(windows)]`.
+  - [x] `releaseName: 'triage-mail ${{ github.event.inputs.tag || github.ref_name }}'` configured in `.github/workflows/release.yml`.
+  - [x] Architecture Decision Record ADR-025 and knowledge card k-047 updated.
+  - [x] Cargo dev/test dependency debug symbols tuned to 0 to prevent CI memory issues.
+  - [x] Full workspace DoD passed: cargo test, pnpm check/test/build, ci-guard policy scan.
+
+---
+
 ## [v0.1.5] - 2026-11-08
 
 ### 📌 Task [00.12]: Windows Installation Writer Ownership & Path Contract
