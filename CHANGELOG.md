@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-08
+
+### Added
+- Headless background daemon (`triage-mail daemon`) and one-shot sync CLI (`triage-mail sync`) with periodic sync scheduler, signal drain on `SIGTERM`, and exclusive writer ownership (`WriterOwnership`).
+- Writable and read-only container deployments (`packaging/cli`) with non-root security boundaries, sibling lockfile conventions, and outbound TLS verification.
+- Local ONNX embeddings via `fastembed-rs` and `ort` with on-demand model caching, background vector indexing, and progress reporting.
+- Consent-bound alerts and webhook dispatchers supporting generic JSON POST endpoints, Telegram Bot (`sendMessage`), and Discord webhooks with quiet hours schedules and digests.
+- Local triage rules engine with condition-action evaluations, simulation dry-runs, automatic and manual classification categories, sender reviews, and conversation grouping.
+- Encrypted saved searches, virtual folders, and encrypted backup recovery with portable JSON export/import.
+- Coverage-guided fuzzing harnesses for IMAP `BODYSTRUCTURE` and `FETCH` response parsing, hardening literal parsing against malformed tokens.
+
 ## [0.1.3] - 2026-11-02
 
 ### Added

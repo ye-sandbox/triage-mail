@@ -1,6 +1,6 @@
 {
 	"productName": "triage-mail-performance",
-	"version": "0.1.3",
+	"version": "0.1.4",
 	"identifier": "org.yesandbox.triagemail.performance",
 	"build": {
 		"frontendDist": "../../target/performance-ui"
