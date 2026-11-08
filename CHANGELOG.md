@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-11-08
+
+### Fixed
+- CI & Release Workflow: configured `releaseName` in `tauri-apps/tauri-action` to ensure automated GitHub releases are created and published reliably across Ubuntu, macOS, and Windows runners (`.github/workflows/release.yml`).
+- Windows Stable Compatibility: removed nightly `#![feature(windows_by_handle)]` and nightly handle inspection methods from `crates/sync-runtime/src/ownership.rs`, ensuring 100% safe, stable Rust standard library metadata verification (`MetadataExt`) on Windows builds.
+- Cargo Runner Memory Limits: set `debug = 0` for dependencies in `dev` and `test` profiles (`Cargo.toml`) to prevent linker OOM errors on GitHub Actions runners.
+
 ## [0.1.5] - 2026-11-08
 
 ### Fixed
