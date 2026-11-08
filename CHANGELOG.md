@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-11-08
+
+### Fixed
+- Windows installation writer ownership (`WriterOwnership`): resolved fail-closed `StorageUnavailable` defect on Windows application launch/upgrade by implementing safe Windows non-blocking exclusive file locking via `File::try_lock()`, volume identity verification via `volume_serial_number()` and `file_index()`, and metadata validation rejecting symlinks and reparse points (`crates/sync-runtime/src/ownership.rs`).
+
 ## [0.1.4] - 2026-11-08
 
 ### Added
