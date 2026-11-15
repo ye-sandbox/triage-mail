@@ -26,9 +26,13 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 2
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.0.0
+        with:
+          version: '11.25.0'
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.19.0'
+          cache: 'pnpm'
       - name: Policy scanner regressions
         run: node --test scripts/ci-guard.test.mjs
       - name: Tracked text and Svelte policy
@@ -36,11 +40,9 @@ jobs:
       - name: Whitespace
         run: git diff-tree --check --root -m HEAD
       - name: Install frontend dependencies
-        run: |
-          npm install --global pnpm@11.25.0
-          pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - run: pnpm --filter desktop check
-      - run: pnpm --filter desktop test
+      - run: pnpm --filter desktop test -- --fileParallelism --maxConcurrency=4
       - run: pnpm --filter desktop build
 
   rust:
@@ -66,6 +68,9 @@ jobs:
           rustup default 1.99.0
       - name: Rust cache
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ${{ hashFiles('Cargo.toml') }}
+          cache-on-failure: true
       - name: Fetch locked dependencies
         run: cargo fetch --locked
       # INVARIANT: Tests use synthetic local fixtures; no provider credentials or models.
@@ -73,7 +78,6 @@ jobs:
         env:
           CARGO_NET_OFFLINE: 'true'
         run: |
-          cargo check --workspace --locked
-          cargo test --workspace --locked
           cargo fmt --all -- --check
+          cargo test --workspace --locked
           cargo clippy --workspace --all-targets --locked -- -D warnings

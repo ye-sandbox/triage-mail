@@ -45,7 +45,7 @@ env:
 ```
 
 ### 2. Enable Pinned Intelligent Cargo Caching
-Use `Swatinem/rust-cache` pinned by commit SHA immediately after installing the toolchain:
+Use `Swatinem/rust-cache` pinned by commit SHA immediately after installing the toolchain, explicitly hashing root `Cargo.toml` (since `rust-cache` hashes `Cargo.lock` and member `Cargo.toml` files by default, missing root `[profile.*]` edits):
 ```yaml
 - name: Rust toolchain
   run: |
@@ -53,6 +53,9 @@ Use `Swatinem/rust-cache` pinned by commit SHA immediately after installing the 
     rustup default 1.99.0
 - name: Rust cache
   uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+  with:
+    key: ${{ hashFiles('Cargo.toml') }}
+    cache-on-failure: true
 - name: Fetch locked dependencies
   run: cargo fetch --locked
 ```
