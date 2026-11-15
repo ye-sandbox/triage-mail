@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-15
+
+### Changed
+- **UI v2 Redesign & App Shell:** Replaced the desktop frontend with a responsive Svelte 5 Runes + Tailwind v4 SPA shell (`AppShell`, `SidebarNav`, `WindowControls`, `WorkstationDock`) featuring offline `@fontsource/*` typography (`Plus Jakarta Sans`, `DM Sans`, `JetBrains Mono`), light/dark semantic tokens, and multi-route navigation (`/`, `/onboarding`, `/due-dates`, `/automation`, `/settings`).
+- **Unified Inbox, Reader & Command Palette:** Ported `WdgInboxStatsBar`, virtualized `WdgMessageList`, `WdgRowBadges`, `WdgMessageReader` (sandboxed `DOMPurify` iframe with theme-aware CSS and per-message HTTPS remote-image consent), `WdgReaderHeader`, `WdgExtractionSummary`, `WdgConversationThread`, `WdgCommandPalette`, and `WdgSnoozeSheet`.
+- **Boot Gate & Multi-Account Onboarding:** Ported `WdgBootGate`, `WdgOnboardingPage`, `WdgVaultUnlockCard`, `WdgAccountDiscoveryForm` (preserving explicit ISPDB lookup and TLS port 993 probing), `WdgAccountHelpGuide`, `WdgConnectedAccountList`, and `WdgAccountAvatar`.
+- **Due Dates & Reminders Hub (`/due-dates`):** Ported `WdgDueDatesPage`, `WdgDueDateKpis`, `WdgBoletoCard`, `WdgReminderConfigDrawer`, and `WdgReminderRuleForm` with live overdue/due-today sidebar badge synchronization and direct email jump-to-message navigation.
+- **Automation Workspace (`/automation`):** Ported `WdgAutomationPage`, `WdgRulesSplitPane`, `WdgRuleEditorForm`, `WdgRuleSimulatorPanel`, `WdgAlertsManager`, `WdgAlertDestinationDialog`, `WdgSenderReviewQueue`, and `WdgCategoryOverrides` preserving all explicit dispatch, quiet-hours, and identity consent gates.
+- **Settings, Local AI & Encrypted Backup (`/settings`):** Ported `WdgSettingsPage`, `WdgPrivacyPanel`, `WdgSearchIndexPanel`, `WdgAiModelsPanel`, `WdgBackupDefinitionsPanel`, and `WdgImportPreviewDialog`, and removed 57 obsolete legacy `.svelte` modules and compatibility styles.
+- **Cargo Workspace Metadata:** Inherited `authors` and `repository` workspace package metadata across member crates (`Cargo.toml`).
+
+### Fixed
+- **Desktop Dev Server Port Alignment:** Configured Vite dev server to bind strictly to port `1420` matching Tauri `devUrl` (`apps/desktop/vite.config.ts`).
+- **Mobile & Responsive Layout:** Fixed mobile inbox search bar wrapping (`WdgInboxStatsBar.svelte`), QA warnings, and mobile horizontal overflow across UI v2 panes.
+- **Clippy Lint Cleanliness:** Simplified boolean return expression in `crates/triage-ai/src/otp.rs` to satisfy `clippy::needless_bool` under `-D warnings`.
+
 ## [0.1.6] - 2026-11-08
 
 ### Fixed

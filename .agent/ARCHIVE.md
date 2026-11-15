@@ -3,6 +3,26 @@
 > Batches archived after Git tag (or when `TASK.md` log exceeds ~15 entries).
 > Canonical header: `## [vX.Y.Z] - YYYY-MM-DD`. Deep detail: `git log`.
 
+## [v0.2.0] - 2026-11-15
+
+### 📌 Tasks [04.14]–[04.19]: UI v2 Desktop Redesign & Polish
+
+- **Description:** Full Svelte 5 Runes + Tailwind v4 UI v2 replacement across AppShell/navigation (`[04.14]`), Unified Inbox/Reader/Command Palette (`[04.15]`), Boot Gate/Vault Unlock/Onboarding (`[04.16]`), Due Dates & Reminders Hub (`[04.17]`), Automation Workspace (`[04.18]`), and Settings/AI/Backup/Legacy Cleanup (`[04.19]`), plus QA overflow/warning fixes, Vite port `1420` alignment, Cargo workspace metadata inheritance, and Clippy `needless_bool` fix.
+- **Systems Involved:** `apps/desktop/src/**`, `apps/desktop/vite.config.ts`, `crates/*/Cargo.toml`, `apps/cli/Cargo.toml`, `apps/desktop/src-tauri/Cargo.toml`, `crates/triage-ai/src/otp.rs`.
+- **Action Type:** Feature & UI Redesign.
+- **Status:** DONE
+- **Commits:** `1ecbbc3`, `6cc1b73`, `6e045f1`, `749bc50`, `90f0f2a`, `8ac172a`, `ee868c0`, `d74b698`, `0693a14`, `7235690`, `95938b0`, `20cc66e`
+- **Acceptance:**
+  - [x] Offline `@fontsource/*` fonts, light/dark semantic tokens, `AppShell`, and SPA routes implemented in Svelte 5 Runes (`[04.14]`).
+  - [x] Virtualized Unified Inbox, sandboxed `WdgMessageReader`, `WdgCommandPalette`, and `WdgSnoozeSheet` promoted (`[04.15]`).
+  - [x] `WdgBootGate`, `WdgVaultUnlockCard`, `WdgAccountDiscoveryForm`, `WdgConnectedAccountList`, and `WdgAccountAvatar` promoted (`[04.16]`).
+  - [x] `WdgDueDatesPage`, KPI cards, `WdgBoletoCard`, and `WdgReminderConfigDrawer` promoted with live badge sync (`[04.17]`).
+  - [x] `WdgAutomationPage` (Rules, Simulator, Alerts, Sender Review, Category Overrides) promoted with all consent gates preserved (`[04.18]`).
+  - [x] `WdgSettingsPage` panels and `WdgImportPreviewDialog` promoted; 57 obsolete legacy `.svelte` components removed (`[04.19]`).
+  - [x] Post-QA polish, Vite port `1420` alignment, Cargo metadata inheritance, and Clippy fix verified with full workspace DoD.
+
+---
+
 ## [v0.1.6] - 2026-11-08
 
 ### 📌 Task [00.13]: Fix Release Workflow releaseName and sync-runtime Windows Stable Compatibility
