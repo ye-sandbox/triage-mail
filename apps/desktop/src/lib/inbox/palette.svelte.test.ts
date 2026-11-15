@@ -1,10 +1,15 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { flushSync, mount, unmount } from 'svelte';
-import InboxView from './InboxView.svelte';
-import TriageBadges from './TriageBadges.svelte';
+import { flushSync, mount, tick, unmount } from 'svelte';
+import InboxSession from '../onboarding/InboxSession.svelte';
+import { appStore } from '$lib/stores/app.svelte';
+import WdgCommandPalette from './WdgCommandPalette.svelte';
+import WdgExtractionSummary from './WdgExtractionSummary.svelte';
 import { InboxController } from './controller.svelte';
+import { createLiveWorkspace, workspaceRegistry } from './workspace.svelte';
 import type { InboxTransport, MessageRowDto } from './types';
 import type { MessageDetailDto, ReaderTransport, TriageBadge } from '../reader/types';
+import type { Settings, SettingsTransport } from '../settings/types';
+
 const row: MessageRowDto = {
 	id: 'local-message',
 	account_id: 'local',
@@ -19,6 +24,7 @@ const row: MessageRowDto = {
 	folder_override: null,
 	category_badge: 'Newsletter'
 };
+
 const badges: TriageBadge[] = [
 	{ OtpCode: { code: '123456' } },
 	{
@@ -33,7 +39,9 @@ const badges: TriageBadge[] = [
 	{ TrackingCode: { carrier: 'Synthetic', code: 'TEST123' } },
 	{ UnsubscribeAvailable: { supports_one_click: true } }
 ];
+
 let cleanup: (() => Promise<void>) | undefined;
+
 beforeAll(() => {
 	vi.stubGlobal(
 		'ResizeObserver',
@@ -45,11 +53,34 @@ beforeAll(() => {
 	);
 	Element.prototype.scrollIntoView = vi.fn();
 });
+
 afterEach(async () => {
+	appStore.commandOpen = false;
+	appStore.setLocale('en');
 	await cleanup?.();
 	cleanup = undefined;
+	workspaceRegistry.setActive(null);
 	vi.useRealTimers();
 });
+
+function createSettingsMock(): SettingsTransport {
+	const settings: Settings = {
+		ai: { enabled: false, provider: 'Ollama', endpoint: 'http://127.0.0.1:11434', model: 'llama3' },
+		tokenizer: 'Unicode61RemoveDiacritics',
+		has_api_key: false,
+		model_cached: false,
+		experimental_semantic_search: false
+	};
+	return {
+		get: vi.fn(async () => settings),
+		save: vi.fn(async () => {}),
+		tokenizer: vi.fn(async () => {}),
+		setExperimentalSemanticSearch: vi.fn(async () => {}),
+		download: vi.fn(async () => {}),
+		summarize: vi.fn(async () => '')
+	};
+}
+
 function setup(supports = true) {
 	const triage = vi.fn<InboxTransport['triage']>().mockResolvedValue(undefined);
 	const inbox = new InboxController({
@@ -59,6 +90,7 @@ function setup(supports = true) {
 	});
 	inbox.rows = [row];
 	inbox.selectedId = row.id;
+
 	const body = vi.fn<ReaderTransport['body']>().mockResolvedValue({
 		id: row.id,
 		subject: row.subject,
@@ -71,21 +103,32 @@ function setup(supports = true) {
 		attachments_meta: []
 	} satisfies MessageDetailDto);
 	const attachment = vi.fn<ReaderTransport['attachment']>();
+
+	const workspace = createLiveWorkspace(inbox, {
+		connected: true,
+		readerTransport: { body, attachment },
+		settingsTransport: createSettingsMock()
+	});
+	workspace.recordRowBadges(row.id, [
+		{ UnsubscribeAvailable: { supports_one_click: supports } }
+	]);
+
+	const restoreSpy = vi.fn();
 	const target = document.createElement('div');
 	document.body.append(target);
-	const component = mount(InboxView, {
+	const palette = mount(WdgCommandPalette, {
 		target,
-		props: { inbox, connected: true, readerTransport: { body, attachment } }
+		props: { workspace, restoreFocus: restoreSpy }
 	});
 	flushSync();
 	cleanup = async () => {
 		inbox.dispose();
-		await unmount(component);
+		await unmount(palette);
 		target.remove();
 	};
-	const trigger = target.querySelector<HTMLButtonElement>('[aria-haspopup=dialog]')!;
-	return { inbox, triage, target, trigger, attachment };
+	return { inbox, workspace, triage, target, attachment, restoreSpy };
 }
+
 function key(element: EventTarget, value: string, extra: KeyboardEventInit = {}) {
 	element.dispatchEvent(
 		new KeyboardEvent('keydown', {
@@ -97,24 +140,34 @@ function key(element: EventTarget, value: string, extra: KeyboardEventInit = {})
 	);
 	flushSync();
 }
+
 function commandInput() {
 	return document.querySelector<HTMLInputElement>('[role=combobox]')!;
 }
-function filter(value: string) {
+
+async function filter(value: string) {
 	const input = commandInput();
 	input.value = value;
 	input.dispatchEvent(new Event('input', { bubbles: true }));
 	flushSync();
+	await tick();
+	await tick();
+	flushSync();
 	return input;
 }
-describe('keyboard palette', () => {
-	it('opens using Ctrl K, filters, executes on Enter and restores focus', async () => {
-		const { trigger, triage } = setup();
-		trigger.focus();
-		key(window, 'k', { ctrlKey: true });
+
+describe('UI v2 WdgCommandPalette', () => {
+	it('opens via appStore.commandOpen, filters actions, executes on Enter, and invokes restoreFocus', async () => {
+		const { triage, restoreSpy } = setup();
+		appStore.commandOpen = true;
+		flushSync();
 		await vi.waitFor(() => expect(document.activeElement).toBe(commandInput()));
-		const input = filter('unread');
-		expect(document.querySelectorAll('[role=dialog] [role=option]')).toHaveLength(1);
+
+		const input = await filter('unread');
+		const options = document.querySelectorAll('[role=dialog] [role=option]');
+		expect(options.length).toBe(1);
+		expect(options[0].textContent).toContain('Mark unread');
+
 		key(input, 'Enter');
 		await vi.waitFor(() =>
 			expect(triage).toHaveBeenCalledWith({
@@ -122,31 +175,60 @@ describe('keyboard palette', () => {
 				action: 'MarkUnread'
 			})
 		);
-		await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+		await vi.waitFor(() => expect(restoreSpy).toHaveBeenCalled());
 	});
-	it('keeps focus in the dialog, supports arrow navigation, closes on Escape and resets search', async () => {
-		const { trigger, triage } = setup();
-		trigger.focus();
-		trigger.click();
+
+	it('supports arrow navigation, closes on Escape without executing, and resets filter on reopen', async () => {
+		const { triage } = setup();
+		appStore.commandOpen = true;
 		flushSync();
 		await vi.waitFor(() => expect(document.activeElement).toBe(commandInput()));
 		const input = commandInput();
 		key(input, 'ArrowDown');
-		expect(input.getAttribute('aria-activedescendant')).toBe('triage-command-1');
-		filter('archive');
+		expect(input.getAttribute('aria-activedescendant')).toBeTruthy();
+
+		await filter('archive');
 		key(input, 'Escape');
 		await vi.waitFor(() => expect(document.querySelector('[role=dialog]')).toBeNull());
 		expect(triage).not.toHaveBeenCalled();
-		trigger.click();
+
+		appStore.commandOpen = true;
 		flushSync();
 		await vi.waitFor(() => expect(commandInput()?.value).toBe(''));
 	});
-	it('does not trigger shortcuts from editable fields and validates local tag input', async () => {
-		const { target, trigger, triage } = setup();
-		const search = target.querySelector('input[type=search]')!;
+
+	it('does not trigger shortcuts from editable fields and validates local tag 128-byte UTF-8 input', async () => {
+		const triage = vi.fn<InboxTransport['triage']>().mockResolvedValue(undefined);
+		const target = document.createElement('div');
+		document.body.append(target);
+		const session = mount(InboxSession, {
+			target,
+			props: {
+				connected: true,
+				inboxTransport: {
+					triage,
+					search: async () => [row],
+					subscribe: async () => () => {}
+				},
+				settingsTransport: createSettingsMock()
+			}
+		});
+		const palette = mount(WdgCommandPalette, { target });
+		flushSync();
+		cleanup = async () => {
+			await unmount(palette);
+			await unmount(session);
+			target.remove();
+		};
+
+		await vi.waitFor(() => expect(target.querySelector('[role="option"]')).not.toBeNull());
+		target.querySelector<HTMLElement>('[role="option"]')?.click();
+		flushSync();
+
+		const search = target.querySelector<HTMLInputElement>('input[type=search]')!;
 		key(search, 'e');
 		expect(triage).not.toHaveBeenCalled();
-		trigger.focus();
+
 		key(window, 't');
 		await vi.waitFor(() => expect(document.querySelector('#local-tag')).not.toBeNull());
 		const input = document.querySelector<HTMLInputElement>('#local-tag')!;
@@ -154,6 +236,7 @@ describe('keyboard palette', () => {
 		input.dispatchEvent(new Event('input', { bubbles: true }));
 		flushSync();
 		expect(document.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);
+
 		input.value = 'Receipts';
 		input.dispatchEvent(new Event('input', { bubbles: true }));
 		flushSync();
@@ -167,15 +250,18 @@ describe('keyboard palette', () => {
 			})
 		);
 	});
-	it('requires supported one-click metadata and an explicit selection before sending', async () => {
-		const { trigger, triage, attachment } = setup();
-		await vi.waitFor(() => expect(document.body.textContent).toContain('One-click available'));
-		expect(triage).not.toHaveBeenCalled();
-		trigger.click();
+
+	it('requires supported one-click metadata and explicit selection before sending unsubscribe', async () => {
+		const { triage, attachment } = setup(true);
+		appStore.commandOpen = true;
 		flushSync();
-		filter('unsubscribe');
-		const option = document.querySelector<HTMLButtonElement>('[role=dialog] [role=option]')!;
-		expect(option.getAttribute('aria-disabled')).toBe('false');
+		await vi.waitFor(() => expect(commandInput()).not.toBeNull());
+
+		await filter('unsubscribe');
+		const option = document.querySelector<HTMLElement>('[role=dialog] [role=option]')!;
+		expect(option.getAttribute('aria-disabled')).not.toBe('true');
+		expect(triage).not.toHaveBeenCalled();
+
 		option.click();
 		flushSync();
 		await vi.waitFor(() =>
@@ -187,58 +273,49 @@ describe('keyboard palette', () => {
 		expect(attachment).not.toHaveBeenCalled();
 	});
 
-	it('opens the snooze form from the palette and sends a UTC deadline with keyboard focus', async () => {
-		const { trigger, triage } = setup();
-		trigger.click();
+	it('opens WdgSnoozeSheet state when selecting Snooze from the palette', async () => {
+		const { workspace } = setup(true);
+		appStore.commandOpen = true;
 		flushSync();
-		const command = filter('snooze');
+		await vi.waitFor(() => expect(commandInput()).not.toBeNull());
+
+		const command = await filter('snooze');
 		key(command, 'Enter');
-		await vi.waitFor(() =>
-			expect(document.activeElement).toBe(document.querySelector('input[type=datetime-local]'))
-		);
-		const input = document.querySelector<HTMLInputElement>('input[type=datetime-local]')!;
-		const date = new Date(Date.now() + 86400000);
-		const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-			.toISOString()
-			.slice(0, 16);
-		input.value = local;
-		input.dispatchEvent(new Event('input', { bubbles: true }));
-		flushSync();
-		document
-			.querySelector<HTMLFormElement>('[role=dialog] form')!
-			.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-		await vi.waitFor(() =>
-			expect(triage).toHaveBeenCalledWith({
-				message_ids: [row.id],
-				action: { Snooze: { until_epoch_ms: new Date(local).getTime() } }
-			})
-		);
+		await vi.waitFor(() => expect(workspace.snoozeOpen).toBe(true));
+		expect(workspace.snoozeTargetId).toBe(row.id);
 	});
-	it('keeps unsupported unsubscribe disabled', async () => {
-		const { trigger, triage } = setup(false);
-		trigger.click();
+
+	it('keeps unsupported unsubscribe disabled in palette', async () => {
+		const { triage } = setup(false);
+		appStore.commandOpen = true;
 		flushSync();
-		filter('unsubscribe');
-		const option = document.querySelector<HTMLButtonElement>('[role=dialog] [role=option]')!;
+		await vi.waitFor(() => expect(commandInput()).not.toBeNull());
+
+		await filter('unsubscribe');
+		const option = document.querySelector<HTMLElement>('[role=dialog] [role=option]')!;
 		expect(option.getAttribute('aria-disabled')).toBe('true');
 		option.click();
 		flushSync();
 		expect(triage).not.toHaveBeenCalled();
 	});
 });
-describe('extracted badge UI', () => {
+
+describe('UI v2 extracted badge UI (WdgExtractionSummary)', () => {
 	it('renders all extraction values as accessible text without interpreting payload markup', async () => {
 		const target = document.createElement('div');
 		document.body.append(target);
-		const component = mount(TriageBadges, { target, props: { badges } });
+		const component = mount(WdgExtractionSummary, { target, props: { badges } });
 		flushSync();
-		expect(target.querySelectorAll('li')).toHaveLength(6);
+		expect(target.textContent).toContain('123.45');
+		appStore.setLocale('pt-BR');
+		flushSync();
 		expect(target.textContent).toContain('123,45');
 		expect(target.textContent).toContain('2026-10-30');
 		expect(target.textContent).toContain('<img src=x onerror=alert(1)>');
 		expect(target.querySelector('img')).toBeNull();
 		expect(target.textContent).toContain('TEST123');
 		expect(target.textContent).toContain('1'.repeat(44));
+		expect(target.textContent).toContain('RFC 8058');
 		await unmount(component);
 		target.remove();
 	});

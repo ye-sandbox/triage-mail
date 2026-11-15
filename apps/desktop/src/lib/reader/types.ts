@@ -41,7 +41,17 @@ export type AttachmentRequestDto = {
 	part_id: string;
 };
 export type AttachmentBytesDto = { bytes: number[] };
+import type { Category, CategoryMetadata } from '../categories/types';
+import type { AiSettings } from '../settings/types';
+
 export interface ReaderTransport {
 	body(messageId: string): Promise<MessageDetailDto>;
 	attachment(request: AttachmentRequestDto): Promise<AttachmentBytesDto>;
+	summarize?(messageId: string, consent: boolean, expected: AiSettings): Promise<string>;
+	categoryMetadata?(messageId: string): Promise<CategoryMetadata>;
+	correctCategory?(
+		messageId: string,
+		revision: number,
+		category: Category | null
+	): Promise<CategoryMetadata>;
 }

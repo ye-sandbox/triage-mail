@@ -276,5 +276,14 @@ export interface Translations {
 		openDrawer: string;
 		syncNow: string;
 		windowActionError: string;
+		blockRemoteImages: string;
+		downloaded: string;
+		noSubject: string;
+		unknownSender: string;
+		loadingMessage: string;
+		loadMessageError: string;
+		tryAgain: string;
+		resetCategory: string;
+		noDisplayableContent: string;
 	};
 }

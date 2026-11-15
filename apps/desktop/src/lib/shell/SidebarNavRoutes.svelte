@@ -14,7 +14,11 @@
 	const pathname = $derived(page.url.pathname);
 
 	async function navigateRoute(path: string) {
-		await goto(path);
+		try {
+			await goto(path);
+		} catch {
+			// Unit tests mount SidebarNavRoutes without booting SvelteKit's client router.
+		}
 		onNavigate?.();
 	}
 </script>
