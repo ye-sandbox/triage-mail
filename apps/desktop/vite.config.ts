@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => ({
 	...(mode === 'test' ? { resolve: { conditions: ['browser'] } } : {}),
 	test: {
 		environment: 'jsdom',
+		setupFiles: ['./src/vitest-setup.ts'],
 		include: ['src/**/*.{test,spec}.{js,ts}'],
 		pool: 'forks',
 		maxConcurrency: 1,

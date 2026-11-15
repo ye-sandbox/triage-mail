@@ -7,30 +7,17 @@
 
 ## Active Task
 
-### Task [04.14]: UI v2 Foundation, Offline Fonts, App Shell & Window Controls
+### Task [04.15]: UI v2 Unified Inbox, Virtualized Message List, Reader & Command Palette (`/`)
 
-- **Status:** APPROVED
-- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`)
-- **Source Reference:** `/mnt/c/Users/y/Downloads/triage-mail` (generated Svelte 5 + Tailwind v4 UI)
-- **Systems Involved:** `apps/desktop/package.json`, `apps/desktop/src/app.html`, `apps/desktop/src/app.css`, `apps/desktop/src/routes/+layout.svelte`, `apps/desktop/src/routes/+layout.ts`, `apps/desktop/src/lib/shell/`, `apps/desktop/src/lib/stores/`, `apps/desktop/src/lib/i18n/`, `apps/desktop/src/lib/security/sanitize.ts`, `apps/desktop/src/lib/window/`.
-- **Goal:** Replace the global visual shell, theme tokens, typography, and window chrome with the UI v2 design while preserving 100% of Tauri v2 IPC, CSP, and security invariants.
-- **Scope & Invariants:**
-  1. **Clean Dependencies (`apps/desktop/package.json`):** Add `lucide-svelte`, `svelte-sonner`, `vaul-svelte`, `@fontsource/plus-jakarta-sans`, `@fontsource/dm-sans`, and `@fontsource/jetbrains-mono` (do NOT import React/Express/AI-Studio packages from the generated template).
-  2. **CSP-Compliant Offline Typography (`app.html`, `app.css`):** Remove external `fonts.googleapis.com` links from `app.html`; bundle `@fontsource/*` locally and adopt the UI v2 semantic CSS tokens (`--background`, `--sidebar`, `--surface`, `--reader`, `--toolbar`, `--field`, `--text`, `--secondary`, `--separator`, `--accent`, `--selection`, `--selection-soft`, `--status-*`) with light/dark mode and `prefers-reduced-motion`.
-  3. **Unified Sanitizer (`src/lib/security/sanitize.ts`):** Keep the existing strict `DOMPurify` allowlist, `<meta http-equiv="Content-Security-Policy">`, and `data:`/`https:` image validation from `[04.3]`, while integrating the UI v2 light/dark iframe stylesheet and `hasBlockedRemoteImages(htmlRaw)` helper.
-  4. **App Shell & Real Window Controls (`src/lib/shell/*`, `+layout.svelte`):** Port `AppShell.svelte`, `SidebarNav.svelte`, `SidebarNavRoutes.svelte`, and `WindowControls.svelte` using Svelte 5 Runes (`<= 250` lines per `.svelte` file), `<Toaster />`, and `vaul-svelte` mobile drawer. Wire `WindowControls` and drag region to `src/lib/window/transport.ts` (`createTauriWindowTransport()`) with browser dock fallback when running outside Tauri.
-  5. **SPA Routing & State:** Configure `@sveltejs/adapter-static` compatible routes (`/`, `/due-dates`, `/automation`, `/onboarding`, `/settings`) and expand `i18n` labels without breaking existing unit tests.
-- **Validation:** `pnpm --filter desktop check`, `pnpm --filter desktop test`, `pnpm --filter desktop build`, `! grep -rn "export let" apps/desktop/src/`, `cargo check --workspace`, `git diff --check`.
+- **Status:** READY FOR PLANNING
+- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.14]`)
+- **Scope:** Replace `InboxView`, `Sidebar`, `SearchToolbar`, `MessageList`, `MessageState`, `MessageActions`, `SelectionOverview`, `MessageContent`, `AttachmentDownload`, `TriageBadges`, `CommandPalette`, `SnoozeForm`, and `Conversation*` with `WdgInboxStatsBar`, `WdgMessageList`, `WdgMessageReader`, `WdgReaderHeader`, `WdgExtractionSummary`, `WdgCommandPalette`, and `WdgSnoozeSheet`. Wire into `InboxController`, `virtual.ts` (`ROW_HEIGHT = 88`), `BadgeLoader`, and `reader/transport.ts` (`cmd_get_message_body`, `cmd_fetch_attachment`, `cmd_summarize_message`, `cmd_correct_category`), keeping fixture fallback only when `!nativeAvailable()`. Update inbox/reader/palette `*.svelte.test.ts`.
 
 ---
 
 ## UI v2 Redesign Queue (`feat/ui-v2-redesign`)
 
-Sequential 100% UI replacement roadmap following `[04.14]`. Priority: match the generated UI v2 layout/polish while preserving Rust backend contracts (`crates/*`, `apps/desktop/src-tauri`) and migrating mock data to real `transport.ts` / controllers progressively.
-
-### Task [04.15]: UI v2 Unified Inbox, Virtualized Message List, Reader & Command Palette (`/`)
-- **Status:** QUEUED (after `[04.14]`)
-- **Scope:** Replace `InboxView`, `Sidebar`, `SearchToolbar`, `MessageList`, `MessageState`, `MessageActions`, `SelectionOverview`, `MessageContent`, `AttachmentDownload`, `TriageBadges`, `CommandPalette`, `SnoozeForm`, and `Conversation*` with `WdgInboxStatsBar`, `WdgMessageList`, `WdgMessageReader`, `WdgReaderHeader`, `WdgExtractionSummary`, `WdgCommandPalette`, and `WdgSnoozeSheet`. Wire into `InboxController`, `virtual.ts` (`ROW_HEIGHT = 88`), `BadgeLoader`, and `reader/transport.ts` (`cmd_get_message_body`, `cmd_fetch_attachment`, `cmd_summarize_message`, `cmd_correct_category`), keeping fixture fallback only when `!nativeAvailable()`. Update inbox/reader/palette `*.svelte.test.ts`.
+Sequential 100% UI replacement roadmap following `[04.15]`. Priority: match the generated UI v2 layout/polish while preserving Rust backend contracts (`crates/*`, `apps/desktop/src-tauri`) and migrating mock data to real `transport.ts` / controllers progressively.
 
 ### Task [04.16]: UI v2 Boot Gate, Vault Unlock & Multi-Account Onboarding (`/onboarding`)
 - **Status:** QUEUED (after `[04.15]`)
@@ -47,6 +34,42 @@ Sequential 100% UI replacement roadmap following `[04.14]`. Priority: match the 
 ### Task [04.19]: UI v2 Settings, Search Index, Local AI, Backup & Legacy Cleanup (`/settings`)
 - **Status:** QUEUED (after `[04.18]`)
 - **Scope:** Replace `SettingsDialog`, `SettingsView`, `settings/modules/*`, `AiSettingsForm`, `ModelSettings`, `LearnedSearchSettings`, `BackupModule`, `PortableForm`, and `LanguageSelector` with `WdgSearchIndexPanel`, `WdgAiModelsPanel`, `WdgPrivacyPanel`, `WdgBackupDefinitionsPanel`, and `WdgImportPreviewDialog` on `/settings`, wired to `settings/transport.ts`, `settings/guards.ts`, and `backup/transport.ts`. Remove all obsolete `.svelte` files and orphan fixtures, update remaining tests, and pass full repository DoD (`cargo check/test/fmt/clippy`, `pnpm check/test/build`, zero `export let`, zero PII/secrets).
+
+---
+
+## Latest Completed Task
+
+### Task [04.14]: UI v2 Foundation, Offline Fonts, App Shell & Window Controls
+
+- **Status:** DONE
+- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, starting after `1ecbbc3`)
+- **Source Reference:** `/mnt/c/Users/y/Downloads/triage-mail` (generated Svelte 5 + Tailwind v4 UI)
+- **Systems Involved:** `apps/desktop/package.json`, `apps/desktop/src/app.html`, `apps/desktop/src/app.css`, `apps/desktop/src/routes/+layout.svelte`, `apps/desktop/src/routes/{automation,due-dates,onboarding,settings}/+page.svelte`, `apps/desktop/src/lib/shell/`, `apps/desktop/src/lib/stores/`, `apps/desktop/src/lib/i18n/`, `apps/desktop/src/lib/security/sanitize.ts`, `apps/desktop/src/lib/window/shell.svelte.test.ts`, `apps/desktop/vite.config.ts`, `apps/desktop/src/vitest-setup.ts`.
+- **Goal:** Replace the global visual shell, theme tokens, typography, and window chrome with the UI v2 design while preserving 100% of Tauri v2 IPC, CSP, and security invariants.
+
+#### Completion (2026-11-15)
+
+- **Delivered:**
+  - Installed clean UI v2 frontend packages (`lucide-svelte`, `svelte-sonner`, `vaul-svelte`, `@fontsource/plus-jakarta-sans`, `@fontsource/dm-sans`, `@fontsource/jetbrains-mono`) without React/Express/AI-Studio packages.
+  - Updated `app.html` and `app.css` with UI v2 light/dark semantic tokens, `@fontsource/*` font-family stacks, drag/workstation classes, `prefers-reduced-motion`, and temporary legacy compatibility styles for pre-`[04.15]`–`[04.19]` views.
+  - Unified `src/lib/security/sanitize.ts` retaining `[04.3]` strict `DOMPurify` tag/attr allowlist, leading CSP, and `data:`/`https:` image validation while adding UI v2 light/dark reader stylesheets (`theme?: 'light' | 'dark'`) and `hasBlockedRemoteImages(htmlRaw)`.
+  - Ported `AppShell.svelte`, `SidebarNav.svelte`, `SidebarNavAccounts.svelte`, `SidebarNavRoutes.svelte`, `WindowControls.svelte`, `WorkstationDock.svelte`, and `window.svelte.ts` (all `.svelte` files `<= 215` lines, pure Svelte 5 Runes), wired to `src/lib/window/transport.ts` (`createTauriWindowTransport()`) with browser dock fallback outside Tauri, `<Toaster />`, and `vaul-svelte` drawer.
+  - Added UI v2 domain types (`src/lib/types.ts`), `AppStore` (`src/lib/stores/app.svelte.ts`, `@example.com`/`@example.org` fixtures), SPA routes (`/due-dates`, `/automation`, `/onboarding`, `/settings`), expanded 1:1 EN/PT-BR `shell` translations, and Vitest coverage (`shell.svelte.test.ts`, `app.test.ts`, `sanitize.test.ts`, `i18n.test.ts`).
+- **Validation:**
+  - `pnpm --filter desktop check`: 0 errors, 0 warnings.
+  - `pnpm --filter desktop test`: 33 test files passed, 192 tests passed.
+  - `pnpm --filter desktop build`: Built static SPA to `apps/desktop/build` with offline `.woff2`/`.woff` assets.
+  - `! grep -rn "export let" apps/desktop/src/`, `! grep -rn "fonts.googleapis.com\|fonts.gstatic.com" apps/desktop/src/`, `git diff --check`, and `node scripts/ci-guard.mjs` clean.
+  - Rust workspace (`crates/*`, `apps/desktop/src-tauri`): zero files modified; local `cargo` toolchain unavailable in current environment (`/home/<user>/.cargo/bin/cargo` symlink dangling).
+- **Next:** Task `[04.15]` (`READY FOR PLANNING`).
+
+#### Closing Checklist — [04.14]
+
+- [x] Offline `@fontsource/*` fonts and UI v2 semantic tokens configured without external CDN links.
+- [x] Unified email HTML sanitizer preserves strict `DOMPurify` + leading CSP + light/dark reader CSS.
+- [x] `AppShell`, `SidebarNav*`, `WindowControls`, `WorkstationDock`, `<Toaster />`, and SPA routes implemented with Svelte 5 Runes (`<= 250` lines/file).
+- [x] `pnpm --filter desktop check`, `pnpm --filter desktop test` (192/192), `pnpm --filter desktop build`, and `ci-guard` policy scan passed.
+- [x] Atomic Conventional Commit recorded on `feat/ui-v2-redesign` without pushing.
 
 ---
 

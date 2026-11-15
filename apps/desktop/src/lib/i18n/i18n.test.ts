@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { formatBytes, formatCategoryLabel, formatSyncStatus, t } from './index';
 import { i18n } from './index.svelte';
 import { translations } from './translations';
 
@@ -39,5 +40,14 @@ describe('i18n store', () => {
 			const ptSubKeys = Object.keys(translations['pt-BR'][section]).sort();
 			expect(enSubKeys).toEqual(ptSubKeys);
 		}
+	});
+
+	it('formats UI v2 shell keys, categories, sync states, and byte sizes', () => {
+		expect(t('en', 'navDueDates')).toBe('Due Dates');
+		expect(t('pt-BR', 'navDueDates')).toBe('Vencimentos');
+		expect(formatCategoryLabel('pt-BR', 'Financial')).toBe('Financeiro');
+		expect(formatSyncStatus('pt-BR', 'Syncing')).toBe('Sincronizando');
+		expect(formatBytes(512)).toBe('512 B');
+		expect(formatBytes(2048)).toBe('2.0 KB');
 	});
 });

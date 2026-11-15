@@ -2,22 +2,87 @@ import DOMPurify from 'dompurify';
 
 export interface SanitizeEmailOptions {
 	allowRemoteImages?: boolean;
+	theme?: 'light' | 'dark';
 }
 
-const BASE_DARK_MODE_STYLESHEET = `
-:root {
-	color-scheme: dark light;
-	font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-	line-height: 1.5;
-	color: hsl(210 20% 96%);
-	background-color: hsl(224 24% 10%);
+function buildStylesheet(theme?: 'light' | 'dark'): string {
+	const lightPalette = `
+	--reader-bg: #ffffff;
+	--reader-fg: #111827;
+	--reader-muted: #525d6d;
+	--reader-border: #e2e6ec;
+	--reader-link: #2563eb;
+	--reader-code-bg: #f1f3f6;`;
+
+	const darkPalette = `
+	--reader-bg: #121721;
+	--reader-fg: #eef2f7;
+	--reader-muted: #98a4b8;
+	--reader-border: #242d3d;
+	--reader-link: #60a5fa;
+	--reader-code-bg: #1c2433;`;
+
+	const rootVars =
+		theme === 'light'
+			? `color-scheme: light;${lightPalette}`
+			: theme === 'dark'
+				? `color-scheme: dark;${darkPalette}`
+				: `color-scheme: dark light;${darkPalette}`;
+
+	const mediaFallback =
+		theme === undefined ? `@media (prefers-color-scheme: light) { :root {${lightPalette}\n} }` : '';
+
+	return `
+:root {${rootVars}
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	line-height: 1.6;
 }
-body { margin: 0; padding: 16px; overflow-wrap: anywhere; }
-a { color: hsl(210 90% 68%); }
-img, table { max-width: 100%; }
-img { height: auto; }
-pre { white-space: pre-wrap; }
+${mediaFallback}
+body {
+	margin: 0;
+	padding: 16px;
+	background: var(--reader-bg);
+	color: var(--reader-fg);
+	font-size: 14px;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}
+a { color: var(--reader-link); text-decoration: underline; }
+blockquote {
+	margin: 12px 0;
+	padding: 4px 12px;
+	border-left: 2px solid var(--reader-border);
+	color: var(--reader-muted);
+}
+pre, code {
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	background: var(--reader-code-bg);
+	border-radius: 4px;
+}
+code { padding: 2px 5px; font-size: 12px; }
+pre { padding: 12px; overflow-x: auto; white-space: pre-wrap; }
+table { border-collapse: collapse; width: 100%; max-width: 100%; margin: 12px 0; }
+th, td { border: 1px solid var(--reader-border); padding: 8px; text-align: left; }
+hr { border: 0; border-top: 1px solid var(--reader-border); margin: 16px 0; }
+img { max-width: 100%; height: auto; border-radius: 6px; display: block; margin: 8px 0; }
 `;
+}
+
+export function hasBlockedRemoteImages(htmlRaw: string): boolean {
+	if (!htmlRaw) return false;
+	const imgMatches = htmlRaw.matchAll(/<img\b[^>]*>/gi);
+	for (const match of imgMatches) {
+		const tag = match[0];
+		const srcMatch = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag);
+		if (!srcMatch) continue;
+		const src = (srcMatch[1] ?? srcMatch[2] ?? srcMatch[3] ?? '').trim();
+		const isRasterData = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(src);
+		if (src && !isRasterData) {
+			return true;
+		}
+	}
+	return false;
+}
 
 export function sanitizeEmailHtml(rawHtml: string, options: SanitizeEmailOptions = {}): string {
 	// INVARIANT: Sender CSS and URL-bearing attributes are excluded, not rewritten with regex.
@@ -81,5 +146,6 @@ export function sanitizeEmailHtml(rawHtml: string, options: SanitizeEmailOptions
 	// INVARIANT: CSP precedes sender content; the caller also uses an empty iframe sandbox.
 	const imgSources = options.allowRemoteImages ? 'data: https:' : 'data:';
 	const csp = `default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src ${imgSources}; connect-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'`;
-	return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="referrer" content="no-referrer"><style>${BASE_DARK_MODE_STYLESHEET}</style></head><body>${container.innerHTML}</body></html>`;
+	const stylesheet = buildStylesheet(options.theme);
+	return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="referrer" content="no-referrer"><style>${stylesheet}</style></head><body>${container.innerHTML}</body></html>`;
 }

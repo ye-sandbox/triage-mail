@@ -9,12 +9,12 @@ import { scanText } from './ci-guard.mjs';
 test('permits reserved mailboxes, package versions and contract field names', () => {
   const text =
     'user@example.com user@sub.example.org user@host.test user@host.invalid\n' +
-    'user@localhost.example user@example.net package@1.2.3 client_secret: Option<String>';
+    'user@localhost.example user@example.net package@1.2.3 vaul-svelte@1.0.0-next.7 client_secret: Option<String>';
   assert.deepEqual(scanText('fixture.txt', text), []);
 });
 
 test('rejects non-reserved addresses including misleading reserved suffixes', () => {
-  for (const domain of ['mail' + '.com', 'example.com.evil' + '.com', 'notexample' + '.org']) {
+  for (const domain of ['mail' + '.com', 'example.com.evil' + '.com', 'notexample' + '.org', '1.0.0-evil' + '.com']) {
     const findings = scanText('fixture.txt', `prefix\nuser@${domain}`);
     assert.deepEqual(findings, [{ path: 'fixture.txt', line: 2, rule: 'non-reserved-email' }]);
     assert.ok(!JSON.stringify(findings).includes(domain));
