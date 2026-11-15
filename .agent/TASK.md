@@ -7,21 +7,17 @@
 
 ## Active Task
 
-### Task [04.17]: UI v2 Due Dates & Reminders Hub (`/due-dates`)
+### Task [04.18]: UI v2 Automation Workspace — Rules Simulator, Alerts & Sender Governance (`/automation`)
 
 - **Status:** READY FOR PLANNING
-- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.16]`)
-- **Scope:** Promote `DueDateDashboard` and `RemindersModule` to `/due-dates` using `WdgDueDateKpis`, `WdgBoletoCard`, and `WdgReminderConfigDrawer` wired to `reminders/transport.ts`. Feed live `Overdue + Due Today` badge counts into `SidebarNavRoutes` and route `"View Email"` back to `/` with message selection. Update `reminders.svelte.test.ts`.
+- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.17]`)
+- **Scope:** Replace `RulesModule`, `RuleEditor`, `ConditionsEditor`, `AlertsModule`, `DestinationEditor`, `ScheduleEditor`, `ScheduleTiming`, `ReviewModule`, `SenderDecision`, and `CategoriesModule` with `WdgRulesSplitPane`, `WdgRuleEditorForm`, `WdgRuleSimulatorPanel`, `WdgAlertsManager`, `WdgAlertDestinationDialog`, `WdgSenderReviewQueue`, and `WdgCategoryOverrides` on `/automation`. Wire to `rules/transport.ts`, `alerts/transport.ts` (retaining explicit field consent and quiet hours), `sender-review/transport.ts`, and `categories/transport.ts`, keeping non-contract visual fields (e.g. `matches_count`) gracefully defaulted until backend support lands. Update related `*.svelte.test.ts`.
 
 ---
 
 ## UI v2 Redesign Queue (`feat/ui-v2-redesign`)
 
-Sequential 100% UI replacement roadmap following `[04.16]`. Priority: match the generated UI v2 layout/polish while preserving Rust backend contracts (`crates/*`, `apps/desktop/src-tauri`) and migrating mock data to real `transport.ts` / controllers progressively.
-
-### Task [04.18]: UI v2 Automation Workspace — Rules Simulator, Alerts & Sender Governance (`/automation`)
-- **Status:** QUEUED (after `[04.17]`)
-- **Scope:** Replace `RulesModule`, `RuleEditor`, `ConditionsEditor`, `AlertsModule`, `DestinationEditor`, `ScheduleEditor`, `ScheduleTiming`, `ReviewModule`, `SenderDecision`, and `CategoriesModule` with `WdgRulesSplitPane`, `WdgRuleEditorForm`, `WdgRuleSimulatorPanel`, `WdgAlertsManager`, `WdgAlertDestinationDialog`, `WdgSenderReviewQueue`, and `WdgCategoryOverrides` on `/automation`. Wire to `rules/transport.ts`, `alerts/transport.ts` (retaining explicit field consent and quiet hours), `sender-review/transport.ts`, and `categories/transport.ts`, keeping non-contract visual fields (e.g. `matches_count`) gracefully defaulted until backend support lands. Update related `*.svelte.test.ts`.
+Sequential 100% UI replacement roadmap following `[04.17]`. Priority: match the generated UI v2 layout/polish while preserving Rust backend contracts (`crates/*`, `apps/desktop/src-tauri`) and migrating mock data to real `transport.ts` / controllers progressively.
 
 ### Task [04.19]: UI v2 Settings, Search Index, Local AI, Backup & Legacy Cleanup (`/settings`)
 - **Status:** QUEUED (after `[04.18]`)
@@ -30,6 +26,39 @@ Sequential 100% UI replacement roadmap following `[04.16]`. Priority: match the 
 ---
 
 ## Latest Completed Task
+
+### Task [04.17]: UI v2 Due Dates & Reminders Hub (`/due-dates`)
+
+- **Status:** DONE
+- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.16]`)
+- **Source Reference:** `/mnt/c/Users/y/Downloads/triage-mail` (`src/routes/due-dates/+page.svelte`, `src/lib/due-dates/*`)
+- **Systems Involved:** `apps/desktop/src/routes/due-dates/+page.svelte`, `apps/desktop/src/lib/reminders/*`, `apps/desktop/src/lib/stores/app.svelte.ts`, `apps/desktop/src/lib/onboarding/InboxSession.svelte`, `apps/desktop/src/lib/inbox/{demo.svelte.ts,workspace.svelte.ts}`.
+
+#### Completion (2026-11-15)
+
+- **Delivered:**
+  - Extended [reminders/types.ts](apps/desktop/src/lib/reminders/types.ts) with `countOverdueAndDueToday(items, todayIso?)` and [reminders/labels.ts](apps/desktop/src/lib/reminders/labels.ts) with 1:1 EN/PT-BR UI v2 copy, while preserving all Rust `crates/triage-ai/src/reminders.rs` validation invariants (`name` 1–120 chars, `days_before` 0..365, `target_hour` 0..23, `interval_hours` 1..8760, max 50 configs).
+  - Added [reminders/due-dates.fixtures.ts](apps/desktop/src/lib/reminders/due-dates.fixtures.ts) (`@example.com`/`@example.org`/`@example.net` only) providing `!nativeAvailable()` demo `RemindersTransport`/`AlertsTransport` backends and `buildInboxMessageFromDueItem` for `"View Email"` demo inspection.
+  - Ported UI v2 hub components in pure Svelte 5 Runes: `WdgDueDatesPage.svelte` (non-payment disclaimer banner, status tabs via `bits-ui` `Tabs`, account selector, barcode/text search, empty/clear-filter states, and `appStore.overdueAndDueTodayCount` sync), `WdgDueDateKpis.svelte` (interactive `Overdue`/`DueToday`/`Upcoming` KPI totals in BRL with `aria-pressed` filtering), `WdgBoletoCard.svelte` (clipboard copy with `svelte-sonner` toast feedback, relative deadline delta, `"Dismiss"`, and `"View Email"`), `WdgReminderConfigDrawer.svelte` (`vaul-svelte` mobile drawer / `bits-ui` desktop dialog with `$state.snapshot()` unwrapping on transport saves, inline toggle, create/edit, and revision-checked delete), and `WdgReminderRuleForm.svelte` (quick lead-time presets `14, 7, 3, 1, 0`, min amount in BRL, account filter, and alert destination binding).
+  - Promoted `WdgDueDatesPage` onto [routes/due-dates/+page.svelte](apps/desktop/src/routes/due-dates/+page.svelte), replaced the legacy modal `DueDateDashboard` trigger in [InboxSession.svelte](apps/desktop/src/lib/onboarding/InboxSession.svelte) with live `appStore.overdueAndDueTodayCount` syncing via `remindersTransport.listDueDates()` and `DemoBackend`, and wired `"View Email"` navigation (`appStore.setScope({ kind: 'all' })`, transient `appStore.requestSelectMessage`, and post-load selection in `InboxSession`). Legacy `DueDateDashboard`/`RemindersModule` remain only until `[04.19]` replaces `SettingsDialog`/`SettingsView`.
+  - Updated [reminders.svelte.test.ts](apps/desktop/src/lib/reminders/reminders.svelte.test.ts) with coverage for `WdgDueDatesPage`, `WdgDueDateKpis`, `WdgBoletoCard`, `WdgReminderConfigDrawer`, live `SidebarNavRoutes` badge updates, and `"View Email"` message selection in both connected and demo `InboxSession` modes.
+- **Validation:**
+  - `pnpm --filter desktop check`: 0 errors, 0 warnings.
+  - `pnpm --filter desktop test`: 33 test files passed, 203 tests passed (including 17 tests in `reminders.svelte.test.ts`).
+  - `pnpm --filter desktop build`: Built static SPA to `apps/desktop/build` via `@sveltejs/adapter-static`.
+  - `! grep -rn "export let" apps/desktop/src/`, `node scripts/ci-guard.mjs` (504 tracked text files scanned, 0 findings), `node --test scripts/ci-guard.test.mjs` (5/5 passed), and `git diff --check` clean.
+  - Rust workspace (`crates/*`, `apps/desktop/src-tauri`): zero files modified; local `cargo` toolchain unavailable in current environment.
+- **Next:** Task `[04.18]` (`READY FOR PLANNING`).
+
+#### Closing Checklist — [04.17]
+
+- [x] `WdgDueDatesPage`, `WdgDueDateKpis`, `WdgBoletoCard`, `WdgReminderConfigDrawer`, and `WdgReminderRuleForm` implemented in Svelte 5 Runes and wired to `reminders/transport.ts` + `alerts/transport.ts`.
+- [x] Promoted to `/due-dates` with live `Overdue + Due Today` badge synchronization in `SidebarNavRoutes`.
+- [x] `"View Email"` routes back to `/` with `GlobalAllMail` scope and selects the target message in both native and demo `InboxSession` flows.
+- [x] `reminders.svelte.test.ts` updated; `check`, `test` (203/203), `build`, `ci-guard`, and `git diff --check` passed.
+- [x] Atomic Conventional Commit recorded on `feat/ui-v2-redesign` without pushing.
+
+---
 
 ### Task [04.16]: UI v2 Boot Gate, Vault Unlock & Multi-Account Onboarding (`/onboarding`)
 

@@ -109,6 +109,7 @@ export interface DemoBackend {
 	readerTransport: ReaderTransport;
 	settingsTransport: SettingsTransport;
 	getMessages: () => EmailMessage[];
+	ensureMessage: (msg: EmailMessage) => void;
 	markBoletoPaid: (id: string, paid: boolean) => void;
 }
 
@@ -452,6 +453,11 @@ export function createDemoBackend(): DemoBackend {
 		readerTransport,
 		settingsTransport,
 		getMessages: () => messages,
+		ensureMessage: (msg) => {
+			if (!messages.some((m) => m.id === msg.id)) {
+				messages = [msg, ...messages];
+			}
+		},
 		markBoletoPaid: (id, paid) => {
 			messages = messages.map((m) =>
 				m.id === id && m.extractions.boleto

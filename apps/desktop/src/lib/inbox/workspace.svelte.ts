@@ -3,6 +3,8 @@ import { appStore } from '$lib/stores/app.svelte';
 import type { MailAccount, ScopeFilter, SyncStatus } from '$lib/types';
 import type { AccountConfig } from '../onboarding/types';
 import { nativeReaderTransport } from '../reader/transport';
+import { demoRemindersBackend } from '../reminders/due-dates.fixtures';
+import { countOverdueAndDueToday } from '../reminders/types';
 import { blankView } from '../saved-views/types';
 import type { ReaderTransport, TriageBadge } from '../reader/types';
 import { nativeSettingsTransport } from '../settings/transport';
@@ -311,6 +313,14 @@ export class InboxWorkspace {
 		void this.inbox.search('', this.inbox.mode);
 	}
 
+	ensureDemoDueDateMessage(messageId: string) {
+		if (!this.demoBackend) return;
+		const msg = demoRemindersBackend.findMessage(messageId);
+		if (msg) {
+			this.demoBackend.ensureMessage(msg);
+		}
+	}
+
 	syncShellMetrics() {
 		appStore.loadedCount = this.inbox.rows.length;
 		appStore.unreadTotal = this.demoBackend
@@ -320,14 +330,7 @@ export class InboxWorkspace {
 		appStore.semanticSearchEnabled = this.inbox.experimentalSemanticSearch;
 		appStore.syncStatus = mapSyncStatus(this.inbox.syncStatus);
 		if (this.demoBackend) {
-			appStore.overdueAndDueTodayCount = this.demoBackend
-				.getMessages()
-				.filter(
-					(m) =>
-						m.extractions.boleto &&
-						!m.extractions.boleto.paid &&
-						m.extractions.boleto.due_date_iso <= '2026-11-14'
-				).length;
+			appStore.overdueAndDueTodayCount = countOverdueAndDueToday(demoRemindersBackend.getItems());
 			for (const acct of appStore.accounts) {
 				for (const folder of acct.folders) {
 					const unread = this.demoBackend

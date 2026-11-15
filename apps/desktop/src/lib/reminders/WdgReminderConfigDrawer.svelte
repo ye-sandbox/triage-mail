@@ -1,0 +1,339 @@
+<script lang="ts">
+	import { untrack } from 'svelte';
+	import { Dialog } from 'bits-ui';
+	import { Bell, Plus, Trash2, X } from 'lucide-svelte';
+	import { toast } from 'svelte-sonner';
+	import { Drawer } from 'vaul-svelte';
+	import { nativeAlertsTransport } from '$lib/alerts/transport';
+	import type { AlertsTransport, Destination } from '$lib/alerts/types';
+	import { i18n } from '$lib/i18n/index.svelte';
+	import type { AccountConfig } from '$lib/onboarding/types';
+	import { labels } from './labels';
+	import { nativeRemindersTransport } from './transport';
+	import {
+		newReminderConfig,
+		type RemindersTransport,
+		type ScheduledReminderConfig
+	} from './types';
+	import WdgReminderRuleForm from './WdgReminderRuleForm.svelte';
+
+	interface Props {
+		open: boolean;
+		remindersTransport?: RemindersTransport;
+		alertsTransport?: AlertsTransport;
+		accounts?: AccountConfig[];
+		onConfigsChanged?: (configs: ScheduledReminderConfig[]) => void;
+	}
+
+	let {
+		open = $bindable(false),
+		remindersTransport = nativeRemindersTransport,
+		alertsTransport = nativeAlertsTransport,
+		accounts = [],
+		onConfigsChanged
+	}: Props = $props();
+
+	const t = $derived(labels[i18n.locale]);
+
+	let isMobile = $state(false);
+	let configs = $state<ScheduledReminderConfig[]>([]);
+	let destinations = $state<Destination[]>([]);
+	let draft = $state<ScheduledReminderConfig | null>(null);
+	let loading = $state(false);
+	let busy = $state(false);
+	let error = $state('');
+	let loadGeneration = 0;
+
+	$effect(() => {
+		if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+		const mq = window.matchMedia('(max-width: 767px)');
+		isMobile = mq.matches;
+		const onChange = (e: MediaQueryListEvent) => (isMobile = e.matches);
+		mq.addEventListener('change', onChange);
+		return () => mq.removeEventListener('change', onChange);
+	});
+
+	async function load() {
+		const gen = ++loadGeneration;
+		loading = true;
+		error = '';
+		try {
+			const [cfgList, destList] = await Promise.all([
+				remindersTransport.listConfigs(),
+				alertsTransport.list()
+			]);
+			if (gen !== loadGeneration) return;
+			configs = cfgList;
+			destinations = destList;
+			onConfigsChanged?.(cfgList);
+		} catch {
+			if (gen === loadGeneration) error = t.error;
+		} finally {
+			if (gen === loadGeneration) loading = false;
+		}
+	}
+
+	$effect(() => {
+		if (open) {
+			untrack(() => {
+				draft = null;
+				void load();
+			});
+		} else {
+			loadGeneration++;
+			draft = null;
+			error = '';
+		}
+	});
+
+	function startCreate() {
+		error = '';
+		const fresh = newReminderConfig();
+		if (destinations.length > 0) {
+			fresh.destination_ids = [destinations[0].id];
+		}
+		draft = fresh;
+	}
+
+	async function handleSave(next: ScheduledReminderConfig) {
+		if (busy) return;
+		busy = true;
+		error = '';
+		try {
+			await remindersTransport.saveConfig(next);
+			draft = null;
+			await load();
+			toast.success(t.ruleSavedToast, { description: next.name });
+		} catch {
+			error = t.error;
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function toggleEnabled(cfg: ScheduledReminderConfig) {
+		if (busy) return;
+		busy = true;
+		error = '';
+		try {
+			const plain = $state.snapshot(cfg);
+			await remindersTransport.saveConfig({ ...plain, enabled: !plain.enabled });
+			await load();
+		} catch {
+			error = t.error;
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function handleDelete(cfg: ScheduledReminderConfig) {
+		if (busy) return;
+		busy = true;
+		error = '';
+		try {
+			await remindersTransport.deleteConfig(cfg.id, cfg.revision);
+			if (draft?.id === cfg.id) draft = null;
+			await load();
+			toast.success(t.ruleDeletedToast, { description: cfg.name });
+		} catch {
+			error = t.error;
+		} finally {
+			busy = false;
+		}
+	}
+
+	function formatMinAmountDisplay(cents?: number): string {
+		if (!cents) return '';
+		return new Intl.NumberFormat(i18n.locale === 'pt-BR' ? 'pt-BR' : 'en-US', {
+			style: 'currency',
+			currency: 'BRL'
+		}).format(cents / 100);
+	}
+</script>
+
+{#snippet drawerBody()}
+	<div class="flex flex-col gap-4 text-xs">
+		<p class="leading-relaxed text-[11px] text-secondary">{t.rulesNotice}</p>
+
+		{#if error && !draft}
+			<div
+				role="alert"
+				class="rounded-md border border-status-danger/30 bg-status-danger/10 px-3 py-2 text-xs text-status-danger"
+			>
+				{error}
+			</div>
+		{/if}
+
+		{#if draft}
+			<WdgReminderRuleForm
+				initial={draft}
+				{destinations}
+				{accounts}
+				{busy}
+				{error}
+				onSave={handleSave}
+				onCancel={() => (draft = null)}
+			/>
+		{:else}
+			<div class="flex items-center justify-between gap-2">
+				<span class="font-medium text-foreground">{t.rulesTitle}</span>
+				<button
+					type="button"
+					onclick={startCreate}
+					disabled={loading || busy || configs.length >= 50}
+					class="flex min-h-[36px] items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground hover:opacity-95 disabled:opacity-50"
+				>
+					<Plus class="h-3.5 w-3.5" />
+					<span>{t.addRule}</span>
+				</button>
+			</div>
+
+			{#if loading}
+				<div class="rounded-md border border-separator bg-field p-6 text-center text-secondary">
+					{t.loadingBills}
+				</div>
+			{:else if configs.length === 0}
+				<div class="flex flex-col items-center justify-center gap-2 rounded-md border border-dashed border-separator bg-field py-8 text-center">
+					<Bell class="h-6 w-6 text-secondary" />
+					<p class="text-xs text-secondary">{t.emptyRules}</p>
+				</div>
+			{:else}
+				<div class="flex flex-col gap-2">
+					{#each configs as cfg (cfg.id)}
+						<div
+							class="flex items-center justify-between gap-3 rounded-md border border-separator bg-field p-3"
+						>
+							<div class="flex min-w-0 items-center gap-2.5">
+								<button
+									type="button"
+									role="switch"
+									aria-checked={cfg.enabled}
+									aria-label={cfg.enabled ? t.enabled : t.disabled}
+									disabled={busy}
+									onclick={() => void toggleEnabled(cfg)}
+									class="min-h-[30px] shrink-0 rounded-md border border-separator px-2 py-0.5 font-mono text-[11px] font-medium transition-colors {cfg.enabled
+										? 'bg-selection-soft text-status-healthy'
+										: 'bg-surface text-secondary'}"
+								>
+									{cfg.enabled ? t.enabled : t.disabled}
+								</button>
+
+								<div class="min-w-0">
+									<div class="truncate font-medium text-foreground">{cfg.name}</div>
+									<div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-secondary">
+										{#if 'DueDate' in cfg.trigger}
+											<span>
+												{t.ruleSummaryDueDate(
+													cfg.trigger.DueDate.days_before,
+													cfg.trigger.DueDate.target_hour
+												)}
+											</span>
+											{#if cfg.trigger.DueDate.min_amount_cents}
+												<span aria-hidden="true">·</span>
+												<span>
+													{t.minAmountSummary(
+														formatMinAmountDisplay(cfg.trigger.DueDate.min_amount_cents)
+													)}
+												</span>
+											{/if}
+										{:else}
+											<span>{t.ruleSummaryUnread(cfg.trigger.UnreadInterval.interval_hours)}</span>
+											{#if cfg.trigger.UnreadInterval.min_amount_cents}
+												<span aria-hidden="true">·</span>
+												<span>
+													{t.minAmountSummary(
+														formatMinAmountDisplay(cfg.trigger.UnreadInterval.min_amount_cents)
+													)}
+												</span>
+											{/if}
+										{/if}
+									</div>
+								</div>
+							</div>
+
+							<div class="flex shrink-0 items-center gap-1.5">
+								<button
+									type="button"
+									onclick={() => {
+										error = '';
+										draft = structuredClone($state.snapshot(cfg));
+									}}
+									disabled={busy}
+									class="rounded-md border border-separator bg-surface px-2.5 py-1 text-xs font-medium text-foreground hover:bg-selection-soft"
+								>
+									{t.edit}
+								</button>
+								<button
+									type="button"
+									onclick={() => void handleDelete(cfg)}
+									disabled={busy}
+									aria-label={`${t.delete} ${cfg.name}`}
+									class="rounded-md border border-separator bg-surface p-1.5 text-status-danger hover:bg-status-danger/10"
+								>
+									<Trash2 class="h-3.5 w-3.5" />
+								</button>
+							</div>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		{/if}
+	</div>
+{/snippet}
+
+{#if isMobile}
+	<Drawer.Root bind:open>
+		<Drawer.Portal>
+			<Drawer.Overlay class="fixed inset-0 z-50 bg-foreground/30" />
+			<Drawer.Content
+				class="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-xl border-t border-separator bg-surface p-4 outline-none"
+			>
+				<div class="mx-auto mb-3 h-1.5 w-10 rounded-full bg-separator"></div>
+				<div class="mb-3 flex items-center justify-between">
+					<Drawer.Title class="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
+						<Bell class="h-4 w-4 text-accent" />
+						<span>{t.configureSchedule}</span>
+					</Drawer.Title>
+					<button
+						type="button"
+						aria-label={t.close}
+						onclick={() => {
+							if (!busy) open = false;
+						}}
+						class="rounded-md p-1 text-secondary hover:text-foreground"
+					>
+						<X class="h-4 w-4" />
+					</button>
+				</div>
+				{@render drawerBody()}
+			</Drawer.Content>
+		</Drawer.Portal>
+	</Drawer.Root>
+{:else}
+	<Dialog.Root bind:open>
+		<Dialog.Portal>
+			<Dialog.Overlay class="fixed inset-0 z-50 bg-foreground/25" />
+			<Dialog.Content
+				class="fixed top-1/2 left-1/2 z-50 max-h-[85vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-separator bg-surface p-5 shadow-xl outline-none"
+			>
+				<div class="mb-4 flex items-center justify-between">
+					<Dialog.Title class="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
+						<Bell class="h-4 w-4 text-accent" />
+						<span>{t.configureSchedule}</span>
+					</Dialog.Title>
+					<button
+						type="button"
+						aria-label={t.close}
+						onclick={() => {
+							if (!busy) open = false;
+						}}
+						class="rounded-md p-1 text-secondary hover:text-foreground"
+					>
+						<X class="h-4 w-4" />
+					</button>
+				</div>
+				{@render drawerBody()}
+			</Dialog.Content>
+		</Dialog.Portal>
+	</Dialog.Root>
+{/if}

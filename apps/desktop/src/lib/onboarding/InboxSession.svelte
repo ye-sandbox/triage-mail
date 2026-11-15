@@ -14,8 +14,7 @@
 		workspaceRegistry
 	} from '$lib/inbox/workspace.svelte';
 	import { nativeRemindersTransport } from '$lib/reminders/transport';
-	import { calculateDueDateStatus, type RemindersTransport } from '$lib/reminders/types';
-	import DueDateDashboard from '$lib/reminders/DueDateDashboard.svelte';
+	import { countOverdueAndDueToday, type RemindersTransport } from '$lib/reminders/types';
 	import SettingsDialog from '$lib/settings/SettingsDialog.svelte';
 	import { nativeSettingsTransport } from '$lib/settings/transport';
 	import type { SettingsTab, SettingsTransport } from '$lib/settings/types';
@@ -37,7 +36,6 @@
 	} = $props();
 
 	let settingsOpen = $state(false);
-	let dueDateDashboardOpen = $state(false);
 	let settingsTab = $state<SettingsTab>('general');
 	let ruleSeedMessageId = $state<string | undefined>();
 
@@ -64,6 +62,18 @@
 	);
 
 	const inbox = workspace.inbox;
+
+	function refreshDueDateBadgeCount() {
+		if (!nativeAvailable()) return;
+		void remindersTransport
+			.listDueDates()
+			.then((items) => {
+				const activeCount = countOverdueAndDueToday(items);
+				workspace.dueCount = activeCount;
+				appStore.overdueAndDueTodayCount = activeCount;
+			})
+			.catch(() => {});
+	}
 
 	$effect(() => {
 		const list = accountController?.accounts ?? [];
@@ -95,7 +105,16 @@
 
 		if (!connected) {
 			untrack(() => {
-				void workspace.applyShellScope(appStore.activeScope);
+				const pendingId = appStore.pendingSelectMessageId;
+				if (pendingId) {
+					workspace.ensureDemoDueDateMessage(pendingId);
+				}
+				void workspace.applyShellScope(appStore.activeScope).then(() => {
+					const targetId = appStore.consumePendingSelectMessage();
+					if (targetId) {
+						workspace.selectMessage(targetId, true);
+					}
+				});
 			});
 			return () => {
 				inbox.dispose();
@@ -105,6 +124,10 @@
 		}
 
 		untrack(() => {
+			if (appStore.pendingSelectMessageId) {
+				appStore.activeScope = { kind: 'all' };
+				inbox.scope = 'GlobalAllMail';
+			}
 			void inbox.connect();
 			void settingsTransport
 				.get()
@@ -125,17 +148,7 @@
 					})
 					.catch(() => {});
 
-				void remindersTransport
-					.listDueDates()
-					.then((items) => {
-						const active = items.filter((item) => {
-							const st = calculateDueDateStatus(item);
-							return st === 'Overdue' || st === 'DueToday';
-						});
-						workspace.dueCount = active.length;
-						appStore.overdueAndDueTodayCount = active.length;
-					})
-					.catch(() => {});
+				refreshDueDateBadgeCount();
 			}
 		});
 
@@ -144,6 +157,26 @@
 			appStore.registerShellHooks({});
 			if (workspaceRegistry.current === workspace) workspaceRegistry.setActive(null);
 		};
+	});
+
+	$effect(() => {
+		const pendingId = appStore.pendingSelectMessageId;
+		const loaded = inbox.revision > 0 && !inbox.loading;
+		const rows = inbox.rows;
+		if (!connected || !pendingId || !loaded) return;
+		untrack(() => {
+			const targetId = appStore.consumePendingSelectMessage();
+			if (targetId && rows.some((row) => row.id === targetId)) {
+				workspace.selectMessage(targetId, true);
+			}
+		});
+	});
+
+	$effect(() => {
+		if (!connected) return;
+		const revision = inbox.badgeRevision;
+		if (revision === 0) return;
+		untrack(() => refreshDueDateBadgeCount());
 	});
 
 	$effect(() => {
@@ -196,7 +229,6 @@
 	function handleWindowKeydown(event: KeyboardEvent) {
 		if (
 			settingsOpen ||
-			dueDateDashboardOpen ||
 			appStore.commandOpen ||
 			workspace.snoozeOpen ||
 			workspace.tagDialogOpen ||
@@ -260,22 +292,6 @@
 		</div>
 	</div>
 </div>
-
-<DueDateDashboard
-	open={dueDateDashboardOpen}
-	close={() => (dueDateDashboardOpen = false)}
-	transport={remindersTransport}
-	accounts={accountController?.accounts ?? []}
-	onSelectMessage={(msgId: string) => {
-		dueDateDashboardOpen = false;
-		workspace.selectMessage(msgId, true);
-	}}
-	onConfigureReminders={() => {
-		dueDateDashboardOpen = false;
-		settingsTab = 'reminders';
-		settingsOpen = true;
-	}}
-/>
 
 <SettingsDialog
 	open={settingsOpen}

@@ -60,14 +60,41 @@ export interface RemindersLabels {
 	ruleSummaryDueDate: (days: number, hour: number) => string;
 	ruleSummaryUnread: (hours: number) => string;
 	minAmountSummary: (amount: string) => string;
+
+	// UI v2 Hub additions
+	disclaimerTitle: string;
+	dueDateTotalsAria: string;
+	overdueHint: string;
+	dueTodayHint: string;
+	upcomingHint: string;
+	clearSearch: string;
+	clearFilters: string;
+	loadingBills: string;
+	extractedOn: (dateIso: string) => string;
+	localParser: string;
+	copiedToast: string;
+	dismissedToast: string;
+	configureSchedule: string;
+	paused: string;
+	activeRulesCount: (count: number) => string;
+	presetDaysLabel: (days: number) => string;
+	quickPresets: string;
+	ledgerAria: string;
+	ruleSavedToast: string;
+	ruleDeletedToast: string;
+	invalidRuleName: string;
+	invalidDaysRange: string;
+	invalidHourRange: string;
+	invalidIntervalRange: string;
 }
 
 export const labels: Record<'en' | 'pt-BR', RemindersLabels> = {
 	en: {
 		title: 'Due Dates & Boletos',
-		subtitle: 'Extracted automatically from invoices and payment slips',
+		subtitle: 'Local FEBRABAN boleto extraction ledger and on-device due-date reminders',
+		disclaimerTitle: 'Local read-only extraction:',
 		disclaimer:
-			'Extraction never implies a bill was paid. Extracted deterministically from receipts and boletos. Does not constitute banking payment confirmation.',
+			'Extraction never implies a bill was paid. Extracted deterministically from receipts and boletos locally on-device. Does not constitute banking payment confirmation or initiate transfers.',
 		overdue: 'Overdue',
 		dueToday: 'Due Today',
 		upcoming: 'Upcoming',
@@ -76,12 +103,12 @@ export const labels: Record<'en' | 'pt-BR', RemindersLabels> = {
 		filterStatus: 'Filter by status',
 		filterAccount: 'Filter by account',
 		searchPlaceholder: 'Search sender, subject or barcode…',
-		emptyState: 'No bills or due dates found',
+		emptyState: 'No bills or due dates match this filter',
 		emptyStateHelp:
-			'Invoices, utility bills, and boletos will appear here when detected in your inbox.',
+			'Invoices, utility bills, and boletos will appear here when detected in your inbox, or try clearing active filters.',
 		copyLine: 'Copy barcode',
 		copied: 'Copied!',
-		viewEmail: 'View email',
+		viewEmail: 'View Email',
 		dismiss: 'Dismiss',
 		dismissAria: 'Dismiss reminder',
 		configureReminders: 'Configure Reminders',
@@ -118,7 +145,7 @@ export const labels: Record<'en' | 'pt-BR', RemindersLabels> = {
 		accountScope: 'Account filter',
 		allAccounts: 'All accounts',
 		destinations: 'Alert destinations',
-		noDestinations: 'No alert destinations configured. Add one in Settings → Alerts.',
+		noDestinations: 'No alert destinations configured. Add one in Automation or Settings → Alerts.',
 		save: 'Save Rule',
 		delete: 'Delete',
 		cancel: 'Cancel',
@@ -130,13 +157,38 @@ export const labels: Record<'en' | 'pt-BR', RemindersLabels> = {
 		ruleSummaryDueDate: (days, hour) =>
 			`${days} day${days === 1 ? '' : 's'} before due date at ${hour.toString().padStart(2, '0')}:00`,
 		ruleSummaryUnread: (hours) => `Unread for ${hours} hour${hours === 1 ? '' : 's'}`,
-		minAmountSummary: (amt) => `min. ${amt}`
+		minAmountSummary: (amt) => `min. ${amt}`,
+
+		dueDateTotalsAria: 'Due date totals',
+		overdueHint: 'Past due date',
+		dueTodayHint: 'Maturing today',
+		upcomingHint: 'Scheduled ahead',
+		clearSearch: 'Clear search',
+		clearFilters: 'Clear Filters',
+		loadingBills: 'Loading bills and due dates…',
+		extractedOn: (dateIso) => `Extracted ${dateIso}`,
+		localParser: 'Local parser',
+		copiedToast: 'Digitable line copied',
+		dismissedToast: 'Due-date reminder dismissed',
+		configureSchedule: 'Configure Reminder Schedule',
+		paused: 'Paused',
+		activeRulesCount: (count) => `${count} active`,
+		presetDaysLabel: (days) => (days === 0 ? 'Due day (0d)' : `${days}d before`),
+		quickPresets: 'Quick lead-time presets',
+		ledgerAria: 'Extracted boleto ledger',
+		ruleSavedToast: 'Reminder rule saved locally',
+		ruleDeletedToast: 'Reminder rule deleted',
+		invalidRuleName: 'Enter a rule name (1–120 characters).',
+		invalidDaysRange: 'Days before deadline must be between 0 and 365.',
+		invalidHourRange: 'Notification hour must be between 0 and 23.',
+		invalidIntervalRange: 'Unread interval must be between 1 and 8760 hours.'
 	},
 	'pt-BR': {
 		title: 'Contas e Boletos a Vencer',
-		subtitle: 'Extraídos automaticamente de faturas e boletos bancários',
+		subtitle: 'Registro local de boletos FEBRABAN e lembretes programados no dispositivo',
+		disclaimerTitle: 'Extração local somente leitura:',
 		disclaimer:
-			'A extração nunca implica que um boleto foi pago. Valores extraídos deterministicamente de comprovantes e boletos. Não constitui confirmação bancária de pagamento.',
+			'A extração nunca implica que um boleto foi pago. Valores extraídos deterministicamente de comprovantes e boletos no dispositivo. Não constitui confirmação bancária de pagamento nem inicia transferências.',
 		overdue: 'Atrasados',
 		dueToday: 'Vencendo Hoje',
 		upcoming: 'A Vencer',
@@ -145,9 +197,9 @@ export const labels: Record<'en' | 'pt-BR', RemindersLabels> = {
 		filterStatus: 'Filtrar por status',
 		filterAccount: 'Filtrar por conta',
 		searchPlaceholder: 'Buscar remetente, assunto ou código…',
-		emptyState: 'Nenhuma conta ou boleto encontrado',
+		emptyState: 'Nenhuma conta ou boleto encontrado neste filtro',
 		emptyStateHelp:
-			'Faturas, boletos e contas de consumo aparecerão aqui quando detectados na sua caixa de entrada.',
+			'Faturas, boletos e contas de consumo aparecerão aqui quando detectados na sua caixa de entrada, ou limpe os filtros ativos.',
 		copyLine: 'Copiar código de barras',
 		copied: 'Copiado!',
 		viewEmail: 'Ver e-mail',
@@ -187,7 +239,7 @@ export const labels: Record<'en' | 'pt-BR', RemindersLabels> = {
 		accountScope: 'Filtro por conta',
 		allAccounts: 'Todas as contas',
 		destinations: 'Destinos de alerta',
-		noDestinations: 'Nenhum destino de alerta configurado. Adicione um em Configurações → Alertas.',
+		noDestinations: 'Nenhum destino de alerta configurado. Adicione um em Automação ou Configurações → Alertas.',
 		save: 'Salvar Regra',
 		delete: 'Excluir',
 		cancel: 'Cancelar',
@@ -199,6 +251,30 @@ export const labels: Record<'en' | 'pt-BR', RemindersLabels> = {
 		ruleSummaryDueDate: (days, hour) =>
 			`${days} dia${days === 1 ? '' : 's'} antes do vencimento às ${hour.toString().padStart(2, '0')}:00`,
 		ruleSummaryUnread: (hours) => `Sem leitura por ${hours} hora${hours === 1 ? '' : 's'}`,
-		minAmountSummary: (amt) => `mín. ${amt}`
+		minAmountSummary: (amt) => `mín. ${amt}`,
+
+		dueDateTotalsAria: 'Totais por vencimento',
+		overdueHint: 'Vencimento ultrapassado',
+		dueTodayHint: 'Vence hoje',
+		upcomingHint: 'Programados',
+		clearSearch: 'Limpar busca',
+		clearFilters: 'Limpar Filtros',
+		loadingBills: 'Carregando contas e vencimentos…',
+		extractedOn: (dateIso) => `Extraído em ${dateIso}`,
+		localParser: 'Extrator local',
+		copiedToast: 'Linha digitável copiada',
+		dismissedToast: 'Lembrete de vencimento dispensado',
+		configureSchedule: 'Configurar Agenda de Lembretes',
+		paused: 'Pausado',
+		activeRulesCount: (count) => `${count} ativa${count === 1 ? '' : 's'}`,
+		presetDaysLabel: (days) => (days === 0 ? 'No dia (0d)' : `${days}d antes`),
+		quickPresets: 'Atalhos de antecedência',
+		ledgerAria: 'Registro de boletos extraídos',
+		ruleSavedToast: 'Regra de lembrete salva localmente',
+		ruleDeletedToast: 'Regra de lembrete excluída',
+		invalidRuleName: 'Informe o nome da regra (1–120 caracteres).',
+		invalidDaysRange: 'Dias antes do prazo devem ficar entre 0 e 365.',
+		invalidHourRange: 'Horário da notificação deve ficar entre 0 e 23.',
+		invalidIntervalRange: 'Intervalo sem leitura deve ficar entre 1 e 8760 horas.'
 	}
 };
