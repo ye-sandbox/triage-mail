@@ -121,7 +121,7 @@
 		aria-activedescendant={visibleRows.some((row) => row.id === inbox.selectedId)
 			? `message-${inbox.selectedId}`
 			: undefined}
-		class="min-h-0 flex-1 overflow-auto overscroll-contain [overflow-anchor:none] focus:outline-none"
+		class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [overflow-anchor:none] focus:outline-none"
 	>
 		<div style:height={`${range.total}px`} class="relative">
 			<div class="absolute inset-x-0 top-0" style:transform={`translateY(${range.offset}px)`}>

@@ -17,10 +17,14 @@ describe('sanitizeEmailHtml', () => {
 		const light = sanitizeEmailHtml('<p>Hello</p>', { theme: 'light' });
 		expect(light).toContain('color-scheme: light;');
 		expect(light).toContain('--reader-bg: #ffffff;');
+		expect(light).toContain('--reader-scrollbar-thumb:');
+		expect(light).toContain('::-webkit-scrollbar-thumb');
 
 		const dark = sanitizeEmailHtml('<p>Hello</p>', { theme: 'dark' });
 		expect(dark).toContain('color-scheme: dark;');
 		expect(dark).toContain('--reader-bg: #121721;');
+		expect(dark).toContain('--reader-scrollbar-thumb:');
+		expect(dark).toContain('::-webkit-scrollbar-thumb');
 	});
 
 	it('blocks remote tracking pixel images by default and allows them only on explicit opt-in', () => {

@@ -12,7 +12,10 @@ function buildStylesheet(theme?: 'light' | 'dark'): string {
 	--reader-muted: #525d6d;
 	--reader-border: #e2e6ec;
 	--reader-link: #2563eb;
-	--reader-code-bg: #f1f3f6;`;
+	--reader-code-bg: #f1f3f6;
+	--reader-scrollbar-thumb: rgba(82, 93, 109, 0.24);
+	--reader-scrollbar-thumb-hover: rgba(82, 93, 109, 0.42);
+	--reader-scrollbar-thumb-active: rgba(82, 93, 109, 0.58);`;
 
 	const darkPalette = `
 	--reader-bg: #121721;
@@ -20,7 +23,10 @@ function buildStylesheet(theme?: 'light' | 'dark'): string {
 	--reader-muted: #98a4b8;
 	--reader-border: #242d3d;
 	--reader-link: #60a5fa;
-	--reader-code-bg: #1c2433;`;
+	--reader-code-bg: #1c2433;
+	--reader-scrollbar-thumb: rgba(152, 164, 184, 0.24);
+	--reader-scrollbar-thumb-hover: rgba(152, 164, 184, 0.42);
+	--reader-scrollbar-thumb-active: rgba(152, 164, 184, 0.58);`;
 
 	const rootVars =
 		theme === 'light'
@@ -38,6 +44,24 @@ function buildStylesheet(theme?: 'light' | 'dark'): string {
 	line-height: 1.6;
 }
 ${mediaFallback}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+	background-color: var(--reader-scrollbar-thumb);
+	border-radius: 9999px;
+	border: 2px solid transparent;
+	background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background-color: var(--reader-scrollbar-thumb-hover); }
+*::-webkit-scrollbar-thumb:active { background-color: var(--reader-scrollbar-thumb-active); }
+*::-webkit-scrollbar-corner { background: transparent; }
+*::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+@supports not selector(::-webkit-scrollbar) {
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: var(--reader-scrollbar-thumb) transparent;
+	}
+}
 body {
 	margin: 0;
 	padding: 16px;
