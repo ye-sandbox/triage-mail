@@ -3,7 +3,7 @@
 	import { Layers } from 'lucide-svelte';
 	import { i18n } from '$lib/i18n/index.svelte';
 	import { labels } from '../conversations/labels';
-	import ConversationActions from '../conversations/ConversationActions.svelte';
+	import WdgConversationActions from '../conversations/WdgConversationActions.svelte';
 	import type { ConversationMember, ConversationRow, MutationStatus } from '../conversations/types';
 	import type { MessageRowDto } from './types';
 	import type { InboxWorkspace } from './workspace.svelte';
@@ -84,7 +84,7 @@
 	</div>
 
 	<div class="mb-2">
-		<ConversationActions
+		<WdgConversationActions
 			{inbox}
 			{row}
 			{accountLabel}

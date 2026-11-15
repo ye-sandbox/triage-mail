@@ -51,6 +51,7 @@ class AppStore {
 
 	activeScope = $state<ScopeFilter>({ kind: 'inbox' });
 	pendingSelectMessageId = $state<string | null>(null);
+	pendingRuleSeedMessageId = $state<string | null>(null);
 	loadedCount = $state<number>(0);
 	unreadTotal = $state<number>(0);
 	overdueAndDueTodayCount = $state<number>(0);
@@ -122,6 +123,16 @@ class AppStore {
 	consumePendingSelectMessage(): string | null {
 		const id = this.pendingSelectMessageId;
 		this.pendingSelectMessageId = null;
+		return id;
+	}
+
+	requestCreateRule(messageId: string) {
+		this.pendingRuleSeedMessageId = messageId;
+	}
+
+	consumePendingRuleSeedMessage(): string | null {
+		const id = this.pendingRuleSeedMessageId;
+		this.pendingRuleSeedMessageId = null;
 		return id;
 	}
 

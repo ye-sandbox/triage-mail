@@ -1,10 +1,25 @@
 import { flushSync, mount, unmount } from 'svelte';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, expect, it, vi } from 'vitest';
+import { i18n } from '../i18n/index.svelte';
 import { InboxController, PAGE_SIZE } from '../inbox/controller.svelte';
 import type { InboxTransport, MessageRowDto } from '../inbox/types';
-import { blankView, type SavedView, type SavedViewTransport } from './types';
-import SavedViews from './SavedViews.svelte';
-import { i18n } from '../i18n/index.svelte';
+import { createLiveWorkspace } from '../inbox/workspace.svelte';
+import InboxSession from '../onboarding/InboxSession.svelte';
+import type { SettingsTransport } from '../settings/types';
+import SidebarNav from '../shell/SidebarNav.svelte';
+import { appStore } from '../stores/app.svelte';
+import { blankView, type SavedViewTransport } from './types';
+
+beforeAll(() => {
+	vi.stubGlobal(
+		'ResizeObserver',
+		class {
+			observe() {}
+			unobserve() {}
+			disconnect() {}
+		}
+	);
+});
 
 let cleanup = () => {};
 afterEach(() => {
@@ -13,12 +28,17 @@ afterEach(() => {
 	document.body.innerHTML = '';
 	vi.restoreAllMocks();
 	vi.useRealTimers();
-	i18n.locale = 'en';
+	i18n.setLocale('en');
+	appStore.savedViews = [];
+	appStore.setScope({ kind: 'inbox' });
+	appStore.registerShellHooks({});
 });
+
 async function settle() {
 	for (let i = 0; i < 16; i++) await Promise.resolve();
 	flushSync();
 }
+
 function row(id: number): MessageRowDto {
 	return {
 		id: `m-${id}`,
@@ -35,15 +55,16 @@ function row(id: number): MessageRowDto {
 		category_badge: null
 	};
 }
+
 function fixture() {
 	const view = { ...blankView(), id: 'view', revision: 1, name: 'Clients' };
 	let catalog = [view];
 	const saved: SavedViewTransport = {
 		list: vi.fn(async () => catalog),
 		save: vi.fn(async (v) => {
-			const saved = { ...v, revision: v.revision + 1 };
-			catalog = catalog.map((old) => (old.id === saved.id ? saved : old));
-			return saved;
+			const updated = { ...v, revision: v.revision + 1 };
+			catalog = catalog.map((old) => (old.id === updated.id ? updated : old));
+			return updated;
 		}),
 		remove: vi.fn(async (id) => {
 			catalog = catalog.filter((v) => v.id !== id);
@@ -56,28 +77,29 @@ function fixture() {
 		triage: vi.fn(async () => {}),
 		subscribe: vi.fn(async () => () => {})
 	};
-	const inbox = new InboxController(transport);
-	return { view, saved, transport, inbox };
-}
-function click(text: string) {
-	const b = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === text);
-	expect(b).toBeTruthy();
-	b!.click();
-	flushSync();
-}
-function render(inbox: InboxController) {
-	const target = document.createElement('div');
-	document.body.appendChild(target);
-	const component = mount(SavedViews, {
-		target,
-		props: { inbox, connected: true, accounts: [] }
-	});
-	flushSync();
-	cleanup = () => {
-		inbox.dispose();
-		void unmount(component);
+	const settingsTransport: SettingsTransport = {
+		get: vi.fn(async () => ({
+			ai: {
+				enabled: false,
+				provider: 'Ollama' as const,
+				endpoint: 'http://127.0.0.1:11434',
+				model: 'qwen2.5:7b-instruct'
+			},
+			tokenizer: 'Unicode61RemoveDiacritics' as const,
+			has_api_key: false,
+			model_cached: false,
+			experimental_semantic_search: false
+		})),
+		save: vi.fn(async () => {}),
+		tokenizer: vi.fn(async () => {}),
+		setExperimentalSemanticSearch: vi.fn(async () => {}),
+		download: vi.fn(async () => {}),
+		summarize: vi.fn(async () => '')
 	};
+	const inbox = new InboxController(transport);
+	return { view, saved, transport, settingsTransport, inbox };
 }
+
 it('uses native saved search for all pages and refreshes, invalidating stale scope responses', async () => {
 	const { inbox, view, saved, transport } = fixture();
 	let resolve!: (rows: MessageRowDto[]) => void;
@@ -101,6 +123,7 @@ it('uses native saved search for all pages and refreshes, invalidating stale sco
 	expect(transport.search).toHaveBeenCalledTimes(2);
 	inbox.dispose();
 });
+
 it('cannot replace another scope with a late saved-view response or mutation rollback', async () => {
 	const { inbox, view, saved } = fixture();
 	let resolve!: (rows: MessageRowDto[]) => void;
@@ -114,91 +137,64 @@ it('cannot replace another scope with a late saved-view response or mutation rol
 	expect(inbox.savedView).toBeNull();
 	inbox.dispose();
 });
-it('creates an unsaved template and protects dirty edits on cancellation', async () => {
-	const { inbox, saved } = fixture();
-	render(inbox);
-	await settle();
-	click('Upcoming bills');
-	expect(saved.save).not.toHaveBeenCalled();
-	const name = document.querySelector<HTMLInputElement>('input[maxlength="120"]')!;
-	name.value = 'Edited';
-	name.dispatchEvent(new Event('input', { bubbles: true }));
-	flushSync();
-	const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-	click('Cancel');
-	expect(confirm).toHaveBeenCalled();
-	expect(document.querySelector('[role=dialog]')).toBeTruthy();
-	confirm.mockReturnValue(true);
-	click('Cancel');
-	await settle();
-	expect(saved.save).not.toHaveBeenCalled();
-});
-it('saves an edited definition and deletes the selected view back to All Mail', async () => {
-	const { inbox, view, saved } = fixture();
-	render(inbox);
-	await settle();
-	click('Clients');
-	await settle();
-	expect(inbox.savedView?.id).toBe('view');
-	click('Edit');
-	const input = document.querySelector<HTMLInputElement>('input[maxlength="120"]')!;
-	input.value = 'Renamed';
-	input.dispatchEvent(new Event('input', { bubbles: true }));
-	flushSync();
-	document
-		.querySelector('form')!
-		.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-	await settle();
-	expect(saved.save).toHaveBeenCalledWith(
-		expect.objectContaining({ name: 'Renamed', revision: 1 })
-	);
-	expect(inbox.savedView?.revision).toBe(2);
-	vi.spyOn(window, 'confirm').mockReturnValue(true);
-	click('Delete');
-	await settle();
-	expect(saved.remove).toHaveBeenCalledWith('view', 2);
-	expect(inbox.savedView).toBeNull();
-});
-it('keeps failed saves editable and ignores completion after teardown', async () => {
-	const { inbox, saved } = fixture();
-	render(inbox);
-	await settle();
-	click('Edit');
-	vi.mocked(saved.save).mockRejectedValueOnce('InvalidRequest');
-	document
-		.querySelector('form')!
-		.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-	await settle();
-	expect(document.querySelector('[role=alert]')?.textContent).toContain('unavailable');
-	expect(document.querySelector('form')).toBeTruthy();
-	let resolve!: (v: SavedView) => void;
-	vi.mocked(saved.save).mockReturnValueOnce(new Promise((r) => (resolve = r)));
-	document
-		.querySelector('form')!
-		.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-	await settle();
-	expect(document.querySelector('fieldset')!.disabled).toBe(true);
-	cleanup();
-	cleanup = () => {};
-	resolve({ ...blankView(), revision: 1 });
-	await settle();
-	expect(inbox.savedView).toBeNull();
-});
 
-it('reloads newly imported views from native storage on local invalidation', async () => {
-	const { inbox, saved, view } = fixture();
-	const component = mount(SavedViews, {
-		target: document.body,
-		props: { inbox, connected: true, accounts: [] }
+it('selects saved views from SidebarNav and drives native saved search through workspace scope hook', async () => {
+	const { inbox, view, saved } = fixture();
+	const workspace = createLiveWorkspace(inbox, { connected: true });
+	appStore.savedViews = [{ id: view.id, name: view.name, query: view.query }];
+	appStore.registerShellHooks({
+		onScopeChange: (scope) => void workspace.applyShellScope(scope)
 	});
+
+	const target = document.createElement('div');
+	document.body.appendChild(target);
+	const component = mount(SidebarNav, { target });
 	cleanup = () => {
+		inbox.dispose();
 		void unmount(component);
 	};
+	flushSync();
+
+	const button = [...target.querySelectorAll('button')].find(
+		(b) => b.textContent?.trim() === 'Clients'
+	)!;
+	expect(button).toBeTruthy();
+	button.click();
 	await settle();
+
+	expect(appStore.activeScope).toEqual({ kind: 'saved_view', view_id: 'view' });
+	expect(saved.search).toHaveBeenCalledWith('view', 1, PAGE_SIZE, 0);
+	expect(inbox.savedView?.id).toBe('view');
+});
+
+it('reloads newly imported saved views into SidebarNav via InboxSession on triage-definitions-imported', async () => {
+	const { transport, settingsTransport, saved, view } = fixture();
+	const target = document.createElement('div');
+	document.body.appendChild(target);
+	const sessionComponent = mount(InboxSession, {
+		target,
+		props: {
+			connected: true,
+			inboxTransport: transport,
+			settingsTransport
+		}
+	});
+	const navContainer = document.createElement('div');
+	document.body.appendChild(navContainer);
+	const navComponent = mount(SidebarNav, { target: navContainer });
+	cleanup = () => {
+		void unmount(sessionComponent);
+		void unmount(navComponent);
+	};
+	await settle();
+
+	expect(navContainer.textContent).toContain('Clients');
+
 	vi.mocked(saved.list).mockResolvedValue([
 		{ ...view, id: 'imported', name: 'Imported synthetic view' }
 	]);
 	window.dispatchEvent(new Event('triage-definitions-imported'));
 	await settle();
-	expect(document.body.textContent).toContain('Imported synthetic view');
+
+	expect(navContainer.textContent).toContain('Imported synthetic view');
 });

@@ -5,17 +5,16 @@
 	import type { InboxController } from '../inbox/controller.svelte';
 	import type { ConversationAction, ConversationPreview, ConversationRow } from './types';
 	import { labels } from './labels';
-	let {
-		inbox,
-		row,
-		disabled = false,
-		accountLabel
-	}: {
+
+	interface Props {
 		inbox: InboxController;
 		row: ConversationRow;
 		disabled?: boolean;
 		accountLabel: string;
-	} = $props();
+	}
+
+	let { inbox, row, disabled = false, accountLabel }: Props = $props();
+
 	const t = $derived(labels[i18n.locale]);
 	let kind = $state<'MarkRead' | 'MarkUnread' | 'Archive' | 'Tag'>('MarkRead');
 	let tag = $state('');
@@ -27,7 +26,9 @@
 	let notice = $state(false);
 	let generation = 0;
 	let alive = true;
+
 	const action = $derived<ConversationAction>(kind === 'Tag' ? { Tag: tag.trim() } : kind);
+
 	$effect(() => {
 		inbox.conversationGeneration;
 		row.conversation_id;
@@ -43,11 +44,13 @@
 			error = false;
 		});
 	});
+
 	$effect(() => () => {
 		alive = false;
 		generation++;
 		preview = null;
 	});
+
 	async function prepare() {
 		const transport = inbox.conversationTransport;
 		if (!transport || disabled || busy || inbox.mutating) return;
@@ -73,6 +76,7 @@
 			if (alive) busy = false;
 		}
 	}
+
 	async function apply() {
 		const transport = inbox.conversationTransport;
 		const snapshot = preview;
@@ -106,37 +110,56 @@
 	}
 </script>
 
-<div class="shrink-0 border-b border-[var(--separator)] p-4 text-sm">
-	<div class="flex flex-wrap items-center gap-4">
-		<label
-			>{t.action}
-			<select bind:value={kind} disabled={disabled || busy} class="bg-[var(--surface)] p-2"
-				><option value="MarkRead">{t.read}</option><option value="MarkUnread"
-					>{t.unreadAction}</option
-				><option value="Archive">{t.archive}</option><option value="Tag">{t.tag}</option></select
-			></label
-		>
-		{#if kind === 'Tag'}<input
+<div class="shrink-0 space-y-2 border-b border-separator pb-2.5 text-xs">
+	<div class="flex flex-wrap items-center gap-2.5">
+		<label class="flex items-center gap-1.5 text-secondary">
+			<span>{t.action}</span>
+			<select
+				bind:value={kind}
+				disabled={disabled || busy}
+				class="h-8 rounded-md border border-separator bg-field px-2 text-xs text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
+			>
+				<option value="MarkRead">{t.read}</option>
+				<option value="MarkUnread">{t.unreadAction}</option>
+				<option value="Archive">{t.archive}</option>
+				<option value="Tag">{t.tag}</option>
+			</select>
+		</label>
+
+		{#if kind === 'Tag'}
+			<input
 				aria-label={t.tagName}
 				bind:value={tag}
 				maxlength="128"
 				disabled={disabled || busy}
-				class="rounded border border-[var(--separator)] bg-[var(--surface)] p-2"
-			/>{/if}
+				class="h-8 rounded-md border border-separator bg-field px-2.5 text-xs text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
+			/>
+		{/if}
+
 		<button
 			type="button"
-			class="text-[var(--accent)]"
 			disabled={disabled || busy || inbox.loading || (kind === 'Tag' && !tag.trim())}
-			onclick={() => void prepare()}>{t.preview}</button
+			onclick={() => void prepare()}
+			class="min-h-[32px] rounded-md border border-separator bg-field px-2.5 py-1 text-xs font-medium text-accent hover:bg-selection-soft disabled:opacity-50"
 		>
+			{t.preview}
+		</button>
 	</div>
-	<label class="mt-2 flex items-center gap-2"
-		><input type="checkbox" bind:checked={all} disabled={disabled || busy} />{t.all}</label
-	>
-	<p class="mt-2 text-xs text-[var(--secondary)]">{t.remote}</p>
-	{#if error}<p role="alert" class="mt-2">{t.unavailable} {t.scope}</p>{/if}
-	{#if notice}<p role="status" class="mt-2">{t.saved}</p>{/if}
+
+	<label class="flex cursor-pointer items-center gap-2 text-secondary">
+		<input type="checkbox" bind:checked={all} disabled={disabled || busy} class="accent-accent" />
+		<span>{t.all}</span>
+	</label>
+
+	<p class="text-[11px] text-secondary">{t.remote}</p>
+	{#if error}
+		<p role="alert" class="text-status-danger">{t.unavailable} {t.scope}</p>
+	{/if}
+	{#if notice}
+		<p role="status" class="text-status-healthy">{t.saved}</p>
+	{/if}
 </div>
+
 <Dialog.Root
 	{open}
 	onOpenChange={(value) => {
@@ -146,10 +169,10 @@
 		}
 	}}
 >
-	<Dialog.Portal
-		><Dialog.Overlay class="fixed inset-0 z-40 bg-black/40" />
+	<Dialog.Portal>
+		<Dialog.Overlay class="fixed inset-0 z-50 bg-foreground/25" />
 		<Dialog.Content
-			class="fixed top-1/2 left-1/2 z-50 flex max-h-[80vh] w-[90vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-[var(--separator)] bg-[var(--surface)] p-6 text-[var(--text)]"
+			class="fixed left-1/2 top-1/2 z-50 flex max-h-[80vh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-separator bg-surface p-5 text-foreground shadow-xl outline-none"
 			onEscapeKeydown={(event) => {
 				if (busy) event.preventDefault();
 			}}
@@ -157,10 +180,10 @@
 				if (busy) event.preventDefault();
 			}}
 		>
-			<Dialog.Title class="text-lg font-semibold">{t.confirm}</Dialog.Title>
-			<Dialog.Description class="my-4 text-sm">{t.scope} {accountLabel}</Dialog.Description>
+			<Dialog.Title class="font-display text-sm font-semibold text-foreground">{t.confirm}</Dialog.Title>
+			<Dialog.Description class="my-3 text-xs text-secondary">{t.scope} {accountLabel}</Dialog.Description>
 			{#if preview}
-				<p class="text-sm tabular-nums">
+				<p class="text-xs font-medium tabular-nums text-foreground">
 					{t.action}: {kind === 'MarkRead'
 						? t.read
 						: kind === 'MarkUnread'
@@ -170,31 +193,37 @@
 								: `${t.tag}: ${tag}`} · {t.matching}: {preview.messages.length -
 						preview.outside_count} · {t.outside}: {preview.outside_count}
 				</p>
-				<ul class="my-4 min-h-0 flex-1 overflow-auto text-sm">
-					{#each preview.messages as message (message.id)}<li
-							class="border-b border-[var(--separator)] py-2"
-						>
-							<p>{message.subject}</p>
-							<p class="text-xs text-[var(--secondary)]">
+				<ul class="my-3 min-h-0 flex-1 divide-y divide-separator overflow-auto rounded-md border border-separator bg-field px-3 text-xs">
+					{#each preview.messages as message (message.id)}
+						<li class="py-2">
+							<p class="font-medium text-foreground">{message.subject}</p>
+							<p class="text-[11px] text-secondary">
 								{message.sender} · {accountLabel} · {message.folder_override ?? message.folder}
 							</p>
-						</li>{/each}
+						</li>
+					{/each}
 				</ul>
 			{/if}
-			<div class="flex justify-end gap-4">
+			<div class="flex justify-end gap-2 border-t border-separator pt-3">
 				<button
 					type="button"
 					disabled={busy}
 					onclick={() => {
 						open = false;
 						preview = null;
-					}}>{t.cancel}</button
-				><button
+					}}
+					class="min-h-[36px] rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-secondary hover:text-foreground disabled:opacity-50"
+				>
+					{t.cancel}
+				</button>
+				<button
 					type="button"
 					disabled={busy || !preview || disabled}
-					class="text-[var(--accent)]"
-					onclick={() => void apply()}>{t.apply}</button
+					onclick={() => void apply()}
+					class="min-h-[36px] rounded-md bg-accent px-4 py-1.5 text-xs font-medium text-accent-foreground hover:opacity-95 disabled:opacity-50"
 				>
+					{t.apply}
+				</button>
 			</div>
 		</Dialog.Content>
 	</Dialog.Portal>

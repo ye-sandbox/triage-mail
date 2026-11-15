@@ -1,20 +1,35 @@
 import { flushSync, mount, unmount } from 'svelte';
-import { afterEach, expect, it, vi } from 'vitest';
-import BackupForm from './BackupForm.svelte';
-import PortableForm from './PortableForm.svelte';
-import { SettingsFormGuard } from '../settings/guards';
-import type { TransferTransport } from './transport';
+import { afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { i18n } from '../i18n/index.svelte';
+import { transferGuards } from './guards';
+import { SettingsFormGuard } from '../settings/guards';
+import WdgBackupDefinitionsPanel from '../settings/WdgBackupDefinitionsPanel.svelte';
+import type { TransferTransport } from './transport';
+
+beforeAll(() => {
+	vi.stubGlobal(
+		'ResizeObserver',
+		class {
+			observe() {}
+			unobserve() {}
+			disconnect() {}
+		}
+	);
+});
+
 let cleanup = () => {};
 afterEach(() => {
 	cleanup();
+	cleanup = () => {};
 	document.body.innerHTML = '';
-	i18n.locale = 'en';
+	i18n.setLocale('en');
 });
+
 async function settle() {
 	for (let i = 0; i < 16; i++) await Promise.resolve();
 	flushSync();
 }
+
 function transport(): TransferTransport {
 	return {
 		choose: vi.fn(async () => '/tmp/synthetic-backup.tmb'),
@@ -33,19 +48,22 @@ function transport(): TransferTransport {
 		destinations: vi.fn(async () => [])
 	};
 }
-function input(name: string, value: string) {
-	const element = document.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
+
+function input(name: string, value: string, root: ParentNode = document) {
+	const element = root.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
 	element.value = value;
 	element.dispatchEvent(new Event('input', { bubbles: true }));
 	return element;
 }
-function click(text: string) {
-	const button = [...document.querySelectorAll('button')].find(
+
+function click(text: string, root: ParentNode = document) {
+	const button = [...root.querySelectorAll('button')].find(
 		(b) => b.textContent?.trim() === text
 	);
 	expect(button).toBeTruthy();
 	button!.click();
 }
+
 it('clears detached passphrases on submit, blocks duplicates and resets busy after failure', async () => {
 	const api = transport();
 	let reject!: (reason: string) => void;
@@ -56,7 +74,7 @@ it('clears detached passphrases on submit, blocks duplicates and resets busy aft
 			})
 	);
 	const guard = new SettingsFormGuard();
-	const component = mount(BackupForm, {
+	const component = mount(WdgBackupDefinitionsPanel, {
 		target: document.body,
 		props: { transport: api, guard }
 	});
@@ -64,31 +82,33 @@ it('clears detached passphrases on submit, blocks duplicates and resets busy aft
 		void unmount(component);
 	};
 	await settle();
-	const secret = input('passphrase', 'synthetic backup passphrase');
-	input('confirmation', secret.value);
-	document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+
+	const form = document.querySelector<HTMLFormElement>('form[aria-label="Create encrypted backup"]')!;
+	const secret = input('passphrase', 'synthetic backup passphrase', form);
+	input('confirmation', secret.value, form);
+	form.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
 	await settle();
-	document
-		.querySelector('form')!
-		.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+	form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 	await settle();
 	expect(secret.value).toBe('');
 	expect(guard.busy).toBe(true);
 	expect(api.backup).toHaveBeenCalledTimes(1);
-	document
-		.querySelector('form')!
-		.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+	form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 	await settle();
 	expect(api.backup).toHaveBeenCalledTimes(1);
+
 	reject('synthetic private provider detail');
 	await settle();
 	expect(guard.busy).toBe(false);
 	expect(document.body.textContent).not.toContain('synthetic private provider detail');
 });
+
 it('canceled chooser and teardown clear secrets without starting a backup', async () => {
 	const api = transport();
 	api.choose = vi.fn(async () => null);
-	const component = mount(BackupForm, {
+	const component = mount(WdgBackupDefinitionsPanel, {
 		target: document.body,
 		props: { transport: api }
 	});
@@ -96,23 +116,32 @@ it('canceled chooser and teardown clear secrets without starting a backup', asyn
 		void unmount(component);
 	};
 	await settle();
-	const secret = input('passphrase', 'synthetic backup passphrase');
-	input('confirmation', secret.value);
-	document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+
+	const form = document.querySelector<HTMLFormElement>('form[aria-label="Create encrypted backup"]')!;
+	const secret = input('passphrase', 'synthetic backup passphrase', form);
+	input('confirmation', secret.value, form);
+	form.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
 	await settle();
-	document.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+
+	form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 	await settle();
 	expect(secret.value).toBe('');
 	expect(api.backup).not.toHaveBeenCalled();
-	input('passphrase', 'synthetic another passphrase');
+
+	input('passphrase', 'synthetic another passphrase', form);
 	await unmount(component);
 	cleanup = () => {};
 	expect(secret.value).toBe('');
 });
-it('requires every mapping and explicit consent before importing a preview', async () => {
+
+it('requires every mapping and explicit consent before importing a preview via WdgImportPreviewDialog', async () => {
 	const api = transport();
 	const guard = new SettingsFormGuard();
-	const component = mount(PortableForm, {
+	const importedEvents: number[] = [];
+	const onImported = () => importedEvents.push(1);
+	window.addEventListener('triage-definitions-imported', onImported);
+
+	const component = mount(WdgBackupDefinitionsPanel, {
 		target: document.body,
 		props: {
 			transport: api,
@@ -129,23 +158,31 @@ it('requires every mapping and explicit consent before importing a preview', asy
 		}
 	});
 	cleanup = () => {
+		window.removeEventListener('triage-definitions-imported', onImported);
 		void unmount(component);
 	};
+
 	click('Choose definitions to import');
 	await settle();
-	const button = [...document.querySelectorAll('button')].find(
+
+	const dialog = document.body.querySelector('[role="dialog"]')!;
+	expect(dialog).not.toBeNull();
+	const button = [...dialog.querySelectorAll('button')].find(
 		(b) => b.textContent?.trim() === 'Import reviewed definitions'
 	)!;
 	expect(button.disabled).toBe(true);
 	expect(guard.dirty).toBe(true);
-	const select = document.querySelector('select')!;
+
+	const select = dialog.querySelector('select')!;
 	select.value = 'a';
 	select.dispatchEvent(new Event('change', { bubbles: true }));
-	document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+	dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
 	await settle();
+
 	expect(button.disabled).toBe(false);
 	button.click();
 	await settle();
+
 	expect(api.import).toHaveBeenCalledWith(
 		'/tmp/synthetic-backup.tmb',
 		{ accounts: { 'account-1': 'a' }, destinations: {} },
@@ -153,12 +190,14 @@ it('requires every mapping and explicit consent before importing a preview', asy
 		true
 	);
 	expect(guard.dirty).toBe(false);
+	expect(importedEvents).toHaveLength(1);
 });
+
 it('restoration discloses the isolated vault unlock and does not auto-initialize', async () => {
-	i18n.locale = 'pt-BR';
+	i18n.setLocale('pt-BR');
 	const api = transport();
 	const ondone = vi.fn();
-	const component = mount(BackupForm, {
+	const component = mount(WdgBackupDefinitionsPanel, {
 		target: document.body,
 		props: { restore: true, transport: api, ondone }
 	});
@@ -166,12 +205,18 @@ it('restoration discloses the isolated vault unlock and does not auto-initialize
 		void unmount(component);
 	};
 	await settle();
-	input('passphrase', 'synthetic backup passphrase');
-	input('confirmation', 'synthetic backup passphrase');
-	document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+
+	const form = document.querySelector<HTMLFormElement>(
+		'form[aria-label="Restaurar backup criptografado"]'
+	)!;
+	input('passphrase', 'synthetic backup passphrase', form);
+	input('confirmation', 'synthetic backup passphrase', form);
+	form.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
 	await settle();
-	document.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+
+	form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 	await settle();
+
 	expect(api.restore).toHaveBeenCalledTimes(1);
 	expect(ondone).not.toHaveBeenCalled();
 	expect(document.body.textContent).toContain('novo cofre local');
@@ -179,7 +224,7 @@ it('restoration discloses the isolated vault unlock and does not auto-initialize
 	expect(ondone).toHaveBeenCalledOnce();
 });
 
-it('does not import after the preview is unmounted during a file read', async () => {
+it('does not import after the panel is unmounted during a preview file read', async () => {
 	const api = transport();
 	let resolve!: (value: Awaited<ReturnType<TransferTransport['preview']>>) => void;
 	api.preview = vi.fn(
@@ -188,7 +233,7 @@ it('does not import after the preview is unmounted during a file read', async ()
 				resolve = yes;
 			})
 	);
-	const component = mount(PortableForm, {
+	const component = mount(WdgBackupDefinitionsPanel, {
 		target: document.body,
 		props: { transport: api }
 	});
@@ -201,8 +246,35 @@ it('does not import after the preview is unmounted during a file read', async ()
 	expect(api.import).not.toHaveBeenCalled();
 });
 
-it('keeps unsaved forms independent while excluding concurrent operations', async () => {
-	const { transferGuards } = await import('./guards');
+it('supports browser demo portable diff preview and conflict resolution when native is unavailable', async () => {
+	const component = mount(WdgBackupDefinitionsPanel, {
+		target: document.body
+	});
+	cleanup = () => {
+		void unmount(component);
+	};
+	await settle();
+
+	click('Preview Diff');
+	await settle();
+
+	const dialog = document.body.querySelector('[role="dialog"]')!;
+	expect(dialog.textContent).toContain('Portable Definitions Import Preview');
+	expect(dialog.textContent).toContain('Auto-tag NF-e XML Invoices');
+
+	const overwriteBtns = [...dialog.querySelectorAll('button')].filter(
+		(b) => b.textContent?.trim() === 'Overwrite'
+	);
+	expect(overwriteBtns.length).toBeGreaterThan(0);
+	overwriteBtns[0].click();
+	flushSync();
+
+	click('Commit Import', dialog);
+	await settle();
+	expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it('keeps unsaved forms independent while excluding concurrent operations', () => {
 	const parent = new SettingsFormGuard();
 	const guards = transferGuards(parent);
 	guards.backup.markDirty();

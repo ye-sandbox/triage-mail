@@ -219,7 +219,7 @@ describe('account startup and boot gate', () => {
 		await unmount(component);
 	});
 
-	it('opens account management through settings while keeping existing mail mounted', async () => {
+	it('keeps existing mail mounted cleanly and exposes settings navigation after boot', async () => {
 		const { transport, session, target } = fixture({ native: true });
 		const pending = deferred<AccountConfig[]>();
 		transport.list.mockReturnValueOnce(pending.promise);
@@ -239,20 +239,14 @@ describe('account startup and boot gate', () => {
 		expect(target.textContent).toContain('Loaded Messages');
 		const listbox = target.querySelector('[role="listbox"][aria-label="Messages"]');
 		expect(listbox).not.toBeNull();
-		expect(
-			[...target.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Settings')
-		).toHaveLength(1);
+		const settingsButtons = [...target.querySelectorAll('button')].filter(
+			(b) => b.getAttribute('aria-label') === 'Settings'
+		);
+		expect(settingsButtons).toHaveLength(1);
+		expect(settingsButtons[0].hasAttribute('aria-haspopup')).toBe(false);
 
-		target.querySelector<HTMLButtonElement>('button[aria-label="Settings"]')!.click();
+		settingsButtons[0].click();
 		await settle();
-		target.querySelector<HTMLButtonElement>('#tab-accounts')!.click();
-		flushSync();
-
-		const dialog = target.querySelector('[role="dialog"]')!;
-		expect(dialog.textContent).toContain('reader@example.com');
-		expect(target.querySelector('[role="listbox"][aria-label="Messages"]')).toBe(listbox);
-		dialog.querySelector<HTMLButtonElement>('button[aria-label="Close settings"]')!.click();
-		flushSync();
 		expect(target.querySelector('[role="dialog"]')).toBeNull();
 		expect(target.querySelector('[role="listbox"][aria-label="Messages"]')).toBe(listbox);
 		await unmount(component);

@@ -131,48 +131,6 @@ a {
 	-webkit-tap-highlight-color: transparent;
 }
 
-/* Temporary compatibility classes for pre-[04.15]..[04.19] views during sequential migration */
-@layer components {
-	.setup-input {
-		@apply block w-full min-w-0 rounded-lg border border-[var(--separator)] bg-[var(--field)] px-3 py-2 text-[var(--text)] disabled:opacity-50;
-	}
-	.setup-primary {
-		@apply rounded-lg bg-[var(--accent)] px-4 py-3 text-sm font-medium text-[var(--accent-foreground)] disabled:opacity-50;
-	}
-	.setup-secondary {
-		@apply rounded-lg border border-[var(--separator)] px-4 py-3 text-sm text-[var(--accent)] disabled:opacity-50;
-	}
-	.icon-button {
-		@apply flex size-8 shrink-0 items-center justify-center rounded-md text-[var(--secondary)] hover:bg-[var(--field)] disabled:opacity-40;
-		transition:
-			background-color var(--motion-fast) ease,
-			color var(--motion-fast) ease,
-			opacity var(--motion-fast) ease,
-			transform var(--motion-fast) var(--motion-ease);
-	}
-	.icon-button:active:not(:disabled) {
-		transform: scale(0.94);
-	}
-	.keycap {
-		@apply flex size-5 items-center justify-center rounded border border-[var(--separator)] bg-[var(--surface)] font-sans;
-	}
-	.message-row {
-		transition:
-			background-color var(--motion-fast) ease,
-			color var(--motion-fast) ease;
-	}
-	.message-row:hover {
-		background: var(--selection-soft);
-	}
-	.message-row.selected {
-		background: var(--selection);
-		color: var(--text);
-	}
-	.message-row.selected > span {
-		background: var(--accent);
-	}
-}
-
 .desktop-shell {
 	display: flex;
 	flex-direction: column;
@@ -190,20 +148,6 @@ a {
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
-}
-
-.inbox-sidebar {
-	width: 14rem;
-	opacity: 1;
-	overflow: hidden;
-	transition:
-		width var(--motion-view) var(--motion-ease),
-		opacity var(--motion-fast) ease;
-}
-
-.inbox-sidebar.collapsed {
-	width: 0;
-	opacity: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

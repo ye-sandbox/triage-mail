@@ -218,27 +218,6 @@ export interface Translations {
 			playbooks: GuidePlaybook[];
 		};
 	};
-	settingsModal: {
-		title: string;
-		close: string;
-		navAria: string;
-		tabs: {
-			rules: string;
-			alerts: string;
-			reminders: string;
-			categories: string;
-			senderReview: string;
-			backup: string;
-			general: string;
-			accounts: string;
-			search: string;
-			ai: string;
-			privacy: string;
-		};
-		unsavedChanges: string;
-		stay: string;
-		discard: string;
-	};
 	shell: {
 		appTitle: string;
 		commandPalette: string;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { tick, untrack } from 'svelte';
 	import { InboxController } from '$lib/inbox/controller.svelte';
 	import { nativeAvailable, nativeTransport } from '$lib/inbox/transport';
@@ -15,9 +16,8 @@
 	} from '$lib/inbox/workspace.svelte';
 	import { nativeRemindersTransport } from '$lib/reminders/transport';
 	import { countOverdueAndDueToday, type RemindersTransport } from '$lib/reminders/types';
-	import SettingsDialog from '$lib/settings/SettingsDialog.svelte';
 	import { nativeSettingsTransport } from '$lib/settings/transport';
-	import type { SettingsTab, SettingsTransport } from '$lib/settings/types';
+	import type { SettingsTransport } from '$lib/settings/types';
 	import { appStore } from '$lib/stores/app.svelte';
 	import type { AccountController } from './controller.svelte';
 
@@ -26,28 +26,36 @@
 		inboxTransport = nativeTransport,
 		settingsTransport = nativeSettingsTransport,
 		remindersTransport = nativeRemindersTransport,
-		accountController
+		accountController,
+		onNavigate
 	}: {
 		connected: boolean;
 		inboxTransport?: InboxTransport;
 		settingsTransport?: SettingsTransport;
 		remindersTransport?: RemindersTransport;
 		accountController?: AccountController;
+		onNavigate?: (path: string) => void | Promise<void>;
 	} = $props();
 
-	let settingsOpen = $state(false);
-	let settingsTab = $state<SettingsTab>('general');
-	let ruleSeedMessageId = $state<string | undefined>();
+	function navigateTo(path: string) {
+		if (onNavigate) {
+			void Promise.resolve(onNavigate(path)).catch(() => {});
+			return;
+		}
+		try {
+			void goto(path).catch(() => {});
+		} catch {
+			// Unit tests mount InboxSession without booting SvelteKit's client router.
+		}
+	}
 
 	function openSettings() {
-		settingsTab = 'general';
-		settingsOpen = true;
+		navigateTo('/settings');
 	}
 
 	function createRule(id: string) {
-		ruleSeedMessageId = id;
-		settingsTab = 'rules';
-		settingsOpen = true;
+		appStore.requestCreateRule(id);
+		navigateTo('/automation');
 	}
 
 	const workspace = untrack(() =>
@@ -71,6 +79,36 @@
 				const activeCount = countOverdueAndDueToday(items);
 				workspace.dueCount = activeCount;
 				appStore.overdueAndDueTodayCount = activeCount;
+			})
+			.catch(() => {});
+	}
+
+	function syncSettingsFromTransport() {
+		if (!connected) return;
+		void settingsTransport
+			.get()
+			.then((settings) => {
+				inbox.setExperimentalSemanticSearch(settings.experimental_semantic_search);
+			})
+			.catch(() => {});
+	}
+
+	function syncSavedViewsFromTransport() {
+		if (
+			!connected ||
+			!inbox.savedTransport ||
+			(inboxTransport === nativeTransport && !nativeAvailable())
+		) {
+			return;
+		}
+		void inbox.savedTransport
+			.list()
+			.then((views) => {
+				appStore.savedViews = views.map((v) => ({
+					id: v.id,
+					name: v.name,
+					query: v.query
+				}));
 			})
 			.catch(() => {});
 	}
@@ -129,30 +167,21 @@
 				inbox.scope = 'GlobalAllMail';
 			}
 			void inbox.connect();
-			void settingsTransport
-				.get()
-				.then((settings) => {
-					inbox.setExperimentalSemanticSearch(settings.experimental_semantic_search);
-				})
-				.catch(() => {});
-
+			syncSettingsFromTransport();
+			syncSavedViewsFromTransport();
 			if (nativeAvailable()) {
-				void inbox.savedTransport
-					?.list()
-					.then((views) => {
-						appStore.savedViews = views.map((v) => ({
-							id: v.id,
-							name: v.name,
-							query: v.query
-						}));
-					})
-					.catch(() => {});
-
 				refreshDueDateBadgeCount();
 			}
 		});
 
+		const onSettingsUpdated = () => syncSettingsFromTransport();
+		const onDefinitionsImported = () => syncSavedViewsFromTransport();
+		window.addEventListener('triage-settings-updated', onSettingsUpdated);
+		window.addEventListener('triage-definitions-imported', onDefinitionsImported);
+
 		return () => {
+			window.removeEventListener('triage-settings-updated', onSettingsUpdated);
+			window.removeEventListener('triage-definitions-imported', onDefinitionsImported);
 			inbox.dispose();
 			appStore.registerShellHooks({});
 			if (workspaceRegistry.current === workspace) workspaceRegistry.setActive(null);
@@ -209,17 +238,6 @@
 		untrack(() => workspace.syncShellMetrics());
 	});
 
-	function handleCloseSettings() {
-		settingsOpen = false;
-		ruleSeedMessageId = undefined;
-		void settingsTransport
-			.get()
-			.then((settings) => {
-				inbox.setExperimentalSemanticSearch(settings.experimental_semantic_search);
-			})
-			.catch(() => {});
-	}
-
 	async function handleBackToList() {
 		workspace.closeMobileReader();
 		await tick();
@@ -228,7 +246,6 @@
 
 	function handleWindowKeydown(event: KeyboardEvent) {
 		if (
-			settingsOpen ||
 			appStore.commandOpen ||
 			workspace.snoozeOpen ||
 			workspace.tagDialogOpen ||
@@ -292,13 +309,3 @@
 		</div>
 	</div>
 </div>
-
-<SettingsDialog
-	open={settingsOpen}
-	initialTab={settingsTab}
-	{ruleSeedMessageId}
-	selectedMessageIds={inbox.selectedId ? [inbox.selectedId] : []}
-	close={handleCloseSettings}
-	transport={settingsTransport}
-	{accountController}
-/>

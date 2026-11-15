@@ -75,6 +75,9 @@
 	const t = $derived(automationLabels[i18n.locale]);
 
 	let activeTab = $state<AutomationTab>(untrack(() => initialTab));
+	const resolvedSeedMessageId = $state<string | undefined>(
+		untrack(() => seedMessageId ?? appStore.consumePendingRuleSeedMessage() ?? undefined)
+	);
 	let rulesList = $state<Rule[]>([]);
 	let destinationsList = $state<Destination[]>([]);
 	let queuedSendersCount = $state(0);
@@ -201,7 +204,7 @@
 					{alertsTransport}
 					{guard}
 					selectedIds={resolvedSelectedIds}
-					{seedMessageId}
+					seedMessageId={resolvedSeedMessageId}
 					accounts={resolvedAccounts}
 					{ruleMeta}
 					{resolveMessageSummary}
