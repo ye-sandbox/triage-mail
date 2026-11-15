@@ -7,7 +7,46 @@
 
 ## Active Task
 
-No active task — release v0.1.6 prepared. Multi-folder sync and outbound SMTP composer remain unprioritized.
+### Task [04.14]: UI v2 Foundation, Offline Fonts, App Shell & Window Controls
+
+- **Status:** APPROVED
+- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`)
+- **Source Reference:** `/mnt/c/Users/y/Downloads/triage-mail` (generated Svelte 5 + Tailwind v4 UI)
+- **Systems Involved:** `apps/desktop/package.json`, `apps/desktop/src/app.html`, `apps/desktop/src/app.css`, `apps/desktop/src/routes/+layout.svelte`, `apps/desktop/src/routes/+layout.ts`, `apps/desktop/src/lib/shell/`, `apps/desktop/src/lib/stores/`, `apps/desktop/src/lib/i18n/`, `apps/desktop/src/lib/security/sanitize.ts`, `apps/desktop/src/lib/window/`.
+- **Goal:** Replace the global visual shell, theme tokens, typography, and window chrome with the UI v2 design while preserving 100% of Tauri v2 IPC, CSP, and security invariants.
+- **Scope & Invariants:**
+  1. **Clean Dependencies (`apps/desktop/package.json`):** Add `lucide-svelte`, `svelte-sonner`, `vaul-svelte`, `@fontsource/plus-jakarta-sans`, `@fontsource/dm-sans`, and `@fontsource/jetbrains-mono` (do NOT import React/Express/AI-Studio packages from the generated template).
+  2. **CSP-Compliant Offline Typography (`app.html`, `app.css`):** Remove external `fonts.googleapis.com` links from `app.html`; bundle `@fontsource/*` locally and adopt the UI v2 semantic CSS tokens (`--background`, `--sidebar`, `--surface`, `--reader`, `--toolbar`, `--field`, `--text`, `--secondary`, `--separator`, `--accent`, `--selection`, `--selection-soft`, `--status-*`) with light/dark mode and `prefers-reduced-motion`.
+  3. **Unified Sanitizer (`src/lib/security/sanitize.ts`):** Keep the existing strict `DOMPurify` allowlist, `<meta http-equiv="Content-Security-Policy">`, and `data:`/`https:` image validation from `[04.3]`, while integrating the UI v2 light/dark iframe stylesheet and `hasBlockedRemoteImages(htmlRaw)` helper.
+  4. **App Shell & Real Window Controls (`src/lib/shell/*`, `+layout.svelte`):** Port `AppShell.svelte`, `SidebarNav.svelte`, `SidebarNavRoutes.svelte`, and `WindowControls.svelte` using Svelte 5 Runes (`<= 250` lines per `.svelte` file), `<Toaster />`, and `vaul-svelte` mobile drawer. Wire `WindowControls` and drag region to `src/lib/window/transport.ts` (`createTauriWindowTransport()`) with browser dock fallback when running outside Tauri.
+  5. **SPA Routing & State:** Configure `@sveltejs/adapter-static` compatible routes (`/`, `/due-dates`, `/automation`, `/onboarding`, `/settings`) and expand `i18n` labels without breaking existing unit tests.
+- **Validation:** `pnpm --filter desktop check`, `pnpm --filter desktop test`, `pnpm --filter desktop build`, `! grep -rn "export let" apps/desktop/src/`, `cargo check --workspace`, `git diff --check`.
+
+---
+
+## UI v2 Redesign Queue (`feat/ui-v2-redesign`)
+
+Sequential 100% UI replacement roadmap following `[04.14]`. Priority: match the generated UI v2 layout/polish while preserving Rust backend contracts (`crates/*`, `apps/desktop/src-tauri`) and migrating mock data to real `transport.ts` / controllers progressively.
+
+### Task [04.15]: UI v2 Unified Inbox, Virtualized Message List, Reader & Command Palette (`/`)
+- **Status:** QUEUED (after `[04.14]`)
+- **Scope:** Replace `InboxView`, `Sidebar`, `SearchToolbar`, `MessageList`, `MessageState`, `MessageActions`, `SelectionOverview`, `MessageContent`, `AttachmentDownload`, `TriageBadges`, `CommandPalette`, `SnoozeForm`, and `Conversation*` with `WdgInboxStatsBar`, `WdgMessageList`, `WdgMessageReader`, `WdgReaderHeader`, `WdgExtractionSummary`, `WdgCommandPalette`, and `WdgSnoozeSheet`. Wire into `InboxController`, `virtual.ts` (`ROW_HEIGHT = 88`), `BadgeLoader`, and `reader/transport.ts` (`cmd_get_message_body`, `cmd_fetch_attachment`, `cmd_summarize_message`, `cmd_correct_category`), keeping fixture fallback only when `!nativeAvailable()`. Update inbox/reader/palette `*.svelte.test.ts`.
+
+### Task [04.16]: UI v2 Boot Gate, Vault Unlock & Multi-Account Onboarding (`/onboarding`)
+- **Status:** QUEUED (after `[04.15]`)
+- **Scope:** Replace `DesktopApp`, `OnboardingView`, `AccountForm`, `AccountConnectionFields`, `AccountCredentialFields`, `AccountHelpGuide`, `AccountList`, `AccountPhoto`, and recovery `BackupForm` with `WdgVaultUnlockCard`, `WdgAccountDiscoveryForm`, and `WdgConnectedAccountList` on `/onboarding`. Wire boot gate (recovery/locked/no-accounts -> `/onboarding`) into `onboarding/controller.svelte.ts`, `discovery-controller.svelte.ts`, `avatar-controller.svelte.ts`, and `cmd_list_folders`, preserving `clearCredentialInputs`. Show demo phase switcher only outside Tauri. Update onboarding/avatar tests.
+
+### Task [04.17]: UI v2 Due Dates & Reminders Hub (`/due-dates`)
+- **Status:** QUEUED (after `[04.16]`)
+- **Scope:** Promote `DueDateDashboard` and `RemindersModule` to `/due-dates` using `WdgDueDateKpis`, `WdgBoletoCard`, and `WdgReminderConfigDrawer` wired to `reminders/transport.ts`. Feed live `Overdue + Due Today` badge counts into `SidebarNavRoutes` and route `"View Email"` back to `/` with message selection. Update `reminders.svelte.test.ts`.
+
+### Task [04.18]: UI v2 Automation Workspace — Rules Simulator, Alerts & Sender Governance (`/automation`)
+- **Status:** QUEUED (after `[04.17]`)
+- **Scope:** Replace `RulesModule`, `RuleEditor`, `ConditionsEditor`, `AlertsModule`, `DestinationEditor`, `ScheduleEditor`, `ScheduleTiming`, `ReviewModule`, `SenderDecision`, and `CategoriesModule` with `WdgRulesSplitPane`, `WdgRuleEditorForm`, `WdgRuleSimulatorPanel`, `WdgAlertsManager`, `WdgAlertDestinationDialog`, `WdgSenderReviewQueue`, and `WdgCategoryOverrides` on `/automation`. Wire to `rules/transport.ts`, `alerts/transport.ts` (retaining explicit field consent and quiet hours), `sender-review/transport.ts`, and `categories/transport.ts`, keeping non-contract visual fields (e.g. `matches_count`) gracefully defaulted until backend support lands. Update related `*.svelte.test.ts`.
+
+### Task [04.19]: UI v2 Settings, Search Index, Local AI, Backup & Legacy Cleanup (`/settings`)
+- **Status:** QUEUED (after `[04.18]`)
+- **Scope:** Replace `SettingsDialog`, `SettingsView`, `settings/modules/*`, `AiSettingsForm`, `ModelSettings`, `LearnedSearchSettings`, `BackupModule`, `PortableForm`, and `LanguageSelector` with `WdgSearchIndexPanel`, `WdgAiModelsPanel`, `WdgPrivacyPanel`, `WdgBackupDefinitionsPanel`, and `WdgImportPreviewDialog` on `/settings`, wired to `settings/transport.ts`, `settings/guards.ts`, and `backup/transport.ts`. Remove all obsolete `.svelte` files and orphan fixtures, update remaining tests, and pass full repository DoD (`cargo check/test/fmt/clippy`, `pnpm check/test/build`, zero `export let`, zero PII/secrets).
 
 ---
 
