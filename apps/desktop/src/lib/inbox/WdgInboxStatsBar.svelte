@@ -217,7 +217,6 @@
 					type="button"
 					onclick={openSettings}
 					aria-label="Settings"
-					aria-haspopup="dialog"
 					title={t(appStore.locale, 'navSettings')}
 					class="flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-separator bg-surface px-2.5 py-1 text-xs font-medium text-foreground transition-transform duration-100 ease-out hover:bg-field active:scale-[0.98]"
 				>

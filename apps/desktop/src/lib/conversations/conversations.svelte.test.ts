@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import { InboxController } from '../inbox/controller.svelte';
-import ConversationReader from './ConversationReader.svelte';
-import ConversationActions from './ConversationActions.svelte';
+import WdgConversationThread from '../inbox/WdgConversationThread.svelte';
+import { createLiveWorkspace } from '../inbox/workspace.svelte';
+import WdgConversationActions from './WdgConversationActions.svelte';
 import type {
 	ConversationPage,
 	ConversationRow,
@@ -10,6 +11,18 @@ import type {
 	ConversationPreview
 } from './types';
 import type { MessageRowDto } from '../inbox/types';
+
+beforeAll(() => {
+	vi.stubGlobal(
+		'ResizeObserver',
+		class {
+			observe() {}
+			unobserve() {}
+			disconnect() {}
+		}
+	);
+});
+
 const message: MessageRowDto = {
 	id: 'm1',
 	account_id: 'a',
@@ -109,9 +122,13 @@ describe('native conversation snapshots', () => {
 		inbox.conversations = true;
 		await inbox.search('', 'Lexical');
 		const detail = vi.fn().mockRejectedValue('NotFound');
-		const app = mount(ConversationReader, {
+		const workspace = createLiveWorkspace(inbox, {
+			connected: true,
+			readerTransport: { body: detail, attachment: vi.fn() }
+		});
+		const app = mount(WdgConversationThread, {
 			target: document.body,
-			props: { inbox, row: group, accounts: [], transport: { body: detail, attachment: vi.fn() } }
+			props: { workspace, row: group, activeMemberId: 'm1', onSelectMember: vi.fn() }
 		});
 		mounted.push(app);
 		await settle();
@@ -145,7 +162,7 @@ describe('native conversation snapshots', () => {
 		let reject!: (reason: string) => void;
 		vi.mocked(api.apply).mockReturnValueOnce(new Promise((_, fail) => (reject = fail)));
 		mounted.push(
-			mount(ConversationActions, {
+			mount(WdgConversationActions, {
 				target: document.body,
 				props: { inbox, row: group, accountLabel: 'Synthetic account' }
 			})

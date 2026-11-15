@@ -7,11 +7,7 @@
 
 ## Active Task
 
-### Task [04.19]: UI v2 Settings, Search Index, Local AI, Backup & Legacy Cleanup (`/settings`)
-
-- **Status:** READY FOR PLANNING
-- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.18]`)
-- **Scope:** Replace `SettingsDialog`, `SettingsView`, `settings/modules/*`, `AiSettingsForm`, `ModelSettings`, `LearnedSearchSettings`, `BackupModule`, `PortableForm`, and `LanguageSelector` with `WdgSearchIndexPanel`, `WdgAiModelsPanel`, `WdgPrivacyPanel`, `WdgBackupDefinitionsPanel`, and `WdgImportPreviewDialog` on `/settings`, wired to `settings/transport.ts`, `settings/guards.ts`, and `backup/transport.ts`. Remove all obsolete `.svelte` files and orphan fixtures, update remaining tests, and pass full repository DoD (`cargo check/test/fmt/clippy`, `pnpm check/test/build`, zero `export let`, zero PII/secrets).
+No active task — UI v2 Redesign Queue (`[04.14]`–`[04.19]`) complete on `feat/ui-v2-redesign`.
 
 ---
 
@@ -22,6 +18,47 @@ Sequential 100% UI replacement roadmap continuing from `[04.18]`. Priority: matc
 ---
 
 ## Latest Completed Task
+
+### Task [04.19]: UI v2 Settings, Search Index, Local AI, Backup & Legacy Cleanup (`/settings`)
+
+- **Status:** DONE
+- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.18]`)
+- **Source Reference:** `/mnt/c/Users/y/Downloads/triage-mail` (`src/routes/settings/+page.svelte`, `src/lib/settings/*`)
+- **Systems Involved:** `apps/desktop/src/routes/settings/+page.svelte`, `apps/desktop/src/lib/settings/*`, `apps/desktop/src/lib/backup/*`, `apps/desktop/src/lib/onboarding/{InboxSession,WdgOnboardingPage}.svelte`, `apps/desktop/src/lib/inbox/*`, `apps/desktop/src/lib/conversations/*`, `apps/desktop/src/lib/stores/app.svelte.ts`, `apps/desktop/src/lib/automation/WdgAutomationPage.svelte`, `apps/desktop/src/app.css`, `apps/desktop/src/lib/i18n/{types,translations}.ts`.
+- **Scope:** Replace `SettingsDialog`, `SettingsView`, `settings/modules/*`, `AiSettingsForm`, `ModelSettings`, `LearnedSearchSettings`, `BackupModule`, `PortableForm`, and `LanguageSelector` with `WdgSearchIndexPanel`, `WdgAiModelsPanel`, `WdgPrivacyPanel`, `WdgBackupDefinitionsPanel`, and `WdgImportPreviewDialog` on `/settings`, wired to `settings/transport.ts`, `settings/guards.ts`, and `backup/transport.ts`. Remove all obsolete `.svelte` files and orphan fixtures/styles, update remaining tests, and pass repository DoD (`check`/`test`/`build`, zero `export let`, zero PII/secrets).
+
+#### Completion (2026-11-15)
+
+- **Delivered:**
+  - Added [settings/labels.ts](apps/desktop/src/lib/settings/labels.ts) with 1:1 EN/PT-BR `SettingsLabels` parity, [settings/settings.helpers.ts](apps/desktop/src/lib/settings/settings.helpers.ts) (`getEmbeddingProgressPct`, `getEmbeddingStatusTone`, `triggerBlobDownload`, `buildImportPreviewFromJson`), and [settings/settings.fixtures.ts](apps/desktop/src/lib/settings/settings.fixtures.ts) (`@example.com`/`@example.org`/`@example.net` only, `createDemoSettingsTransport`, `PORTABLE_IMPORT_PREVIEW_FIXTURE`) gated strictly outside native Tauri (`!nativeAvailable()`).
+  - Ported UI v2 settings panels in pure Svelte 5 Runes and promoted onto [routes/settings/+page.svelte](apps/desktop/src/routes/settings/+page.svelte):
+    - `WdgSettingsPage.svelte`: section navigation (`general`, `search`, `ai`, `privacy`, `backup`), `SettingsFormGuard` unsaved-changes `AlertDialog` guard (Stay / Discard) and busy blocking, retryable load error state, `triage-settings-updated` event broadcast, and `appStore.semanticSearchEnabled` sync.
+    - `WdgPrivacyPanel.svelte`: inline EN/PT-BR `role="radiogroup"` locale switcher, OS theme alignment / preview toggle, and strictly read-only global privacy & network guarantees (`Remote Images & Tracking Pixels` blocked by default with zero toggles; per-message HTTPS consent remains in `WdgMessageReader`).
+    - `WdgSearchIndexPanel.svelte`: FTS5 tokenizer selector (`Unicode61RemoveDiacritics` / `Trigram` with disk-space warning), `bits-ui` semantic search `Switch`, 2000ms `embeddingState()` polling with unmount cleanup, explicit rebuild consent gate (`rebuildEmbeddings(true)`), and pinned ONNX download form (`model_url`, `tokenizer_url`, explicit consent, redacted errors).
+    - `WdgAiModelsPanel.svelte`: Ollama / BYOK provider cards, endpoint/model inputs, and detached transient API key DOM input (`clearCredentialInputs` before await and on unmount, never stored in `$state`), zero network probes on save.
+    - `WdgBackupDefinitionsPanel.svelte` & `WdgImportPreviewDialog.svelte`: native `transfer` flows (`choose`, `backup`, `restore` gated on `available()` recovery state, `export`, `preview`, `destinations`, `import` with full placeholder mapping, explicit consent, `triage-definitions-imported` dispatch, `transferGuards`, 12-char passphrase minimum, and `clearCredentialInputs`), plus browser demo diff preview / conflict resolution only when `!nativeAvailable()`.
+  - Updated navigation & legacy cleanup:
+    - Replaced `LanguageSelector` in `WdgOnboardingPage.svelte` with inline EN/PT segmented toggle; removed `SettingsDialog` from `InboxSession.svelte`, routing `Settings` -> `/settings`, `Create Rule` (`appStore.requestCreateRule` / `consumePendingRuleSeedMessage`) -> `/automation` (`WdgAutomationPage.svelte`), and listening to `triage-settings-updated` and `triage-definitions-imported` on `window`. Fixed `syncSavedViewsFromTransport()` guard so injected test `savedViews` transports remain active outside Tauri.
+    - Created `WdgConversationActions.svelte` in Svelte 5 Runes and wired into `WdgConversationThread.svelte`.
+    - Removed all 57 obsolete legacy `.svelte` files, `settings/modules/*`, `lib/ui/`, obsolete tests (`dialog`, `modal-flow`, `learned-search`, `accounts-module`, `title-bar`), orphan `saved-views/labels.ts`, unused `SETTINGS_TABS`/`SettingsTab`/`SettingsModuleProps` in `settings/types.ts`, unused `settingsModal` i18n dictionary, and legacy compatibility CSS classes in `app.css`.
+  - Updated/migrated remaining Vitest suites (`settings.svelte.test.ts`, `backup.svelte.test.ts`, `onboarding.svelte.test.ts`, `settings-shell.svelte.test.ts`, `inbox.test.ts`, `conversations.svelte.test.ts`, `saved.svelte.test.ts`, plus cleaned legacy blocks in `alerts`, `schedule`, `categories`, `rules`, `review`, and `reminders` tests).
+- **Validation:**
+  - `pnpm --filter desktop check`: 0 errors, 0 warnings.
+  - `pnpm --filter desktop test`: 29 test files passed, 164 tests passed.
+  - `pnpm --filter desktop build`: Built static SPA to `apps/desktop/build` via `@sveltejs/adapter-static`.
+  - `! grep -rn "export let" apps/desktop/src/`, `node scripts/ci-guard.mjs`, `node --test scripts/ci-guard.test.mjs`, and `git diff --check` verified after staging.
+  - Rust workspace (`crates/*`, `apps/desktop/src-tauri`): zero files modified; local `cargo` toolchain unavailable in current environment (`/home/<user>/.cargo/bin/cargo` symlink dangling).
+- **Next:** UI v2 Redesign Queue complete (`[04.14]`–`[04.19]`); no active task queued.
+
+#### Closing Checklist — [04.19]
+
+- [x] `WdgSettingsPage`, `WdgPrivacyPanel`, `WdgSearchIndexPanel`, `WdgAiModelsPanel`, `WdgBackupDefinitionsPanel`, and `WdgImportPreviewDialog` implemented in Svelte 5 Runes and promoted onto `/settings`.
+- [x] Security and consent invariants preserved: read-only global remote-image guarantee, detached credential inputs with `clearCredentialInputs`, zero AI save network probes, explicit ONNX download / vector rebuild / portable mapping / backup recovery consents, and `SettingsFormGuard` / `transferGuards`.
+- [x] All obsolete legacy `.svelte` files, orphan i18n/types/CSS rules, and obsolete tests removed cleanly.
+- [x] All 29 desktop Vitest suites (164 tests), `svelte-check`, static SPA `build`, `ci-guard`, and `git diff --check` passed.
+- [x] Atomic Conventional Commit recorded on `feat/ui-v2-redesign` without pushing.
+
+---
 
 ### Task [04.18]: UI v2 Automation Workspace — Rules Simulator, Alerts & Sender Governance (`/automation`)
 

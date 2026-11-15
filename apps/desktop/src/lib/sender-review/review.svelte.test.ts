@@ -3,8 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InboxController, PAGE_SIZE } from '../inbox/controller.svelte';
 import type { InboxTransport, MessageRowDto } from '../inbox/types';
 import type { ReviewTransport, SenderChoice, ReviewPreferences } from './types';
-import ReviewActions from './ReviewActions.svelte';
-import ReviewModule from './ReviewModule.svelte';
 import WdgSenderReviewQueue from '../automation/WdgSenderReviewQueue.svelte';
 import { SettingsFormGuard } from '../settings/guards';
 import { i18n } from '../i18n/index.svelte';
@@ -71,12 +69,6 @@ function button(text: string) {
 	expect(found).toBeTruthy();
 	return found!;
 }
-function check(index: number) {
-	const input = document.querySelectorAll<HTMLInputElement>('input[type=checkbox]')[index];
-	input.checked = true;
-	input.dispatchEvent(new Event('change', { bubbles: true }));
-	flushSync();
-}
 it('uses native review pages and discards late results across review and mailbox changes', async () => {
 	const { review, transport, inbox } = fixture();
 	let resolve!: (rows: MessageRowDto[]) => void;
@@ -105,89 +97,6 @@ it('uses native review pages and discards late results across review and mailbox
 	expect(inbox.rows).toEqual([]);
 	expect(inbox.review).toBeNull();
 	inbox.dispose();
-});
-it('requires exact sender and account consent and never sends a triage mutation', async () => {
-	vi.useFakeTimers();
-	const { review, transport, inbox } = fixture();
-	inbox.rows = [row];
-	const component = mount(ReviewActions, {
-		target: document.body,
-		props: { inbox, message: row, accountLabel: 'Account A' }
-	});
-	cleanup = () => {
-		inbox.dispose();
-		void unmount(component);
-	};
-	await settle();
-	expect(document.body.textContent).toContain('does not authenticate');
-	expect(document.body.textContent).toContain('Account A');
-	expect(button('Decline sender').disabled).toBe(true);
-	check(0);
-	button('Decline sender').click();
-	await settle();
-	expect(review.save).toHaveBeenCalledWith({ ...choice, state: 'Declined' });
-	expect(transport.triage).not.toHaveBeenCalled();
-});
-it('keeps unresolved senders visible and ignores metadata after unmount', async () => {
-	const { review, inbox } = fixture();
-	vi.mocked(review.metadata).mockResolvedValueOnce(null);
-	const component = mount(ReviewActions, {
-		target: document.body,
-		props: { inbox, message: row, accountLabel: 'A' }
-	});
-	await settle();
-	expect(document.body.textContent).toContain('This message stays visible');
-	expect(document.querySelector('input')).toBeNull();
-	await unmount(component);
-	let resolve!: (v: SenderChoice) => void;
-	vi.mocked(review.metadata).mockReturnValueOnce(new Promise((r) => (resolve = r)));
-	const next = mount(ReviewActions, {
-		target: document.body,
-		props: { inbox, message: row, accountLabel: 'A' }
-	});
-	flushSync();
-	await unmount(next);
-	resolve(choice);
-	await settle();
-	expect(document.body.textContent).toBe('');
-	inbox.dispose();
-});
-it('guards settings drafts and writes, keeps hiding separate, and renders Portuguese', async () => {
-	const { review } = fixture();
-	const guard = new SettingsFormGuard();
-	const account = {
-		account_id: 'a',
-		email_display: 'reader@example.com',
-		imap_host: 'imap.example.com',
-		imap_port: 993,
-		auth_method: 'AppPassword' as const
-	};
-	const component = mount(ReviewModule, {
-		target: document.body,
-		props: { guard, transport: review, accounts: [account] }
-	});
-	cleanup = () => void unmount(component);
-	await settle();
-	check(0);
-	expect(guard.needsConfirmation()).toBe(true);
-	let resolve!: (v: ReviewPreferences) => void;
-	vi.mocked(review.savePreferences).mockReturnValueOnce(new Promise((r) => (resolve = r)));
-	button('Save preferences').click();
-	await settle();
-	expect(guard.isBlocked()).toBe(true);
-	expect(review.savePreferences).toHaveBeenCalledWith({
-		...pref,
-		enabled: true,
-		hide_in_inbox: false
-	});
-	resolve({ ...pref, revision: 1, enabled: true, initializing: true });
-	await settle();
-	expect(guard.isBlocked()).toBe(false);
-	expect(guard.needsConfirmation()).toBe(false);
-	i18n.locale = 'pt-BR';
-	flushSync();
-	expect(document.body.textContent).toContain('Novos remetentes');
-	expect(document.body.textContent).toContain('não autentica');
 });
 
 describe('WdgSenderReviewQueue (UI v2)', () => {

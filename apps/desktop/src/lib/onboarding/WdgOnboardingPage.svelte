@@ -5,7 +5,6 @@
 	import { i18n } from '../i18n/index.svelte';
 	import type { FolderDto } from '../inbox/types';
 	import { appStore } from '../stores/app.svelte';
-	import LanguageSelector from '../ui/LanguageSelector.svelte';
 	import type { AvatarTransport } from './avatar-types';
 	import type { DiscoveryTransport } from './discovery';
 	import {
@@ -175,7 +174,38 @@
 			</div>
 
 			<div class="flex flex-wrap items-center gap-2">
-				<LanguageSelector />
+				<div
+					role="radiogroup"
+					aria-label={i18n.t.language.selectLabel}
+					class="inline-flex items-center rounded-md border border-separator bg-field p-0.5"
+				>
+					<button
+						type="button"
+						role="radio"
+						aria-checked={i18n.locale === 'en'}
+						aria-label="English"
+						onclick={() => i18n.setLocale('en')}
+						class="min-h-[32px] rounded px-2.5 text-xs font-medium transition-colors {i18n.locale ===
+						'en'
+							? 'bg-surface text-foreground shadow-xs'
+							: 'text-secondary hover:text-foreground'}"
+					>
+						EN
+					</button>
+					<button
+						type="button"
+						role="radio"
+						aria-checked={i18n.locale === 'pt-BR'}
+						aria-label="Português"
+						onclick={() => i18n.setLocale('pt-BR')}
+						class="min-h-[32px] rounded px-2.5 text-xs font-medium transition-colors {i18n.locale ===
+						'pt-BR'
+							? 'bg-surface text-foreground shadow-xs'
+							: 'text-secondary hover:text-foreground'}"
+					>
+						PT
+					</button>
+				</div>
 
 				{#if !isNative}
 					<div
