@@ -1,10 +1,11 @@
 import { flushSync, mount, unmount } from 'svelte';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InboxController, PAGE_SIZE } from '../inbox/controller.svelte';
 import type { InboxTransport, MessageRowDto } from '../inbox/types';
 import type { CategoryMetadata, CategoryTransport } from './types';
 import CategoryActions from './CategoryActions.svelte';
 import CategoriesModule from './CategoriesModule.svelte';
+import WdgCategoryOverrides from '../automation/WdgCategoryOverrides.svelte';
 import { SettingsFormGuard } from '../settings/guards';
 import { i18n } from '../i18n/index.svelte';
 let cleanup = () => {};
@@ -171,4 +172,66 @@ it('guards settings reset until persistence settles and renders Portuguese label
 	await settle();
 	expect(guard.isBlocked()).toBe(false);
 	await unmount(component);
+});
+
+describe('WdgCategoryOverrides (UI v2)', () => {
+	it('renders absent metadata cleanly, updates category, guards reset until settled, and localizes', async () => {
+		const { categories } = fixture();
+		const guard = new SettingsFormGuard();
+		vi.mocked(categories.list).mockResolvedValue([
+			{ account_id: 'a', sender: 'sender@example.org', revision: 4, category: 'Financial' }
+		]);
+
+		const component = mount(WdgCategoryOverrides, {
+			target: document.body,
+			props: {
+				guard,
+				transport: categories,
+				accounts: [
+					{
+						account_id: 'a',
+						email_display: 'user@example.com',
+						imap_host: 'imap.example.com',
+						imap_port: 993,
+						auth_method: 'AppPassword'
+					}
+				]
+			}
+		});
+		cleanup = () => void unmount(component);
+		await settle();
+
+		expect(document.body.textContent).toContain('sender@example.org');
+		expect(document.body.textContent).toContain('SenderOverride');
+
+		const select = document.body.querySelector<HTMLSelectElement>('select')!;
+		select.value = 'Security';
+		select.dispatchEvent(new Event('change', { bubbles: true }));
+		await settle();
+		expect(categories.save).toHaveBeenCalledWith({
+			account_id: 'a',
+			sender: 'sender@example.org',
+			revision: 4,
+			category: 'Security'
+		});
+
+		let resolveReset!: (v: import('./types').SenderOverride) => void;
+		vi.mocked(categories.save).mockReturnValueOnce(new Promise((r) => (resolveReset = r)));
+		button('Reset').click();
+		flushSync();
+		expect(guard.isBlocked()).toBe(true);
+		expect(categories.save).toHaveBeenLastCalledWith({
+			account_id: 'a',
+			sender: 'sender@example.org',
+			revision: 4,
+			category: null
+		});
+		resolveReset({ account_id: 'a', sender: 'sender@example.org', revision: 5, category: null });
+		await settle();
+		expect(guard.isBlocked()).toBe(false);
+
+		i18n.locale = 'pt-BR';
+		flushSync();
+		expect(document.body.textContent).toContain('Substituições Locais de Categoria');
+	});
 });

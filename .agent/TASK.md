@@ -7,25 +7,53 @@
 
 ## Active Task
 
-### Task [04.18]: UI v2 Automation Workspace — Rules Simulator, Alerts & Sender Governance (`/automation`)
+### Task [04.19]: UI v2 Settings, Search Index, Local AI, Backup & Legacy Cleanup (`/settings`)
 
 - **Status:** READY FOR PLANNING
-- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.17]`)
-- **Scope:** Replace `RulesModule`, `RuleEditor`, `ConditionsEditor`, `AlertsModule`, `DestinationEditor`, `ScheduleEditor`, `ScheduleTiming`, `ReviewModule`, `SenderDecision`, and `CategoriesModule` with `WdgRulesSplitPane`, `WdgRuleEditorForm`, `WdgRuleSimulatorPanel`, `WdgAlertsManager`, `WdgAlertDestinationDialog`, `WdgSenderReviewQueue`, and `WdgCategoryOverrides` on `/automation`. Wire to `rules/transport.ts`, `alerts/transport.ts` (retaining explicit field consent and quiet hours), `sender-review/transport.ts`, and `categories/transport.ts`, keeping non-contract visual fields (e.g. `matches_count`) gracefully defaulted until backend support lands. Update related `*.svelte.test.ts`.
+- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.18]`)
+- **Scope:** Replace `SettingsDialog`, `SettingsView`, `settings/modules/*`, `AiSettingsForm`, `ModelSettings`, `LearnedSearchSettings`, `BackupModule`, `PortableForm`, and `LanguageSelector` with `WdgSearchIndexPanel`, `WdgAiModelsPanel`, `WdgPrivacyPanel`, `WdgBackupDefinitionsPanel`, and `WdgImportPreviewDialog` on `/settings`, wired to `settings/transport.ts`, `settings/guards.ts`, and `backup/transport.ts`. Remove all obsolete `.svelte` files and orphan fixtures, update remaining tests, and pass full repository DoD (`cargo check/test/fmt/clippy`, `pnpm check/test/build`, zero `export let`, zero PII/secrets).
 
 ---
 
 ## UI v2 Redesign Queue (`feat/ui-v2-redesign`)
 
-Sequential 100% UI replacement roadmap following `[04.17]`. Priority: match the generated UI v2 layout/polish while preserving Rust backend contracts (`crates/*`, `apps/desktop/src-tauri`) and migrating mock data to real `transport.ts` / controllers progressively.
-
-### Task [04.19]: UI v2 Settings, Search Index, Local AI, Backup & Legacy Cleanup (`/settings`)
-- **Status:** QUEUED (after `[04.18]`)
-- **Scope:** Replace `SettingsDialog`, `SettingsView`, `settings/modules/*`, `AiSettingsForm`, `ModelSettings`, `LearnedSearchSettings`, `BackupModule`, `PortableForm`, and `LanguageSelector` with `WdgSearchIndexPanel`, `WdgAiModelsPanel`, `WdgPrivacyPanel`, `WdgBackupDefinitionsPanel`, and `WdgImportPreviewDialog` on `/settings`, wired to `settings/transport.ts`, `settings/guards.ts`, and `backup/transport.ts`. Remove all obsolete `.svelte` files and orphan fixtures, update remaining tests, and pass full repository DoD (`cargo check/test/fmt/clippy`, `pnpm check/test/build`, zero `export let`, zero PII/secrets).
+Sequential 100% UI replacement roadmap continuing from `[04.18]`. Priority: match the generated UI v2 layout/polish while preserving Rust backend contracts (`crates/*`, `apps/desktop/src-tauri`) and migrating mock data to real `transport.ts` / controllers progressively.
 
 ---
 
 ## Latest Completed Task
+
+### Task [04.18]: UI v2 Automation Workspace — Rules Simulator, Alerts & Sender Governance (`/automation`)
+
+- **Status:** DONE
+- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.17]`)
+- **Systems Involved:** `apps/desktop/src/routes/automation/+page.svelte`, `apps/desktop/src/lib/automation/*`, `apps/desktop/src/lib/rules/rules.svelte.test.ts`, `apps/desktop/src/lib/alerts/{alerts,schedule}.svelte.test.ts`, `apps/desktop/src/lib/sender-review/review.svelte.test.ts`, `apps/desktop/src/lib/categories/categories.svelte.test.ts`.
+- **Scope:** Replace `RulesModule`, `RuleEditor`, `ConditionsEditor`, `AlertsModule`, `DestinationEditor`, `ScheduleEditor`, `ScheduleTiming`, `ReviewModule`, `SenderDecision`, and `CategoriesModule` with `WdgRulesSplitPane`, `WdgRuleEditorForm`, `WdgRuleSimulatorPanel`, `WdgAlertsManager`, `WdgAlertDestinationDialog`, `WdgSenderReviewQueue`, and `WdgCategoryOverrides` on `/automation`. Wire to `rules/transport.ts`, `alerts/transport.ts` (retaining explicit field consent and quiet hours), `sender-review/transport.ts`, and `categories/transport.ts`, keeping non-contract visual fields (e.g. `matches_count`) gracefully defaulted until backend support lands. Update related `*.svelte.test.ts`.
+
+#### Completion (2026-11-15)
+
+- **Delivered:**
+  - Added [automation/labels.ts](apps/desktop/src/lib/automation/labels.ts) with 1:1 EN/PT-BR `AutomationLabels` parity, [automation/simulator.ts](apps/desktop/src/lib/automation/simulator.ts) (`clonePlain`, condition builders/extractors, action formatting, `validateWebhookOrigin` rejecting non-HTTPS schemes/localhost/IP-literals/non-443 ports, and `simulateRulesLocally` preserving `Matched`/`Excluded`/`Disabled`/`Stopped` precedence), and [automation/automation.fixtures.ts](apps/desktop/src/lib/automation/automation.fixtures.ts) (`@example.com`/`@example.org`/`@example.net` RFC 2606 demo backend for `!nativeAvailable()` with separate visual metadata maps).
+  - Ported UI v2 automation components in pure Svelte 5 Runes (`$props`, `$state`, `$derived`, `$effect`, `$state.snapshot()`): `WdgAutomationPage.svelte` (`bits-ui` 3-tab governance shell wired to `nativeRulesTransport`, `nativeAlertsTransport`, `nativeScheduleTransport`, `nativeReview`, and `nativeCategories` with `!nativeAvailable()` demo fallback), `WdgRulesSplitPane.svelte` (ordered rule pipeline, switch toggle, reorder, seeded draft creation, delete), `WdgRuleEditorForm.svelte` (`all`/`any`/`except` condition groups, action stack with integer cents and UTF-8 tag validation, destination safety warnings, dirty/busy guard), `WdgRuleSimulatorPanel.svelte` (read-only dry-run simulation and per-rule/group explanation traces), `WdgAlertsManager.svelte` (destination cards, explicit 2-step confirmation for test/replay with scheduling bypass notice, delivery history table), `WdgAlertDestinationDialog.svelte` (detached transient password inputs cleared on submit/cancel/switch/destroy, explicit export-field checkboxes, HTTPS public origin preview, schedule cadence/quiet-hours/preview/urgent-bypass dual consent), `WdgSenderReviewQueue.svelte` (per-account toggle + hide-in-inbox switch, initialization polling, Pending/Declined filter, per-sender unauthenticated-identity consent checkbox), and `WdgCategoryOverrides.svelte` (account/category/origin badges, override dropdown, guarded reset).
+  - Promoted `WdgAutomationPage` onto [routes/automation/+page.svelte](apps/desktop/src/routes/automation/+page.svelte); kept legacy `.svelte` modules (`RulesModule`, `AlertsModule`, `DestinationEditor`, `ScheduleEditor`, `ReviewModule`, `SenderDecision`, `CategoriesModule`) intact for `SettingsDialog`/`InboxView` tests until `[04.19]`.
+  - Added UI v2 Vitest suites in [automation.svelte.test.ts](apps/desktop/src/lib/automation/automation.svelte.test.ts), [rules.svelte.test.ts](apps/desktop/src/lib/rules/rules.svelte.test.ts), [alerts.svelte.test.ts](apps/desktop/src/lib/alerts/alerts.svelte.test.ts), [schedule.svelte.test.ts](apps/desktop/src/lib/alerts/schedule.svelte.test.ts), [review.svelte.test.ts](apps/desktop/src/lib/sender-review/review.svelte.test.ts), and [categories.svelte.test.ts](apps/desktop/src/lib/categories/categories.svelte.test.ts).
+- **Validation:**
+  - `pnpm --filter desktop check`: 0 errors, 0 warnings.
+  - `pnpm --filter desktop test`: 34 test files passed, 216 tests passed.
+  - `pnpm --filter desktop build`: Built static SPA to `apps/desktop/build` via `@sveltejs/adapter-static`.
+  - `! grep -rn "export let" apps/desktop/src/`, `node scripts/ci-guard.mjs` (516 tracked text files scanned, 0 findings), `node --test scripts/ci-guard.test.mjs` (5/5 passed), and `git diff --check` clean.
+  - Rust workspace (`crates/*`, `apps/desktop/src-tauri`): zero files modified; local `cargo` toolchain unavailable in current environment.
+- **Next:** Task `[04.19]` (`READY FOR PLANNING`).
+
+#### Closing Checklist — [04.18]
+
+- [x] `WdgAutomationPage`, `WdgRulesSplitPane`, `WdgRuleEditorForm`, `WdgRuleSimulatorPanel`, `WdgAlertsManager`, `WdgAlertDestinationDialog`, `WdgSenderReviewQueue`, and `WdgCategoryOverrides` implemented in Svelte 5 Runes and wired to native transports with `!nativeAvailable()` demo fallback.
+- [x] Promoted to `/automation` while keeping legacy `.svelte` components intact for `SettingsDialog` / `InboxView` until `[04.19]`.
+- [x] Security and consent invariants preserved: detached secret inputs, explicit export-field consent, 2-step test/replay confirmation, quiet-hours + urgent bypass dual consent, sender-review exact-identity consent, and `SettingsFormGuard` lifecycle.
+- [x] `automation.svelte.test.ts`, `rules.svelte.test.ts`, `alerts.svelte.test.ts`, `schedule.svelte.test.ts`, `review.svelte.test.ts`, and `categories.svelte.test.ts` updated; `check`, `test` (216/216), `build`, `ci-guard`, and `git diff --check` passed.
+- [x] Atomic Conventional Commit recorded on `feat/ui-v2-redesign` without pushing.
+
+---
 
 ### Task [04.17]: UI v2 Due Dates & Reminders Hub (`/due-dates`)
 
