@@ -1,4 +1,9 @@
 import type { AuthMethod } from './types';
+import {
+	GOOGLE_AUTH_ENDPOINT,
+	GOOGLE_IMAP_SCOPE,
+	GOOGLE_TOKEN_ENDPOINT
+} from './google-oauth-json';
 
 export interface ProviderPreset {
 	name: string;
@@ -27,13 +32,45 @@ export const providerPresets: ProviderPreset[] = [
 		host: 'imap.gmail.com',
 		port: 993,
 		method: 'OAuth2ByoCredentials',
-		authEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-		tokenEndpoint: 'https://oauth2.googleapis.com/token',
-		scopes: 'https://mail.google.com/'
+		authEndpoint: GOOGLE_AUTH_ENDPOINT,
+		tokenEndpoint: GOOGLE_TOKEN_ENDPOINT,
+		scopes: GOOGLE_IMAP_SCOPE
 	},
 	microsoftPreset,
+	{
+		name: 'Google Workspace',
+		host: 'imap.gmail.com',
+		port: 993,
+		method: 'OAuth2ByoCredentials',
+		authEndpoint: GOOGLE_AUTH_ENDPOINT,
+		tokenEndpoint: GOOGLE_TOKEN_ENDPOINT,
+		scopes: GOOGLE_IMAP_SCOPE
+	},
 	{ name: 'iCloud', host: 'imap.mail.me.com', port: 993, method: 'AppPassword' },
 	{ name: 'Yahoo', host: 'imap.mail.yahoo.com', port: 993, method: 'AppPassword' },
 	{ name: 'Fastmail', host: 'imap.fastmail.com', port: 993, method: 'AppPassword' },
 	{ name: 'Proton', host: '127.0.0.1', port: 1143, method: 'ProtonBridgeLocal' }
 ];
+
+export function oauthDefaultsForHost(host: string): {
+	authEndpoint: string;
+	tokenEndpoint: string;
+	scopes: string;
+} | null {
+	const normalized = host.trim().toLowerCase();
+	if (normalized === 'imap.gmail.com' || normalized === 'imap.googlemail.com') {
+		return {
+			authEndpoint: GOOGLE_AUTH_ENDPOINT,
+			tokenEndpoint: GOOGLE_TOKEN_ENDPOINT,
+			scopes: GOOGLE_IMAP_SCOPE
+		};
+	}
+	if (normalized === 'outlook.office365.com') {
+		return {
+			authEndpoint: microsoftPreset.authEndpoint ?? '',
+			tokenEndpoint: microsoftPreset.tokenEndpoint ?? '',
+			scopes: microsoftPreset.scopes ?? ''
+		};
+	}
+	return null;
+}

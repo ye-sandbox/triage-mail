@@ -1,12 +1,13 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
-	import { CheckCircle2, GlobeLock, KeyRound, MailPlus, Search, ShieldCheck, Timer, X } from 'lucide-svelte';
+	import { tick, untrack } from 'svelte';
+	import { CheckCircle2, FileUp, GlobeLock, KeyRound, MailPlus, Search, ShieldCheck, Timer, X } from 'lucide-svelte';
 	import { toast } from 'svelte-sonner';
 	import { i18n } from '../i18n/index.svelte';
 	import type { AccountController } from './controller.svelte';
 	import { nativeDiscoveryTransport, type DiscoveryTransport } from './discovery';
 	import { DiscoveryController } from './discovery-controller.svelte';
 	import { clearCredentialInputs } from './forms';
+	import { MAX_GOOGLE_CLIENT_JSON_BYTES, parseGoogleOAuthClientJson } from './google-oauth-json';
 	import {
 		createDemoAccountDto,
 		extractDomainOnly,
@@ -18,7 +19,7 @@
 		type IspdbPreset,
 		type TlsProbeResult
 	} from './onboarding.fixtures';
-	import { providerPresets, type ProviderPreset } from './presets';
+	import { oauthDefaultsForHost, providerPresets, type ProviderPreset } from './presets';
 	import type { AccountConfig, AccountSubmission, AuthMethod } from './types';
 	import WdgAccountHelpGuide from './WdgAccountHelpGuide.svelte';
 
@@ -40,6 +41,7 @@
 
 	let form = $state<HTMLFormElement>();
 	let emailInput = $state<HTMLInputElement>();
+	let googleJsonInput = $state<HTMLInputElement>();
 
 	const discovery = new DiscoveryController(
 		untrack(() => discoveryTransport),
@@ -119,7 +121,73 @@
 			discovery.settings.host = discovery.provider?.imap_host ?? demoIspdb?.imap_host ?? '';
 			discovery.settings.port = discovery.provider?.imap_port ?? demoIspdb?.imap_port ?? 993;
 		}
+		if (next === 'OAuth2PublicPkce' || next === 'OAuth2ByoCredentials') {
+			const defaults = oauthDefaultsForHost(discovery.settings.host);
+			if (defaults) {
+				if (!discovery.settings.authorize.trim()) {
+					discovery.settings.authorize = defaults.authEndpoint;
+				}
+				if (!discovery.settings.token.trim()) {
+					discovery.settings.token = defaults.tokenEndpoint;
+				}
+				if (!discovery.settings.scopes.trim()) {
+					discovery.settings.scopes = defaults.scopes;
+				}
+			}
+		}
 		demoTls = null;
+	}
+
+	function readFileText(file: File): Promise<string> {
+		if (typeof file.text === 'function') {
+			return file.text();
+		}
+		return new Promise((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+			reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
+			reader.readAsText(file);
+		});
+	}
+
+	async function handleGoogleJsonChange(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file) return;
+		if (file.size > MAX_GOOGLE_CLIENT_JSON_BYTES) {
+			toast.error(t.importGoogleJsonInvalidError);
+			return;
+		}
+		const raw = await readFileText(file);
+		const parsed = parseGoogleOAuthClientJson(raw);
+		if (!parsed.ok) {
+			toast.error(
+				parsed.reason === 'web_client_unsupported'
+					? t.importGoogleJsonWebError
+					: t.importGoogleJsonInvalidError
+			);
+			return;
+		}
+		clearCredentialInputs(form);
+		discovery.edit();
+		discovery.selectedPreset = 'Gmail OAuth';
+		discovery.settings = {
+			host: 'imap.gmail.com',
+			port: 993,
+			method: 'OAuth2ByoCredentials',
+			authorize: parsed.authEndpoint,
+			token: parsed.tokenEndpoint,
+			scopes: parsed.scopes
+		};
+		demoTls = null;
+		await tick();
+		// INVARIANT: Imported client_id/client_secret live only in unbound DOM inputs, never Runes state.
+		const clientEl = form?.querySelector<HTMLInputElement>('input[name="client"]');
+		const secretEl = form?.querySelector<HTMLInputElement>('input[name="secret"]');
+		if (clientEl) clientEl.value = parsed.clientId;
+		if (secretEl) secretEl.value = parsed.clientSecret;
+		toast.success(t.importGoogleJsonSuccess);
 	}
 
 	function handleLookupClick() {
@@ -445,6 +513,27 @@
 
 				{#if oauth}
 					<p class="text-xs text-secondary">{t.oauthHelp}</p>
+					{#if method === 'OAuth2ByoCredentials'}
+						<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-separator bg-field px-3.5 py-2.5">
+							<span class="text-xs text-secondary">{t.importGoogleJsonHelp}</span>
+							<input
+								bind:this={googleJsonInput}
+								type="file"
+								accept=".json,application/json"
+								aria-label={t.importGoogleJson}
+								onchange={handleGoogleJsonChange}
+								class="sr-only"
+							/>
+							<button
+								type="button"
+								onclick={() => googleJsonInput?.click()}
+								class="flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-foreground whitespace-nowrap hover:bg-selection-soft"
+							>
+								<FileUp class="h-3.5 w-3.5 shrink-0 text-accent" />
+								<span>{t.importGoogleJson}</span>
+							</button>
+						</div>
+					{/if}
 					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 						<label class="flex flex-col gap-1">
 							<span class="text-xs font-medium text-secondary">{t.authEndpointLabel}</span>

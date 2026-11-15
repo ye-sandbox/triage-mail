@@ -20,6 +20,7 @@ pub(super) fn lookup(domain: &str) -> Option<DiscoveredProvider> {
         _ => return None,
     };
     let microsoft = name == "Outlook";
+    let google = name == "Gmail";
     Some(DiscoveredProvider {
         domain: domain.into(),
         provider_name: name.into(),
@@ -31,12 +32,22 @@ pub(super) fn lookup(domain: &str) -> Option<DiscoveredProvider> {
         } else {
             AuthMethod::AppPassword
         },
-        oauth_endpoints: microsoft.then(|| OAuthEndpoints {
-            authorization_endpoint:
-                "https://login.microsoftonline.com/common/oauth2/v2.0/authorize".into(),
-            token_endpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/token".into(),
-            scopes: "offline_access https://outlook.office.com/IMAP.AccessAsUser.All".into(),
-        }),
+        oauth_endpoints: if microsoft {
+            Some(OAuthEndpoints {
+                authorization_endpoint:
+                    "https://login.microsoftonline.com/common/oauth2/v2.0/authorize".into(),
+                token_endpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/token".into(),
+                scopes: "offline_access https://outlook.office.com/IMAP.AccessAsUser.All".into(),
+            })
+        } else if google {
+            Some(OAuthEndpoints {
+                authorization_endpoint: "https://accounts.google.com/o/oauth2/v2/auth".into(),
+                token_endpoint: "https://oauth2.googleapis.com/token".into(),
+                scopes: "https://mail.google.com/".into(),
+            })
+        } else {
+            None
+        },
         help_url: help.map(str::to_owned),
         source: DiscoverySource::Preset,
     })

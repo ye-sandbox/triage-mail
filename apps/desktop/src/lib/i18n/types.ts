@@ -172,6 +172,11 @@ export interface Translations {
 		browserAuthPending: string;
 		cancelAuth: string;
 		quickFillLabel: string;
+		importGoogleJson: string;
+		importGoogleJsonHelp: string;
+		importGoogleJsonSuccess: string;
+		importGoogleJsonWebError: string;
+		importGoogleJsonInvalidError: string;
 	};
 	guide: {
 		title: string;

@@ -184,7 +184,16 @@ export const translations: Record<SupportedLocale, Translations> = {
 			browserAuthPending:
 				'Finish authorization in your browser. This attempt expires in five minutes.',
 			cancelAuth: 'Cancel authorization',
-			quickFillLabel: 'Quick fill:'
+			quickFillLabel: 'Quick fill:',
+			importGoogleJson: 'Import Google Cloud JSON',
+			importGoogleJsonHelp:
+				'Load the client_secret_*.json file (Desktop app) directly into the form.',
+			importGoogleJsonSuccess:
+				'Google Cloud OAuth credentials loaded. Enter your email and authorize.',
+			importGoogleJsonWebError:
+				'This JSON is for a Web application. Create a "Desktop app" OAuth client ID in Google Cloud Console.',
+			importGoogleJsonInvalidError:
+				'Invalid Google Cloud OAuth JSON file. Select the client_secret_*.json downloaded from Credentials.'
 		},
 		guide: {
 			title: 'How sign-in methods work & step-by-step setup',
@@ -298,8 +307,8 @@ export const translations: Record<SupportedLocale, Translations> = {
 							'Open console.cloud.google.com, create a project, and enable the "Gmail API" under APIs & Services -> Library.',
 							'Go to APIs & Services -> OAuth consent screen, choose External (or Internal for Workspace), add scope https://mail.google.com/, and add your own email under Test users.',
 							'Go to Credentials -> Create Credentials -> OAuth client ID and select Application type "Desktop app".',
-							'Copy both the generated Client ID and Client secret.',
-							'Click "Gmail OAuth" in Quick fill, enter your email, paste your Client ID and Client secret, and click Authorize and connect.',
+							'Download the client_secret_*.json file (or copy both the generated Client ID and Client secret).',
+							'Click "Gmail OAuth" (or "Google Workspace") in Quick fill, click "Import Google Cloud JSON" to auto-fill your credentials (or paste them manually), enter your email, and click Authorize and connect.',
 							'In the browser window, sign in and approve access (if Google shows an unverified-app prompt for your personal project, click Advanced -> Proceed).'
 						]
 					}
@@ -607,7 +616,16 @@ export const translations: Record<SupportedLocale, Translations> = {
 			browserAuthPending:
 				'Conclua a autorização no seu navegador. Esta tentativa expira em cinco minutos.',
 			cancelAuth: 'Cancelar autorização',
-			quickFillLabel: 'Preenchimento rápido:'
+			quickFillLabel: 'Preenchimento rápido:',
+			importGoogleJson: 'Importar JSON do Google Cloud',
+			importGoogleJsonHelp:
+				'Carregue o arquivo client_secret_*.json (App para computador) direto no formulário.',
+			importGoogleJsonSuccess:
+				'Credenciais OAuth do Google Cloud carregadas. Informe seu e-mail e autorize.',
+			importGoogleJsonWebError:
+				'Este JSON é de aplicativo Web. Crie um ID do cliente OAuth do tipo "App para computador" no Google Cloud Console.',
+			importGoogleJsonInvalidError:
+				'Arquivo JSON OAuth inválido. Selecione o client_secret_*.json baixado em Credenciais no Google Cloud.'
 		},
 		guide: {
 			title: 'Como funcionam os métodos de login e passo a passo',
@@ -721,8 +739,8 @@ export const translations: Record<SupportedLocale, Translations> = {
 							'Acesse console.cloud.google.com, crie um novo projeto e, em "APIs e Serviços -> Biblioteca", pesquise por "Gmail API" e clique em "Ativar".',
 							'Em "APIs e Serviços -> Tela de permissão OAuth", configure como Externo (ou Interno no Workspace), adicione o escopo https://mail.google.com/ e adicione seu próprio e-mail em "Usuários de teste" (Test users).',
 							'Vá em "Credenciais -> Criar credenciais -> ID do cliente OAuth" e selecione o tipo de aplicativo "App para computador" (Desktop app).',
-							'Copie o "ID do cliente" (Client ID) e a "Chave secreta do cliente" (Client secret) gerados.',
-							'Clique em "Gmail OAuth" no Preenchimento rápido, digite seu e-mail, cole o ID do cliente e a Chave secreta e clique em "Autorizar e conectar".',
+							'Baixe o arquivo client_secret_*.json (ou copie o "ID do cliente" e a "Chave secreta do cliente").',
+							'Clique em "Gmail OAuth" (ou "Google Workspace") no Preenchimento rápido, use "Importar JSON do Google Cloud" para preencher automaticamente (ou cole manualmente), digite seu e-mail e clique em "Autorizar e conectar".',
 							'Na janela do navegador, faça login e aprove o acesso (se o Google exibir o aviso de app não verificado para seu projeto pessoal, clique em Avançado -> Acessar).'
 						]
 					}

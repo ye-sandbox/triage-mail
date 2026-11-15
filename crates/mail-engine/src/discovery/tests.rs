@@ -96,6 +96,15 @@ fn presets_cover_exact_aliases_without_suffix_matching() {
     let microsoft = presets::lookup("hotmail.com").unwrap();
     assert_eq!(microsoft.recommended_auth, AuthMethod::OAuth2PublicPkce);
     assert!(microsoft.oauth_endpoints.is_some());
+    let gmail = presets::lookup("gmail.com").unwrap();
+    assert_eq!(gmail.recommended_auth, AuthMethod::AppPassword);
+    assert_eq!(
+        gmail
+            .oauth_endpoints
+            .as_ref()
+            .map(|e| e.authorization_endpoint.as_str()),
+        Some("https://accounts.google.com/o/oauth2/v2/auth")
+    );
     assert!(presets::lookup("gmail.com.example.com").is_none());
     assert!(presets::lookup("example.com").is_none());
 }

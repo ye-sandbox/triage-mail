@@ -186,6 +186,11 @@ pub async fn authorize(
         ("code_challenge", &pkce.challenge),
         ("code_challenge_method", "S256"),
     ]);
+    // INVARIANT: Google OAuth2 omits refresh_token unless access_type=offline is requested.
+    if url.host_str() == Some("accounts.google.com") {
+        url.query_pairs_mut()
+            .extend_pairs([("access_type", "offline"), ("prompt", "consent")]);
+    }
     let key = staging_oauth_vault_key()?;
     let staged_key = key.clone();
     service

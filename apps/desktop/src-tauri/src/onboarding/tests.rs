@@ -83,6 +83,7 @@ fn callback(url: &str, valid_state: bool) -> Result<(), IpcError> {
     assert_eq!(values["code_challenge_method"], "S256");
     assert_eq!(values["response_type"], "code");
     assert!(!values.contains_key("client_secret"));
+    assert!(!values.contains_key("access_type"));
     let redirect = Url::parse(&values["redirect_uri"]).unwrap();
     let state = if valid_state {
         values["state"].clone()
@@ -98,6 +99,72 @@ fn callback(url: &str, valid_state: bool) -> Result<(), IpcError> {
         socket.read_to_end(&mut response).await.unwrap();
     });
     Ok(())
+}
+
+#[tokio::test]
+async fn google_oauth_requests_offline_refresh_token_and_consent() {
+    let (service, _vault, mut config, mut input) = fixture();
+    config.auth_method = AuthMethod::OAuth2ByoCredentials;
+    config.imap_host = "imap.gmail.com".into();
+    input.0.authorization_endpoint = "https://accounts.google.com/o/oauth2/v2/auth".into();
+    input.0.token_endpoint = "https://oauth2.googleapis.com/token".into();
+    input.0.scopes = "https://mail.google.com/".into();
+    input.0.client_secret = Some("synthetic-google-secret".into());
+    let (_sender, cancel) = watch::channel(false);
+    let exchange = TestExchange(AtomicUsize::new(0));
+    let observed_url = Arc::new(Mutex::new(String::new()));
+    let captured_url = observed_url.clone();
+    let id = authorize(
+        service,
+        config,
+        input,
+        cancel,
+        move |url| {
+            *captured_url.lock().unwrap() = url.to_owned();
+            let parsed = Url::parse(url).unwrap();
+            let redirect = parsed
+                .query_pairs()
+                .find(|(k, _)| k == "redirect_uri")
+                .unwrap()
+                .1
+                .into_owned();
+            let state = parsed
+                .query_pairs()
+                .find(|(k, _)| k == "state")
+                .unwrap()
+                .1
+                .into_owned();
+            let port = Url::parse(&redirect).unwrap().port().unwrap();
+            tokio::spawn(async move {
+                let mut socket = tokio::net::TcpStream::connect(("127.0.0.1", port))
+                    .await
+                    .unwrap();
+                socket
+                    .write_all(
+                        format!(
+                            "GET /callback?code=synthetic-code&state={state} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+                        )
+                        .as_bytes(),
+                    )
+                    .await
+                    .unwrap();
+                let mut response = Vec::new();
+                socket.read_to_end(&mut response).await.unwrap();
+            });
+            Ok(())
+        },
+        &exchange,
+    )
+    .await
+    .unwrap();
+    assert!(!id.is_empty());
+    let parsed = Url::parse(&observed_url.lock().unwrap()).unwrap();
+    let params: HashMap<_, _> = parsed.query_pairs().into_owned().collect();
+    assert_eq!(
+        params.get("access_type").map(String::as_str),
+        Some("offline")
+    );
+    assert_eq!(params.get("prompt").map(String::as_str), Some("consent"));
 }
 #[test]
 fn validates_endpoints_and_redacts_bad_inputs_and_tokens() {

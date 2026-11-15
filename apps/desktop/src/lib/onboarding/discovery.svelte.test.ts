@@ -214,3 +214,103 @@ it('surfaces unresolved lookup feedback and preserves manual host input while ed
 	expect(host.value).toBe('manual.example.org');
 	await unmount(component);
 });
+
+it('auto-fills Google OAuth endpoints when switching from default Gmail to BYO OAuth tab', async () => {
+	const target = document.createElement('div');
+	document.body.append(target);
+	const authorize = vi.fn().mockResolvedValue('a');
+	const controller = new AccountController({
+		list: async () => [],
+		unlock: async () => {},
+		add: async () => 'a',
+		authorize,
+		cancel: async () => {}
+	});
+	const component = mount(WdgAccountDiscoveryForm, {
+		target,
+		props: { controller, discoveryTransport: transport() }
+	});
+	flushSync();
+	const byoTab = [...target.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((b) =>
+		b.textContent?.includes('Your client credentials')
+	)!;
+	byoTab.click();
+	flushSync();
+	expect(target.querySelector<HTMLInputElement>('input[name="authorize"]')!.value).toBe(
+		'https://accounts.google.com/o/oauth2/v2/auth'
+	);
+	expect(target.querySelector<HTMLInputElement>('input[name="token"]')!.value).toBe(
+		'https://oauth2.googleapis.com/token'
+	);
+	expect(target.querySelector<HTMLInputElement>('input[name="scopes"]')!.value).toBe(
+		'https://mail.google.com/'
+	);
+	await unmount(component);
+});
+
+it('imports Google Cloud Desktop JSON directly into transient credential inputs', async () => {
+	const target = document.createElement('div');
+	document.body.append(target);
+	const authorize = vi.fn().mockResolvedValue('acct-google');
+	const controller = new AccountController({
+		list: async () => [],
+		unlock: async () => {},
+		add: async () => 'acct-google',
+		authorize,
+		cancel: async () => {}
+	});
+	const component = mount(WdgAccountDiscoveryForm, {
+		target,
+		props: { controller, discoveryTransport: transport() }
+	});
+	flushSync();
+	const workspaceBtn = [...target.querySelectorAll<HTMLButtonElement>('button')].find(
+		(b) => b.textContent?.trim() === 'Google Workspace'
+	)!;
+	workspaceBtn.click();
+	flushSync();
+	const fileInput = target.querySelector<HTMLInputElement>('input[type="file"]')!;
+	const jsonPayload = JSON.stringify({
+		installed: {
+			client_id: 'synthetic-imported-client-id',
+			client_secret: 'synthetic-imported-client-secret',
+			auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+			token_uri: 'https://oauth2.googleapis.com/token'
+		}
+	});
+	const file = new File([jsonPayload], 'client_secret_synthetic.json', {
+		type: 'application/json'
+	});
+	Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
+	fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+	const clientEl = target.querySelector<HTMLInputElement>('input[name="client"]')!;
+	const secretEl = target.querySelector<HTMLInputElement>('input[name="secret"]')!;
+	await vi.waitFor(() => {
+		expect(clientEl.value).toBe('synthetic-imported-client-id');
+		expect(secretEl.value).toBe('synthetic-imported-client-secret');
+	});
+	const email = target.querySelector<HTMLInputElement>('input[name="email"]')!;
+	email.value = 'reader@example.com';
+	target
+		.querySelector('form')!
+		.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+	flushSync();
+	expect(clientEl.value).toBe('');
+	expect(secretEl.value).toBe('');
+	expect(authorize).toHaveBeenCalledWith(
+		expect.objectContaining({
+			imap_host: 'imap.gmail.com',
+			imap_port: 993,
+			auth_method: 'OAuth2ByoCredentials'
+		}),
+		expect.objectContaining({
+			authorization_endpoint: 'https://accounts.google.com/o/oauth2/auth',
+			token_endpoint: 'https://oauth2.googleapis.com/token',
+			scopes: 'https://mail.google.com/',
+			client_id: 'synthetic-imported-client-id',
+			client_secret: 'synthetic-imported-client-secret'
+		}),
+		expect.any(Function)
+	);
+	await unmount(component);
+});
