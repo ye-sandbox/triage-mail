@@ -1,10 +1,11 @@
 import { flushSync, mount, unmount } from 'svelte';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InboxController, PAGE_SIZE } from '../inbox/controller.svelte';
 import type { InboxTransport, MessageRowDto } from '../inbox/types';
 import type { ReviewTransport, SenderChoice, ReviewPreferences } from './types';
 import ReviewActions from './ReviewActions.svelte';
 import ReviewModule from './ReviewModule.svelte';
+import WdgSenderReviewQueue from '../automation/WdgSenderReviewQueue.svelte';
 import { SettingsFormGuard } from '../settings/guards';
 import { i18n } from '../i18n/index.svelte';
 let cleanup = () => {};
@@ -187,4 +188,65 @@ it('guards settings drafts and writes, keeps hiding separate, and renders Portug
 	flushSync();
 	expect(document.body.textContent).toContain('Novos remetentes');
 	expect(document.body.textContent).toContain('não autentica');
+});
+
+describe('WdgSenderReviewQueue (UI v2)', () => {
+	it('requires explicit sender consent, guards preferences writes, polls while initializing, and supports pt-BR', async () => {
+		const { review } = fixture();
+		const guard = new SettingsFormGuard();
+		const account = {
+			account_id: 'a',
+			email_display: 'reader@example.com',
+			imap_host: 'imap.example.com',
+			imap_port: 993,
+			auth_method: 'AppPassword' as const
+		};
+
+		const component = mount(WdgSenderReviewQueue, {
+			target: document.body,
+			props: { guard, transport: review, accounts: [account] }
+		});
+		cleanup = () => void unmount(component);
+		await settle();
+
+		expect(document.body.textContent).toContain('does not authenticate');
+		expect(document.body.textContent).toContain('sender@example.org');
+
+		// Accept / Decline disabled until per-sender exact consent is checked
+		expect(button('Accept sender').disabled).toBe(true);
+		expect(button('Decline sender').disabled).toBe(true);
+
+		const rowConsent = document.body.querySelector<HTMLInputElement>('input[type=checkbox]')!;
+		rowConsent.checked = true;
+		rowConsent.dispatchEvent(new Event('change', { bubbles: true }));
+		flushSync();
+		expect(button('Decline sender').disabled).toBe(false);
+
+		button('Decline sender').click();
+		await settle();
+		expect(review.save).toHaveBeenCalledWith({ ...choice, state: 'Declined' });
+
+		// Toggle enable switch -> marks SettingsFormGuard dirty
+		const enableSwitch = document.body.querySelector<HTMLButtonElement>(
+			'button[aria-label="Toggle enable sender review"]'
+		)!;
+		enableSwitch.click();
+		flushSync();
+		expect(guard.needsConfirmation()).toBe(true);
+
+		let resolvePref!: (v: ReviewPreferences) => void;
+		vi.mocked(review.savePreferences).mockReturnValueOnce(new Promise((r) => (resolvePref = r)));
+		button('Save preferences').click();
+		await settle();
+		expect(guard.isBlocked()).toBe(true);
+
+		resolvePref({ ...pref, revision: 1, enabled: true, initializing: true });
+		await settle();
+		expect(guard.isBlocked()).toBe(false);
+
+		i18n.locale = 'pt-BR';
+		flushSync();
+		expect(document.body.textContent).toContain('Fila de Revisão de Novos Remetentes');
+		expect(document.body.textContent).toContain('não autentica');
+	});
 });
