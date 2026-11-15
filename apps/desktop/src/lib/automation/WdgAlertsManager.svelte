@@ -319,13 +319,19 @@
 										</h3>
 									</div>
 									<div
-										class="mt-1 flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-secondary"
+										class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[11px] text-secondary"
 									>
 										<span>{kindLabel(dest.kind)}</span>
-										<span aria-hidden="true">·</span>
-										<span class="tabular-nums">rev {dest.revision}</span>
-										<span aria-hidden="true">·</span>
-										<span class="truncate">{dest.public_origin ?? alertT.local}</span>
+										<span class="inline-flex items-center gap-1.5 whitespace-nowrap tabular-nums">
+											<span aria-hidden="true">·</span>
+											<span>rev {dest.revision}</span>
+										</span>
+										{#if dest.public_origin}
+											<span class="inline-flex min-w-0 items-center gap-1.5">
+												<span aria-hidden="true">·</span>
+												<span class="truncate">{dest.public_origin}</span>
+											</span>
+										{/if}
 									</div>
 								</div>
 

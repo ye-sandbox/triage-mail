@@ -207,10 +207,10 @@
 	}
 </script>
 
-<form onsubmit={handleSubmit} class="rounded-lg border border-separator bg-surface p-4 text-xs">
-	<fieldset disabled={busy} class="flex flex-col gap-4 border-0 p-0">
-		<div class="flex flex-wrap items-end justify-between gap-3 border-b border-separator pb-3">
-			<label class="flex min-w-[200px] flex-1 flex-col gap-1">
+<form onsubmit={handleSubmit} class="min-w-0 max-w-full rounded-lg border border-separator bg-surface p-4 text-xs">
+	<fieldset disabled={busy} class="flex min-w-0 max-w-full flex-col gap-4 border-0 p-0">
+		<div class="flex min-w-0 flex-wrap items-end justify-between gap-3 border-b border-separator pb-3">
+			<label class="flex w-full min-w-0 flex-col gap-1 sm:w-auto sm:min-w-[200px] sm:flex-1">
 				<span class="text-[11px] font-medium text-secondary">{t.ruleName}</span>
 				<input
 					type="text"
@@ -219,11 +219,11 @@
 					value={draft.name}
 					oninput={(e) => patchDraft({ ...draft, name: e.currentTarget.value })}
 					placeholder={t.ruleNamePlaceholder}
-					class="h-9 w-full rounded-md border border-separator bg-field px-3 text-xs font-medium text-foreground focus:border-accent focus:outline-none"
+					class="h-9 w-full min-w-0 rounded-md border border-separator bg-field px-3 text-xs font-medium text-foreground focus:border-accent focus:outline-none"
 				/>
 			</label>
 
-			<div class="flex flex-wrap items-center gap-2">
+			<div class="flex min-w-0 max-w-full flex-wrap items-center gap-2">
 				<label
 					class="flex cursor-pointer items-center gap-2 rounded-md border border-separator bg-field px-3 py-2 text-xs font-medium text-foreground"
 				>
@@ -291,11 +291,11 @@
 			</p>
 		{/if}
 
-		<div class="flex flex-col gap-3">
+		<div class="flex min-w-0 flex-col gap-3">
 			{#each GROUPS as grp (grp.key)}
-				<section class="rounded-md border border-separator bg-field/60 p-3">
-					<div class="mb-2 flex items-center justify-between gap-2">
-						<div class="flex flex-wrap items-center gap-2">
+				<section class="min-w-0 rounded-md border border-separator bg-field/60 p-3">
+					<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+						<div class="flex min-w-0 flex-wrap items-center gap-2">
 							<span class="font-mono text-[11px] font-semibold text-foreground">{grp.title}</span>
 							<span class="text-[11px] text-secondary">{grp.logic}</span>
 						</div>
@@ -313,16 +313,16 @@
 					{#if draft[grp.key].length === 0}
 						<p class="text-[11px] text-secondary">{t.noGroupConditions(grp.title)}</p>
 					{:else}
-						<div class="flex flex-col gap-2">
+						<div class="flex min-w-0 flex-col gap-2">
 							{#each draft[grp.key] as cond, idx (`${grp.key}-${idx}`)}
 								{@const entry = extractConditionEntry(cond)}
-								<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+								<div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
 									<select
 										value={entry.field}
 										onchange={(e) =>
 											updateConditionField(grp.key, idx, e.currentTarget.value as Field)}
 										aria-label={`${grp.title} ${t.conditionFieldAria} ${idx + 1}`}
-										class="h-9 rounded-md border border-separator bg-surface px-2.5 font-mono text-[11px] text-foreground focus:border-accent focus:outline-none sm:w-52"
+										class="h-9 w-full min-w-0 rounded-md border border-separator bg-surface px-2.5 font-mono text-[11px] text-foreground focus:border-accent focus:outline-none sm:w-52"
 									>
 										{#each FIELDS as field (field)}
 											<option value={field}>{ruleT.fields[field]}</option>
@@ -335,7 +335,7 @@
 											onchange={(e) =>
 												updateConditionValue(grp.key, idx, 'Account', e.currentTarget.value)}
 											aria-label={`${grp.title} ${t.conditionValueAria} ${idx + 1}`}
-											class="h-9 min-w-0 flex-1 rounded-md border border-separator bg-surface px-2.5 text-xs text-foreground focus:border-accent focus:outline-none"
+											class="h-9 w-full min-w-0 flex-1 rounded-md border border-separator bg-surface px-2.5 text-xs text-foreground focus:border-accent focus:outline-none sm:w-auto"
 										>
 											<option value="">—</option>
 											{#each accounts as acct (acct.account_id)}
@@ -361,7 +361,7 @@
 												updateConditionValue(grp.key, idx, entry.field, e.currentTarget.value)}
 											placeholder={conditionPlaceholder(entry.field)}
 											aria-label={`${grp.title} ${t.conditionValueAria} ${idx + 1}`}
-											class="h-9 min-w-0 flex-1 rounded-md border border-separator bg-surface px-3 font-mono text-xs text-foreground focus:border-accent focus:outline-none"
+											class="h-9 w-full min-w-0 flex-1 rounded-md border border-separator bg-surface px-3 font-mono text-xs text-foreground focus:border-accent focus:outline-none sm:w-auto"
 										/>
 									{/if}
 
@@ -381,7 +381,7 @@
 			{/each}
 		</div>
 
-		<section class="rounded-md border border-separator bg-field/60 p-3">
+		<section class="min-w-0 rounded-md border border-separator bg-field/60 p-3">
 			<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
 				<span class="font-mono text-[11px] font-semibold text-foreground">
 					{t.actionStack(draft.actions.length)}
@@ -406,15 +406,15 @@
 			{#if draft.actions.length === 0}
 				<p class="text-[11px] text-secondary">{t.addActionHint}</p>
 			{:else}
-				<div class="flex flex-col gap-2">
+				<div class="flex min-w-0 flex-col gap-2">
 					{#each draft.actions as act, idx (`act-${idx}`)}
 						{@const kind = actionKindOf(act)}
-						<div class="flex flex-wrap items-center gap-2">
+						<div class="flex min-w-0 flex-wrap items-center gap-2">
 							<select
 								value={kind}
 								onchange={(e) => updateActionKind(idx, e.currentTarget.value as ActionKind)}
 								aria-label={`${t.actionTypeAria} ${idx + 1}`}
-								class="h-9 rounded-md border border-separator bg-surface px-2.5 font-mono text-[11px] text-foreground focus:border-accent focus:outline-none"
+								class="h-9 min-w-0 max-w-full rounded-md border border-separator bg-surface px-2.5 font-mono text-[11px] text-foreground focus:border-accent focus:outline-none"
 							>
 								<option value="Tag">Tag(string)</option>
 								<option value="Star">{ruleT.star}</option>
@@ -454,7 +454,7 @@
 									{/each}
 								</select>
 							{:else}
-								<span class="flex-1 font-mono text-[11px] text-secondary">{t.noParamRequired}</span>
+								<span class="min-w-0 flex-1 font-mono text-[11px] text-secondary">{t.noParamRequired}</span>
 							{/if}
 
 							<button

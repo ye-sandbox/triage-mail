@@ -244,10 +244,10 @@
 		</p>
 	{/if}
 
-	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start">
-		<aside class="flex flex-col gap-3 rounded-lg border border-separator bg-surface p-3">
+	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[380px_minmax(0,1fr)] lg:items-start">
+		<aside class="flex min-w-0 flex-col gap-3 rounded-lg border border-separator bg-surface p-3">
 			<div class="flex items-center justify-between gap-2 border-b border-separator pb-2.5">
-				<div>
+				<div class="min-w-0">
 					<h2 class="font-display text-sm font-semibold text-foreground">{t.pipelineTitle}</h2>
 					<p class="text-[11px] text-secondary">{t.pipelineSubtitle}</p>
 				</div>
@@ -255,7 +255,7 @@
 					type="button"
 					disabled={busy}
 					onclick={startNewRule}
-					class="flex min-h-[36px] items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-xs font-medium whitespace-nowrap text-accent-foreground hover:opacity-95 active:scale-[0.98] disabled:opacity-45"
+					class="flex min-h-[36px] shrink-0 items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-xs font-medium whitespace-nowrap text-accent-foreground hover:opacity-95 active:scale-[0.98] disabled:opacity-45"
 				>
 					<Plus class="h-3.5 w-3.5" />
 					<span>{t.newRule}</span>
@@ -272,34 +272,36 @@
 						{@const isSelected = !isCreatingNew && selectedId === rule.id}
 						{@const matchCount = ruleMeta[rule.id]?.matches_count}
 						<div
-							class="flex items-start justify-between gap-2 rounded-md px-2 py-2.5 transition-colors {isSelected
+							class="flex flex-col gap-2 rounded-md px-2.5 py-2.5 transition-colors {isSelected
 								? 'bg-selection-soft'
 								: 'hover:bg-field/60'}"
 						>
 							<button
 								type="button"
 								onclick={() => selectRule(rule)}
-								class="min-w-0 flex-1 text-left focus-visible:outline-2 focus-visible:outline-accent"
+								class="w-full min-w-0 text-left focus-visible:outline-2 focus-visible:outline-accent"
 							>
 								<div class="flex items-center gap-2">
-									<span class="font-mono text-xs font-semibold tabular-nums text-secondary">
+									<span class="shrink-0 font-mono text-xs font-semibold tabular-nums text-secondary">
 										{String(idx + 1).padStart(2, '0')}
 									</span>
 									<span class="truncate text-xs font-semibold text-foreground">{rule.name}</span>
 								</div>
-								<div class="mt-1 flex flex-wrap items-center gap-1.5 pl-6 text-[11px] text-secondary">
-									<span class="font-mono tabular-nums">
+								<div class="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-6 text-[11px] text-secondary">
+									<span class="font-mono whitespace-nowrap tabular-nums">
 										{t.condsLabel(rule.all.length + rule.any.length + rule.except.length)}
 									</span>
-									<span aria-hidden="true">·</span>
-									<span class="font-mono tabular-nums">{t.actionsLabel(rule.actions.length)}</span>
+									<span class="font-mono whitespace-nowrap tabular-nums">
+										{t.actionsLabel(rule.actions.length)}
+									</span>
 									{#if typeof matchCount === 'number'}
-										<span aria-hidden="true">·</span>
-										<span class="font-mono tabular-nums">{t.matchesLabel(matchCount)}</span>
+										<span class="font-mono whitespace-nowrap tabular-nums">
+											{t.matchesLabel(matchCount)}
+										</span>
 									{/if}
 									{#if rule.stop_processing}
 										<span
-											class="rounded border border-status-info/40 bg-status-info/10 px-1.5 py-0.5 font-mono text-[10px] text-status-info"
+											class="rounded border border-status-info/40 bg-status-info/10 px-1.5 py-0.5 font-mono text-[10px] whitespace-nowrap text-status-info"
 										>
 											{t.stopProcessing}
 										</span>
@@ -307,53 +309,55 @@
 								</div>
 							</button>
 
-							<div class="flex shrink-0 items-center gap-1">
-								<button
-									type="button"
-									disabled={busy}
-									onclick={() => selectRule(rule)}
-									aria-label={`${t.editRule} ${rule.name}`}
-									title={t.editRule}
-									class="flex h-7 w-7 items-center justify-center rounded border border-separator bg-surface text-secondary hover:text-foreground disabled:opacity-40"
-								>
-									<Pencil class="h-3 w-3" />
-								</button>
-								<button
-									type="button"
-									disabled={busy || idx === 0}
-									onclick={() => void moveRule(idx, -1)}
-									aria-label={t.moveUp}
-									title={t.moveUp}
-									class="flex h-7 w-7 items-center justify-center rounded border border-separator bg-surface text-secondary hover:text-foreground disabled:opacity-40"
-								>
-									<ChevronUp class="h-3.5 w-3.5" />
-								</button>
-								<button
-									type="button"
-									disabled={busy || idx === rules.length - 1}
-									onclick={() => void moveRule(idx, 1)}
-									aria-label={t.moveDown}
-									title={t.moveDown}
-									class="flex h-7 w-7 items-center justify-center rounded border border-separator bg-surface text-secondary hover:text-foreground disabled:opacity-40"
-								>
-									<ChevronDown class="h-3.5 w-3.5" />
-								</button>
-								<button
-									type="button"
-									disabled={busy}
-									onclick={() => void deleteRule(rule.id, rule.revision)}
-									aria-label={`${t.deleteRule} ${rule.name}`}
-									title={t.deleteRule}
-									class="flex h-7 w-7 items-center justify-center rounded border border-separator bg-surface text-secondary hover:text-status-danger disabled:opacity-40"
-								>
-									<Trash2 class="h-3 w-3" />
-								</button>
+							<div class="flex items-center justify-between gap-2 pl-6">
+								<div class="flex items-center gap-1">
+									<button
+										type="button"
+										disabled={busy}
+										onclick={() => selectRule(rule)}
+										aria-label={`${t.editRule} ${rule.name}`}
+										title={t.editRule}
+										class="flex h-7 w-7 items-center justify-center rounded border border-separator bg-surface text-secondary hover:text-foreground disabled:opacity-40"
+									>
+										<Pencil class="h-3 w-3" />
+									</button>
+									<button
+										type="button"
+										disabled={busy || idx === 0}
+										onclick={() => void moveRule(idx, -1)}
+										aria-label={t.moveUp}
+										title={t.moveUp}
+										class="flex h-7 w-7 items-center justify-center rounded border border-separator bg-surface text-secondary hover:text-foreground disabled:opacity-40"
+									>
+										<ChevronUp class="h-3.5 w-3.5" />
+									</button>
+									<button
+										type="button"
+										disabled={busy || idx === rules.length - 1}
+										onclick={() => void moveRule(idx, 1)}
+										aria-label={t.moveDown}
+										title={t.moveDown}
+										class="flex h-7 w-7 items-center justify-center rounded border border-separator bg-surface text-secondary hover:text-foreground disabled:opacity-40"
+									>
+										<ChevronDown class="h-3.5 w-3.5" />
+									</button>
+									<button
+										type="button"
+										disabled={busy}
+										onclick={() => void deleteRule(rule.id, rule.revision)}
+										aria-label={`${t.deleteRule} ${rule.name}`}
+										title={t.deleteRule}
+										class="flex h-7 w-7 items-center justify-center rounded border border-separator bg-surface text-secondary hover:text-status-danger disabled:opacity-40"
+									>
+										<Trash2 class="h-3 w-3" />
+									</button>
+								</div>
 								<Switch.Root
 									checked={rule.enabled}
 									disabled={busy}
 									onCheckedChange={() => void toggleRule(rule)}
 									aria-label={t.toggleRule(rule.name)}
-									class="ml-0.5 inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-separator p-0.5 transition-colors data-[state=checked]:bg-accent data-[state=unchecked]:bg-field focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-45"
+									class="inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-separator p-0.5 transition-colors data-[state=checked]:bg-accent data-[state=unchecked]:bg-field focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-45"
 								>
 									<Switch.Thumb
 										class="pointer-events-none block h-3.5 w-3.5 rounded-full bg-surface shadow-sm transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0"

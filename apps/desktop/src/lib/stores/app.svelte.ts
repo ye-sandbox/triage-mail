@@ -1,5 +1,12 @@
 import { i18n, type SupportedLocale } from '$lib/i18n/index.svelte';
-import { nativeAvailable } from '$lib/inbox/transport';
+import { INBOX_FIXTURES } from '$lib/inbox/inbox.fixtures';
+import { nativeAvailable, nativeTransport } from '$lib/inbox/transport';
+import type { InboxTransport } from '$lib/inbox/types';
+import { nativeAccountTransport } from '$lib/onboarding/transport';
+import type { AccountConfig, AccountTransport } from '$lib/onboarding/types';
+import { createDueDateFixtures } from '$lib/reminders/due-dates.seed';
+import { nativeRemindersTransport } from '$lib/reminders/transport';
+import { countOverdueAndDueToday, type RemindersTransport } from '$lib/reminders/types';
 import type {
 	AlertDestination,
 	AutomationRule,
@@ -22,6 +29,43 @@ import {
 } from './app.fixtures';
 
 const THEME_STORAGE_KEY = 'triage_mail_theme';
+
+export interface NativeShellHydrationDeps {
+	isNative?: () => boolean;
+	accountTransport?: Pick<AccountTransport, 'list'>;
+	inboxTransport?: Pick<InboxTransport, 'listFolders' | 'search' | 'savedViews'>;
+	remindersTransport?: Pick<RemindersTransport, 'listDueDates'>;
+}
+
+function mapAccountToShellAccount(acct: AccountConfig): MailAccount {
+	return {
+		account_id: acct.account_id,
+		display_name: acct.email_display,
+		address: acct.email_display,
+		imap_host: acct.imap_host,
+		imap_port: acct.imap_port,
+		tls_mode: acct.imap_port === 143 ? 'STARTTLS' : 'IMAPS',
+		auth_method: acct.auth_method === 'AppPassword' ? 'AppPassword-Vault' : 'OAuth2-PKCE',
+		vault_locked: false,
+		folders: [
+			{ id: 'INBOX', label: 'INBOX' },
+			{ id: 'Archive', label: 'Archive' },
+			{ id: 'Trash', label: 'Trash' }
+		]
+	};
+}
+
+function buildDemoFolderUnreadCounts(): Record<string, number> {
+	const counts: Record<string, number> = {};
+	for (const acct of SHELL_ACCOUNT_FIXTURES) {
+		for (const folder of acct.folders) {
+			counts[`${acct.account_id}::${folder.id}`] = INBOX_FIXTURES.filter(
+				(m) => m.account_id === acct.account_id && m.folder === folder.id && m.unread
+			).length;
+		}
+	}
+	return counts;
+}
 
 function getInitialTheme(): ThemeMode {
 	if (typeof localStorage !== 'undefined') {
@@ -52,12 +96,21 @@ class AppStore {
 	activeScope = $state<ScopeFilter>({ kind: 'inbox' });
 	pendingSelectMessageId = $state<string | null>(null);
 	pendingRuleSeedMessageId = $state<string | null>(null);
-	loadedCount = $state<number>(0);
-	unreadTotal = $state<number>(0);
-	overdueAndDueTodayCount = $state<number>(0);
-	private folderUnreadCounts = $state<Record<string, number>>({});
+	loadedCount = $state<number>(nativeAvailable() ? 0 : INBOX_FIXTURES.length);
+	unreadTotal = $state<number>(
+		nativeAvailable()
+			? 0
+			: INBOX_FIXTURES.filter((m) => m.folder === 'INBOX' && m.unread).length
+	);
+	overdueAndDueTodayCount = $state<number>(
+		nativeAvailable() ? 0 : countOverdueAndDueToday(createDueDateFixtures())
+	);
+	private folderUnreadCounts = $state<Record<string, number>>(
+		nativeAvailable() ? {} : buildDemoFolderUnreadCounts()
+	);
 	private scopeChangeHook: ((scope: ScopeFilter) => void) | null = null;
 	private syncTriggerHook: (() => void) | null = null;
+	private hydrationGeneration = 0;
 
 	accounts = $state<MailAccount[]>(
 		nativeAvailable() ? [] : structuredClone(SHELL_ACCOUNT_FIXTURES)
@@ -202,6 +255,108 @@ class AppStore {
 			action_tag: category,
 			action_archive: false
 		});
+	}
+
+	async hydrateNativeShellCounts(deps: NativeShellHydrationDeps = {}): Promise<void> {
+		const isNative = deps.isNative ?? nativeAvailable;
+		if (!isNative()) return;
+
+		const generation = ++this.hydrationGeneration;
+		const accountTransport = deps.accountTransport ?? nativeAccountTransport;
+		const inboxTransport = deps.inboxTransport ?? nativeTransport;
+		const remindersTransport = deps.remindersTransport ?? nativeRemindersTransport;
+
+		let accountConfigs: AccountConfig[];
+		try {
+			accountConfigs = await accountTransport.list();
+		} catch {
+			return;
+		}
+		if (generation !== this.hydrationGeneration) return;
+
+		this.vaultUnlocked = true;
+		this.accounts = accountConfigs.map(mapAccountToShellAccount);
+
+		if (accountConfigs.length === 0) {
+			this.loadedCount = 0;
+			this.unreadTotal = 0;
+			this.overdueAndDueTodayCount = 0;
+			this.folderUnreadCounts = {};
+			return;
+		}
+
+		const [foldersResult, searchResult, dueDatesResult, savedViewsResult] =
+			await Promise.allSettled([
+				inboxTransport.listFolders
+					? Promise.all(
+							accountConfigs.map((acct) =>
+								inboxTransport.listFolders!(acct.account_id).then((folders) => ({
+									accountId: acct.account_id,
+									folders
+								}))
+							)
+						)
+					: Promise.resolve([]),
+				inboxTransport.search({
+					query: '',
+					mode: 'Lexical',
+					limit: 200,
+					offset: 0,
+					scope: 'GlobalAllMail'
+				}),
+				remindersTransport.listDueDates(),
+				inboxTransport.savedViews ? inboxTransport.savedViews.list() : Promise.resolve(null)
+			]);
+
+		if (generation !== this.hydrationGeneration) return;
+
+		let folderUnreadSum = 0;
+		let hasFolderUnread = false;
+
+		if (foldersResult.status === 'fulfilled') {
+			for (const { accountId, folders } of foldersResult.value) {
+				for (const folder of folders) {
+					if (folder.unread_messages === null) continue;
+					const targetFolder: FolderId | null =
+						folder.role === 'inbox' || folder.folder_name.toUpperCase() === 'INBOX'
+							? 'INBOX'
+							: folder.role === 'archive' || folder.folder_name === 'Archive'
+								? 'Archive'
+								: folder.role === 'trash' || folder.folder_name === 'Trash'
+									? 'Trash'
+									: null;
+					if (targetFolder) {
+						this.setFolderUnread(accountId, targetFolder, folder.unread_messages);
+						if (targetFolder === 'INBOX') {
+							folderUnreadSum += folder.unread_messages;
+							hasFolderUnread = true;
+						}
+					}
+				}
+			}
+		}
+
+		if (searchResult.status === 'fulfilled') {
+			const rows = searchResult.value;
+			this.loadedCount = rows.length;
+			this.unreadTotal = hasFolderUnread
+				? folderUnreadSum
+				: rows.filter((r) => !r.is_read).length;
+		} else if (hasFolderUnread) {
+			this.unreadTotal = folderUnreadSum;
+		}
+
+		if (dueDatesResult.status === 'fulfilled') {
+			this.overdueAndDueTodayCount = countOverdueAndDueToday(dueDatesResult.value);
+		}
+
+		if (savedViewsResult.status === 'fulfilled' && savedViewsResult.value) {
+			this.savedViews = savedViewsResult.value.map((v) => ({
+				id: v.id,
+				name: v.name,
+				query: v.query
+			}));
+		}
 	}
 }
 

@@ -419,6 +419,13 @@ describe('UI v2 WdgSnoozeSheet deadline input and presets', () => {
 			target.remove();
 		};
 
+		const dialog = document.querySelector('[role=dialog]')!;
+		expect(
+			dialog.textContent?.match(
+				/Choose a local date and time within the next year\. Saved on this device only\./g
+			)
+		).toHaveLength(1);
+
 		const input = document.querySelector<HTMLInputElement>('input[type="datetime-local"]')!;
 		const form = document.querySelector<HTMLFormElement>('[role=dialog] form')!;
 		const submit = () =>

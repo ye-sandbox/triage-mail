@@ -229,7 +229,7 @@
 		<WdgDueDateKpis {items} activeStatus={activeTab} onSelectStatus={(s) => (activeTab = s)} />
 
 		<div
-			class="flex flex-col gap-3 rounded-lg border border-separator bg-surface p-3 lg:flex-row lg:items-center lg:justify-between"
+			class="flex flex-col gap-3 rounded-lg border border-separator bg-surface p-3 xl:flex-row xl:items-center xl:justify-between"
 		>
 			<Tabs.Root value={activeTab} onValueChange={(val) => val && (activeTab = val as TabValue)}>
 				<Tabs.List class="flex flex-wrap gap-1 rounded-md border border-separator bg-field p-1">
@@ -247,12 +247,12 @@
 				</Tabs.List>
 			</Tabs.Root>
 
-			<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+			<div class="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center xl:w-auto">
 				{#if resolvedAccounts.length > 1}
 					<select
 						bind:value={selectedAccountId}
 						aria-label={t.filterAccount}
-						class="h-10 rounded-md border border-separator bg-field px-2.5 text-xs text-foreground focus:border-accent focus:outline-none md:h-9"
+						class="h-10 min-w-0 rounded-md border border-separator bg-field px-2.5 text-xs text-foreground focus:border-accent focus:outline-none md:h-9"
 					>
 						<option value="all">{t.allAccounts}</option>
 						{#each resolvedAccounts as account (account.account_id)}
@@ -261,7 +261,7 @@
 					</select>
 				{/if}
 
-				<div class="relative flex min-w-[220px] items-center sm:w-64">
+				<div class="relative flex w-full min-w-0 flex-1 items-center sm:w-72 md:w-80 xl:flex-none">
 					<Search class="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-secondary" />
 					<input
 						type="search"

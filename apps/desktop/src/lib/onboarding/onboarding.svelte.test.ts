@@ -287,6 +287,38 @@ describe('multi-account directory, folder catalog, and demo switcher gating', ()
 		await unmount(nativeComponent);
 	});
 
+	it('renders demo Phase 3 Connected Accounts without binding_property_non_reactive warnings', async () => {
+		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const browser = fixture({ native: false });
+		const demoComponent = mount(WdgOnboardingPage, {
+			target: browser.target,
+			props: { session: browser.session }
+		});
+		await settle();
+
+		const phase3Btn = [...browser.target.querySelectorAll('button')].find((b) =>
+			b.textContent?.includes('3. Connected Accounts')
+		)!;
+		phase3Btn.click();
+		await settle();
+
+		const warnings = warnSpy.mock.calls.flat().map(String).join('\n');
+		expect(warnings).not.toContain('binding_property_non_reactive');
+
+		const uploadInput = browser.target.querySelector<HTMLInputElement>(
+			'input[type="file"][aria-label^="Upload avatar"]'
+		)!;
+		expect(uploadInput).not.toBeNull();
+		const clickSpy = vi.spyOn(uploadInput, 'click');
+		const chooseBtn = [...browser.target.querySelectorAll('button')].find(
+			(b) => b.textContent?.includes('Replace photo') || b.textContent?.includes('Choose a photo')
+		)!;
+		chooseBtn.click();
+		expect(clickSpy).toHaveBeenCalledTimes(1);
+
+		await unmount(demoComponent);
+	});
+
 	it('loads and retries cmd_list_folders lazily per account on /onboarding', async () => {
 		const { transport, session, target } = fixture({ native: true });
 		transport.list.mockResolvedValueOnce([account]);

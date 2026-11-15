@@ -268,7 +268,7 @@
 	{/if}
 
 	{#if value}
-		<fieldset disabled={busy || loading} class="flex flex-col gap-3 border-0 p-0">
+		<fieldset disabled={busy || loading} class="flex min-w-0 max-w-full flex-col gap-3 border-0 p-0">
 			<div
 				class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-separator bg-field p-3"
 			>
@@ -378,17 +378,14 @@
 										{reviewT[choice.state]}
 									</span>
 								</div>
-								<div class="flex flex-wrap items-center gap-2 font-mono text-[11px] text-secondary">
-									<span>{choice.sender}</span>
-									<span aria-hidden="true">·</span>
-									<span>{accountLabel}</span>
+								<div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-secondary">
+									<span class="truncate">{choice.sender}</span>
+									<span class="truncate">{accountLabel}</span>
 									{#if typeof meta?.message_count === 'number'}
-										<span aria-hidden="true">·</span>
-										<span class="tabular-nums">{t.msgsCount(meta.message_count)}</span>
+										<span class="whitespace-nowrap tabular-nums">{t.msgsCount(meta.message_count)}</span>
 									{/if}
 									{#if meta?.sample_subject}
-										<span aria-hidden="true">·</span>
-										<span class="truncate font-sans">{meta.sample_subject}</span>
+										<span class="min-w-0 max-w-full truncate font-sans">{meta.sample_subject}</span>
 									{/if}
 								</div>
 							</div>
