@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-15
+
+### Added
+- **Google OAuth2 Onboarding & Desktop JSON Import:** Added Google OAuth2 endpoint presets for Gmail/Google Workspace discovery (`crates/mail-engine/src/discovery/presets.rs`), automatic `access_type=offline` and `prompt=consent` parameters on Google authorization URLs to obtain refresh tokens (`apps/desktop/src-tauri/src/onboarding.rs`), host-aware OAuth endpoint defaults, and direct `client_secret_*.json` (Desktop app) credential import in `WdgAccountDiscoveryForm` with EN/PT-BR guidance (`apps/desktop/src/lib/onboarding/google-oauth-json.ts`).
+
+### Fixed
+- **Themed Scrollbars & Inbox Overflow:** Added light/dark semantic scrollbar styling across the desktop shell and sandboxed HTML reader (`apps/desktop/src/app.css`, `apps/desktop/src/lib/security/sanitize.ts`) and constrained horizontal overflow in the virtualized message list (`apps/desktop/src/lib/inbox/WdgMessageList.svelte`).
+
+### Changed
+- **CI & Release Caching:** Added release workflow Rust caching and hardened CI cache keys (`.github/workflows/ci.yml`, `.github/workflows/release.yml`).
+
 ## [0.2.0] - 2026-11-15
 
 ### Changed
