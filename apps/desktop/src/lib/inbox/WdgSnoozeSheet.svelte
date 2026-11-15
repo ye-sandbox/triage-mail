@@ -90,6 +90,15 @@
 		}
 	}
 
+	function formatPresetTime(date: Date): string {
+		return date.toLocaleString(i18n.locale, {
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
+
 	function submitCustom(event: SubmitEvent) {
 		event.preventDefault();
 		dispatchSnooze(new Date(deadline).getTime());
@@ -106,8 +115,8 @@
 					class="flex min-h-11 flex-col items-start justify-center rounded-lg border border-separator bg-field px-3 py-2 text-left transition-colors hover:bg-selection-soft md:min-h-0"
 				>
 					<span class="text-xs font-medium text-foreground">{preset.label}</span>
-					<span class="font-mono text-[10px] tabular-nums text-secondary">
-						{preset.target.toLocaleString()}
+					<span class="font-mono text-[10px] whitespace-nowrap tabular-nums text-secondary">
+						{formatPresetTime(preset.target)}
 					</span>
 				</button>
 			{/each}
@@ -124,7 +133,6 @@
 					class="mt-1.5 block h-9 w-full rounded-md border border-separator bg-field px-3 text-xs text-foreground focus:border-accent focus:outline-none"
 				/>
 			</label>
-			<p class="text-[11px] text-secondary">{tMailboxes.snoozeHelp}</p>
 			{#if invalid}
 				<p role="alert" class="text-xs text-status-danger">{tMailboxes.invalidDeadline}</p>
 			{/if}
@@ -154,9 +162,12 @@
 			<Drawer.Content
 				class="fixed inset-x-0 bottom-0 z-50 flex flex-col gap-3 rounded-t-xl border-t border-separator bg-surface p-5 text-foreground outline-none"
 			>
-				<div class="flex items-center gap-2">
-					<Clock class="h-4 w-4 text-status-warning" />
-					<h2 class="font-display text-sm font-semibold">{tMailboxes.snooze}</h2>
+				<div class="space-y-1">
+					<div class="flex items-center gap-2">
+						<Clock class="h-4 w-4 text-status-warning" />
+						<h2 class="font-display text-sm font-semibold">{tMailboxes.snooze}</h2>
+					</div>
+					<p class="text-xs text-secondary">{tMailboxes.snoozeHelp}</p>
 				</div>
 				{@render snoozeBody()}
 			</Drawer.Content>
@@ -171,7 +182,7 @@
 					event.preventDefault();
 					deadlineInput?.focus();
 				}}
-				class="fixed top-1/2 left-1/2 z-50 w-[min(92vw,480px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-separator bg-surface p-5 text-foreground shadow-xl outline-none"
+				class="fixed top-1/2 left-1/2 z-50 w-[min(92vw,520px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-separator bg-surface p-5 text-foreground shadow-xl outline-none"
 			>
 				<Dialog.Title class="flex items-center gap-2 font-display text-sm font-semibold">
 					<Clock class="h-4 w-4 text-status-warning" />

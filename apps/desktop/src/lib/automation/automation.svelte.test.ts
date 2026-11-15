@@ -135,6 +135,11 @@ describe('WdgAutomationPage (UI v2 workspace)', () => {
 		await settle();
 		expect(target.textContent).toContain('Native OS Notification');
 		expect(target.textContent).toContain('Delivery History');
+		const localCard = [...target.querySelectorAll('article')].find((el) =>
+			el.textContent?.includes('Native OS Notification')
+		)!;
+		expect(localCard).toBeDefined();
+		expect(localCard.textContent?.match(/Local notification/g)).toHaveLength(1);
 
 		const govTab = [...target.querySelectorAll<HTMLButtonElement>('button[role="tab"]')].find(
 			(b) => b.textContent?.includes('Senders & Overrides')

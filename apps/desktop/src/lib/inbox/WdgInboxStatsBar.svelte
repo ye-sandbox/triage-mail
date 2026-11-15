@@ -129,8 +129,8 @@
 			</div>
 		</div>
 
-		<div class="flex min-w-[240px] flex-1 items-center justify-end gap-2">
-			<div class="relative flex max-w-md flex-1 items-center">
+		<div class="flex w-full min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:w-auto sm:min-w-[240px]">
+			<div class="relative flex w-full min-w-[180px] flex-1 items-center sm:w-auto sm:max-w-md">
 				<Search class="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-secondary" />
 				<input
 					type="search"

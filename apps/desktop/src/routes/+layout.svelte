@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import '@fontsource/plus-jakarta-sans/500.css';
 	import '@fontsource/plus-jakarta-sans/600.css';
 	import '@fontsource/plus-jakarta-sans/700.css';
@@ -12,6 +12,7 @@
 	import '@fontsource/jetbrains-mono/600.css';
 	import '../app.css';
 	import { Toaster } from 'svelte-sonner';
+	import { nativeAvailable } from '$lib/inbox/transport';
 	import WdgCommandPalette from '$lib/inbox/WdgCommandPalette.svelte';
 	import WdgSnoozeSheet from '$lib/inbox/WdgSnoozeSheet.svelte';
 	import AppShell from '$lib/shell/AppShell.svelte';
@@ -27,6 +28,13 @@
 
 	$effect(() => {
 		appStore.syncDocumentTheme();
+	});
+
+	$effect(() => {
+		if (!nativeAvailable() || !appStore.vaultUnlocked) return;
+		untrack(() => {
+			void appStore.hydrateNativeShellCounts();
+		});
 	});
 </script>
 

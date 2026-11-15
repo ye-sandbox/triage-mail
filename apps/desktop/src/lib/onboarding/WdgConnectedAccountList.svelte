@@ -56,8 +56,28 @@
 
 	let expandedIds = $state<Record<string, boolean>>({});
 	let folderCatalogs = $state<Record<string, FolderCatalogState>>({});
-	let demoFileInputs: Record<string, HTMLInputElement | undefined> = {};
+	const demoFileInputs = new Map<string, HTMLInputElement>();
 	let active = true;
+
+	function registerDemoInput(node: HTMLInputElement, accountId: string) {
+		demoFileInputs.set(accountId, node);
+		return {
+			update(nextId: string) {
+				if (nextId !== accountId) {
+					if (demoFileInputs.get(accountId) === node) {
+						demoFileInputs.delete(accountId);
+					}
+					accountId = nextId;
+					demoFileInputs.set(accountId, node);
+				}
+			},
+			destroy() {
+				if (demoFileInputs.get(accountId) === node) {
+					demoFileInputs.delete(accountId);
+				}
+			}
+		};
+	}
 
 	const t = $derived(i18n.t.onboarding);
 	const formT = $derived(i18n.t.accountForm);
@@ -250,7 +270,7 @@
 							</span>
 
 							<input
-								bind:this={demoFileInputs[account.account_id]}
+								use:registerDemoInput={account.account_id}
 								type="file"
 								accept="image/*"
 								onchange={(e) => handleDemoAvatarSelect(account.account_id, e)}
@@ -259,7 +279,7 @@
 							/>
 							<button
 								type="button"
-								onclick={() => demoFileInputs[account.account_id]?.click()}
+								onclick={() => demoFileInputs.get(account.account_id)?.click()}
 								class="flex min-h-[36px] items-center gap-1 rounded-md border border-separator bg-field px-2.5 py-1 text-xs text-foreground whitespace-nowrap hover:bg-selection-soft"
 							>
 								<ImagePlus class="h-3.5 w-3.5 text-secondary" />

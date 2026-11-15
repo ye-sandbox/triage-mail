@@ -60,18 +60,18 @@
 					{@const boleto = badge.FebrabanBoleto}
 					<div class="flex flex-col gap-2 rounded-md border border-separator bg-field px-3 py-2">
 						<div class="flex flex-wrap items-center justify-between gap-2">
-							<div class="flex flex-wrap items-center gap-2">
-								<Banknote class="h-4 w-4 shrink-0 text-status-warning" />
-								<span class="font-medium text-foreground">FEBRABAN Boleto</span>
+							<div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+								<span class="inline-flex items-center gap-2">
+									<Banknote class="h-4 w-4 shrink-0 text-status-warning" />
+									<span class="font-medium text-foreground">FEBRABAN Boleto</span>
+								</span>
 								{#if boleto.amount_cents !== null}
-									<span class="text-secondary">·</span>
-									<span class="font-mono font-semibold tabular-nums text-foreground">
+									<span class="font-mono font-semibold whitespace-nowrap tabular-nums text-foreground">
 										{formatBrl(boleto.amount_cents, appStore.locale)}
 									</span>
 								{/if}
 								{#if boleto.due_date_iso}
-									<span class="text-secondary">·</span>
-									<span class="font-mono tabular-nums text-status-warning">
+									<span class="font-mono whitespace-nowrap tabular-nums text-status-warning">
 										Due {boleto.due_date_iso}
 									</span>
 								{/if}

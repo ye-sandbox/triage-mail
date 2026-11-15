@@ -102,7 +102,7 @@ export const labels: Record<'en' | 'pt-BR', RemindersLabels> = {
 		all: 'All',
 		filterStatus: 'Filter by status',
 		filterAccount: 'Filter by account',
-		searchPlaceholder: 'Search sender, subject or barcode…',
+		searchPlaceholder: 'Search bills, senders, barcodes…',
 		emptyState: 'No bills or due dates match this filter',
 		emptyStateHelp:
 			'Invoices, utility bills, and boletos will appear here when detected in your inbox, or try clearing active filters.',
@@ -196,7 +196,7 @@ export const labels: Record<'en' | 'pt-BR', RemindersLabels> = {
 		all: 'Todos',
 		filterStatus: 'Filtrar por status',
 		filterAccount: 'Filtrar por conta',
-		searchPlaceholder: 'Buscar remetente, assunto ou código…',
+		searchPlaceholder: 'Buscar contas, remetentes, códigos…',
 		emptyState: 'Nenhuma conta ou boleto encontrado neste filtro',
 		emptyStateHelp:
 			'Faturas, boletos e contas de consumo aparecerão aqui quando detectados na sua caixa de entrada, ou limpe os filtros ativos.',
