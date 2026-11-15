@@ -1,76 +1,188 @@
 @import 'tailwindcss';
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
 	color-scheme: light dark;
-	--background: #f7f7f9;
-	--sidebar: #eeeef0;
+	--background: #f6f7f9;
+	--sidebar: #eef1f5;
 	--surface: #ffffff;
-	--reader: #fafafb;
-	--toolbar: #f8f8fa;
-	--field: #efeff1;
-	--text: #242426;
-	--secondary: #68686f;
-	--separator: #dedee3;
-	--accent: #0067d9;
-	--selection: #0067d9;
-	--selection-soft: #dfebf9;
-	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-	font-synthesis: none;
-	background: var(--background);
-	color: var(--text);
+	--reader: #ffffff;
+	--toolbar: #f9fafb;
+	--field: #f1f3f6;
+	--text: #111827;
+	--secondary: #525d6d;
+	--separator: #e2e6ec;
+	--accent: #2563eb;
+	--accent-foreground: #ffffff;
+	--selection: #dbeafe;
+	--selection-soft: #eff6ff;
+	--status-healthy: #15803d;
+	--status-warning: #b45309;
+	--status-danger: #b91c1c;
+	--status-info: #1d4ed8;
+	--motion-fast: 120ms;
+	--motion-view: 220ms;
+	--motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-@media (prefers-color-scheme: dark) {
-	:root {
-		--background: #1d1d1f;
-		--sidebar: #252527;
-		--surface: #202022;
-		--reader: #1c1c1e;
-		--toolbar: #29292c;
-		--field: #353538;
-		--text: #f1f1f3;
-		--secondary: #aaaab2;
-		--separator: #3c3c40;
-		--accent: #78b6ff;
-		--selection: #175ca8;
-		--selection-soft: #303d50;
+
+.dark {
+	--background: #0d1117;
+	--sidebar: #11161f;
+	--surface: #151b26;
+	--reader: #121721;
+	--toolbar: #161d29;
+	--field: #1c2433;
+	--text: #eef2f7;
+	--secondary: #98a4b8;
+	--separator: #242d3d;
+	--accent: #3b82f6;
+	--accent-foreground: #0b1120;
+	--selection: #1e3a5f;
+	--selection-soft: #16263d;
+	--status-healthy: #22c55e;
+	--status-warning: #f59e0b;
+	--status-danger: #f87171;
+	--status-info: #60a5fa;
+}
+
+@theme inline {
+	--color-background: var(--background);
+	--color-sidebar: var(--sidebar);
+	--color-surface: var(--surface);
+	--color-reader: var(--reader);
+	--color-toolbar: var(--toolbar);
+	--color-field: var(--field);
+	--color-foreground: var(--text);
+	--color-secondary: var(--secondary);
+	--color-separator: var(--separator);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-selection: var(--selection);
+	--color-selection-soft: var(--selection-soft);
+	--color-status-healthy: var(--status-healthy);
+	--color-status-warning: var(--status-warning);
+	--color-status-danger: var(--status-danger);
+	--color-status-info: var(--status-info);
+
+	--font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+	--font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+	html,
+	body {
+		font-family: var(--font-sans);
+		font-synthesis: none;
+		background-color: var(--background);
+		color: var(--text);
+		margin: 0;
+		padding: 0;
+		height: 100%;
+	}
+
+	h1,
+	h2,
+	h3,
+	.font-display {
+		font-family: var(--font-display);
+	}
+
+	* {
+		border-color: var(--separator);
 	}
 }
+
+.tabular-nums {
+	font-variant-numeric: tabular-nums;
+}
+
+.window-drag-region {
+	-webkit-app-region: drag;
+	app-region: drag;
+	user-select: none;
+}
+
+.window-no-drag {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+}
+
+.workstation-backdrop {
+	background-image: radial-gradient(
+		color-mix(in srgb, var(--separator) 80%, transparent) 1px,
+		transparent 1px
+	);
+	background-size: 20px 20px;
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+input[type='search']:focus-visible {
+	outline-offset: 4px;
+}
+
+button,
+select,
+a {
+	-webkit-tap-highlight-color: transparent;
+}
+
+/* Temporary compatibility classes for pre-[04.15]..[04.19] views during sequential migration */
 @layer components {
 	.setup-input {
 		@apply block w-full min-w-0 rounded-lg border border-[var(--separator)] bg-[var(--field)] px-3 py-2 text-[var(--text)] disabled:opacity-50;
 	}
 	.setup-primary {
-		@apply rounded-lg bg-[var(--selection)] px-4 py-3 text-sm font-medium text-white disabled:opacity-50;
+		@apply rounded-lg bg-[var(--accent)] px-4 py-3 text-sm font-medium text-[var(--accent-foreground)] disabled:opacity-50;
 	}
 	.setup-secondary {
 		@apply rounded-lg border border-[var(--separator)] px-4 py-3 text-sm text-[var(--accent)] disabled:opacity-50;
 	}
 	.icon-button {
 		@apply flex size-8 shrink-0 items-center justify-center rounded-md text-[var(--secondary)] hover:bg-[var(--field)] disabled:opacity-40;
+		transition:
+			background-color var(--motion-fast) ease,
+			color var(--motion-fast) ease,
+			opacity var(--motion-fast) ease,
+			transform var(--motion-fast) var(--motion-ease);
+	}
+	.icon-button:active:not(:disabled) {
+		transform: scale(0.94);
 	}
 	.keycap {
 		@apply flex size-5 items-center justify-center rounded border border-[var(--separator)] bg-[var(--surface)] font-sans;
+	}
+	.message-row {
+		transition:
+			background-color var(--motion-fast) ease,
+			color var(--motion-fast) ease;
 	}
 	.message-row:hover {
 		background: var(--selection-soft);
 	}
 	.message-row.selected {
 		background: var(--selection);
-		color: white;
+		color: var(--text);
 	}
 	.message-row.selected > span {
-		background: white;
+		background: var(--accent);
 	}
 }
+
 .desktop-shell {
 	display: flex;
 	flex-direction: column;
 	height: 100dvh;
 	width: 100%;
 	overflow: hidden;
-	background: var(--canvas);
+	background: var(--background);
 	color: var(--text);
 }
+
 .desktop-shell-content {
 	flex: 1 1 0%;
 	min-height: 0;
@@ -79,37 +191,7 @@
 	display: flex;
 	flex-direction: column;
 }
-:focus-visible {
-	outline: 3px solid var(--accent);
-	outline-offset: 3px;
-}
-input[type='search']:focus-visible {
-	outline-offset: 5px;
-}
-button,
-select,
-a {
-	-webkit-tap-highlight-color: transparent;
-}
-@media (prefers-contrast: more) {
-	:root {
-		--separator: #85858b;
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	*,
-	*::before,
-	*::after {
-		scroll-behavior: auto !important;
-	}
-}
 
-/* INVARIANT: Motion communicates state; it never delays input or moves virtual rows. */
-:root {
-	--motion-fast: 120ms;
-	--motion-view: 220ms;
-	--motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-}
 .inbox-sidebar {
 	width: 14rem;
 	opacity: 1;
@@ -118,96 +200,19 @@ a {
 		width var(--motion-view) var(--motion-ease),
 		opacity var(--motion-fast) ease;
 }
+
 .inbox-sidebar.collapsed {
 	width: 0;
 	opacity: 0;
 }
-.icon-button {
-	transition:
-		background-color var(--motion-fast) ease,
-		color var(--motion-fast) ease,
-		opacity var(--motion-fast) ease,
-		transform var(--motion-fast) var(--motion-ease);
-}
-.icon-button:active:not(:disabled) {
-	transform: scale(0.94);
-}
-.message-row {
-	transition:
-		background-color var(--motion-fast) ease,
-		color var(--motion-fast) ease;
-}
-.search-field {
-	transition:
-		border-color var(--motion-fast) ease,
-		box-shadow var(--motion-fast) ease;
-}
-.search-field:focus-within {
-	border-color: var(--accent);
-	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
-}
-.overview-content[data-message='true'] {
-	animation: overview-reveal var(--motion-fast) ease-out;
-}
-.refresh-symbol.is-spinning {
-	animation: activity-turn 900ms linear infinite;
-}
-@keyframes overview-reveal {
-	from {
-		opacity: 0;
-	}
-	to {
-		opacity: 1;
-	}
-}
-@keyframes activity-turn {
-	to {
-		transform: rotate(360deg);
-	}
-}
-@keyframes compact-forward {
-	from {
-		opacity: 0;
-		transform: translateX(8px);
-	}
-	to {
-		opacity: 1;
-		transform: translateX(0);
-	}
-}
-@keyframes compact-back {
-	from {
-		opacity: 0;
-		transform: translateX(-8px);
-	}
-	to {
-		opacity: 1;
-		transform: translateX(0);
-	}
-}
-@media (max-width: 767px) {
-	.inbox-panes[data-detail='true'] .inbox-detail {
-		animation: compact-forward var(--motion-view) var(--motion-ease);
-	}
-	.inbox-panes[data-detail='false'] .inbox-list {
-		animation: compact-back var(--motion-view) var(--motion-ease);
-	}
-}
+
 @media (prefers-reduced-motion: reduce) {
-	/* INVARIANT: CSS owns every animation so preference changes apply even mid-transition. */
-	.inbox-sidebar,
-	.icon-button,
-	.message-row,
-	.search-field {
-		transition: none;
-	}
-	.icon-button:active:not(:disabled) {
-		transform: none;
-	}
-	.overview-content[data-message='true'],
-	.refresh-symbol.is-spinning,
-	.inbox-panes[data-detail='true'] .inbox-detail,
-	.inbox-panes[data-detail='false'] .inbox-list {
-		animation: none;
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
 	}
 }

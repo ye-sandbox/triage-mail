@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeEmailHtml } from './sanitize';
+import { hasBlockedRemoteImages, sanitizeEmailHtml } from './sanitize';
 
 describe('sanitizeEmailHtml', () => {
 	it('strips script tags and inline event handlers while injecting normalized dark-mode CSS', () => {
@@ -13,6 +13,16 @@ describe('sanitizeEmailHtml', () => {
 		expect(output).toContain('Hello');
 	});
 
+	it('applies explicit light and dark UI v2 reader stylesheets when requested', () => {
+		const light = sanitizeEmailHtml('<p>Hello</p>', { theme: 'light' });
+		expect(light).toContain('color-scheme: light;');
+		expect(light).toContain('--reader-bg: #ffffff;');
+
+		const dark = sanitizeEmailHtml('<p>Hello</p>', { theme: 'dark' });
+		expect(dark).toContain('color-scheme: dark;');
+		expect(dark).toContain('--reader-bg: #121721;');
+	});
+
 	it('blocks remote tracking pixel images by default and allows them only on explicit opt-in', () => {
 		const htmlWithPixel =
 			'<p>Invoice</p><img src="https://tracker.example.com/pixel.gif" width="1" height="1" />';
@@ -24,6 +34,13 @@ describe('sanitizeEmailHtml', () => {
 		const allowed = sanitizeEmailHtml(htmlWithPixel, { allowRemoteImages: true });
 		expect(allowed).toContain('https://tracker.example.com/pixel.gif');
 	});
+});
+
+it('detects blocked remote and lazy CID images without flagging safe inline raster images', () => {
+	expect(hasBlockedRemoteImages('<p>Text only</p>')).toBe(false);
+	expect(hasBlockedRemoteImages('<img src="data:image/png;base64,AAAA">')).toBe(false);
+	expect(hasBlockedRemoteImages('<img src="https://cdn.example.com/chart.png">')).toBe(true);
+	expect(hasBlockedRemoteImages('<img src="cid:inline-logo">')).toBe(true);
 });
 
 it('removes alternate network paths and navigation while placing CSP before sender markup', () => {

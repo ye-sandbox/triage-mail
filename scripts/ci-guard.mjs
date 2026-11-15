@@ -21,8 +21,11 @@ export function scanText(path, content) {
   // INVARIANT: Report locations and rule names only; never echo matched secret/PII values.
   content.split('\n').forEach((line, index) => {
     for (const match of line.matchAll(email)) {
-      // Scoped npm versions (e.g. package@1.2.3) are not mailbox addresses.
-      if (!/^[\d.]+$/.test(match[1]) && !reserved.test(match[1])) {
+      // Scoped npm versions (e.g. package@1.2.3 or package@1.0.0-next.7) are not mailbox addresses.
+      if (
+        !/^(?:[\d.]+|\d+\.\d+\.\d+(?:-[a-z\d-]+(?:\.\d+)?)?)$/i.test(match[1]) &&
+        !reserved.test(match[1])
+      ) {
         findings.push({ path, line: index + 1, rule: 'non-reserved-email' });
       }
     }
