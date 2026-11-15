@@ -1,18 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
+import { i18n } from '../i18n/index.svelte';
+import type { FolderDto } from '../inbox/types';
 import { AccountController } from './controller.svelte';
-import OnboardingView from './OnboardingView.svelte';
-import DesktopApp from './DesktopApp.svelte';
-import type { AccountConfig, AccountTransport } from './types';
+import { OnboardingSession } from './session.svelte';
+import type { AccountConfig, AccountTransport, RecoveryTransport } from './types';
+import WdgAccountDiscoveryForm from './WdgAccountDiscoveryForm.svelte';
+import WdgBootGate from './WdgBootGate.svelte';
+import WdgOnboardingPage from './WdgOnboardingPage.svelte';
 
 vi.mock('../inbox/transport', () => ({
 	nativeAvailable: () => false,
 	nativeTransport: {
 		search: async () => [],
 		subscribe: async () => () => {},
-		triage: async () => {}
+		triage: async () => {},
+		listFolders: async () => []
 	}
 }));
+
 const account: AccountConfig = {
 	account_id: 'account-one',
 	email_display: 'reader@example.com',
@@ -20,6 +26,7 @@ const account: AccountConfig = {
 	imap_port: 993,
 	auth_method: 'AppPassword'
 };
+
 function deferred<T>() {
 	let resolve!: (value: T) => void;
 	let reject!: (reason: unknown) => void;
@@ -29,7 +36,8 @@ function deferred<T>() {
 	});
 	return { promise, resolve, reject };
 }
-function fixture() {
+
+function fixture(options?: { native?: boolean; recoveryAvailable?: boolean }) {
 	const transport = {
 		list: vi.fn<AccountTransport['list']>().mockResolvedValue([]),
 		unlock: vi.fn<AccountTransport['unlock']>().mockResolvedValue(),
@@ -37,29 +45,45 @@ function fixture() {
 		authorize: vi.fn<AccountTransport['authorize']>().mockResolvedValue('account-one'),
 		cancel: vi.fn<AccountTransport['cancel']>().mockResolvedValue()
 	};
+	const recoveryTransport: RecoveryTransport = {
+		available: vi.fn<RecoveryTransport['available']>().mockResolvedValue(
+			options?.recoveryAvailable ?? false
+		),
+		choose: vi.fn<RecoveryTransport['choose']>().mockResolvedValue('/tmp/backup.triagebak'),
+		restore: vi.fn<RecoveryTransport['restore']>().mockResolvedValue()
+	};
 	const controller = new AccountController(transport);
+	const session = new OnboardingSession({
+		accountTransport: transport,
+		recoveryTransport,
+		available: () => options?.native ?? true
+	});
 	const target = document.createElement('div');
 	document.body.append(target);
-	return { transport, controller, target };
+	return { transport, recoveryTransport, controller, session, target };
 }
+
 async function settle() {
-	for (let i = 0; i < 4; i++) {
+	for (let i = 0; i < 6; i++) {
 		await tick();
 		flushSync();
 	}
 }
+
 function input(target: HTMLElement, name: string, value: string) {
 	const element = target.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
 	element.value = value;
 	element.dispatchEvent(new Event('input', { bubbles: true }));
 	return element;
 }
+
 function submit(target: HTMLElement) {
 	target
 		.querySelector('form')!
 		.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 	flushSync();
 }
+
 beforeEach(() => {
 	vi.stubGlobal(
 		'ResizeObserver',
@@ -70,13 +94,15 @@ beforeEach(() => {
 		}
 	);
 });
+
 afterEach(() => {
 	document.body.replaceChildren();
 	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
+	i18n.setLocale('en');
 });
 
-describe('account startup', () => {
+describe('account startup and boot gate', () => {
 	it('makes no IPC calls in a browser and ignores stale startup responses', async () => {
 		const { controller, transport } = fixture();
 		await controller.load(false);
@@ -91,6 +117,7 @@ describe('account startup', () => {
 		expect(controller.phase).toBe('ready');
 		expect(controller.accounts).toEqual([account]);
 	});
+
 	it('distinguishes locked vault from storage failure without echoing diagnostics', async () => {
 		const { controller, transport } = fixture();
 		transport.list
@@ -103,57 +130,126 @@ describe('account startup', () => {
 		expect(controller.phase).toBe('error');
 		expect(controller.error).not.toContain('synthetic-private');
 	});
-	it('clears passphrase on submission, prevents duplicate unlocks and permits retry', async () => {
-		const { controller, transport, target } = fixture();
-		controller.phase = 'locked';
-		const pending = deferred<void>();
-		transport.unlock.mockReturnValueOnce(pending.promise);
-		const component = mount(OnboardingView, {
+
+	it('routes browser mode straight to disconnected InboxSession without native IPC', async () => {
+		const { transport, recoveryTransport, session, target } = fixture({ native: false });
+		const onNavigate = vi.fn();
+		const component = mount(WdgBootGate, {
 			target,
-			props: { controller, enterInbox: vi.fn() }
+			props: { session, onNavigate }
 		});
-		flushSync();
+		await settle();
+		expect(transport.list).not.toHaveBeenCalled();
+		expect(recoveryTransport.available).not.toHaveBeenCalled();
+		expect(onNavigate).not.toHaveBeenCalled();
+		expect(target.querySelector('[role="listbox"][aria-label="Messages"]')).not.toBeNull();
+		await unmount(component);
+	});
+
+	it('redirects locked native boot to /onboarding, clears passphrase on submit, blocks duplicate unlocks, and unlocks to inbox', async () => {
+		const { transport, session, target } = fixture({ native: true });
+		transport.list
+			.mockRejectedValueOnce('VaultUnavailable')
+			.mockResolvedValueOnce([account]);
+		const unlockPending = deferred<void>();
+		transport.unlock.mockReturnValueOnce(unlockPending.promise);
+		const onNavigate = vi.fn();
+
+		const component = mount(WdgBootGate, {
+			target,
+			props: { session, onNavigate }
+		});
+		await settle();
+
+		expect(onNavigate).toHaveBeenCalledWith('/onboarding');
+		expect(target.textContent).toContain('Unlock your mail');
+		// Demo switcher MUST NOT appear inside Tauri native runtime
+		expect(target.querySelector('[aria-label="Onboarding lifecycle phases"]')).toBeNull();
+
 		const passphrase = input(target, 'passphrase', 'synthetic-passphrase');
 		submit(target);
 		expect(passphrase.value).toBe('');
 		submit(target);
 		expect(transport.unlock).toHaveBeenCalledTimes(1);
-		pending.reject('synthetic-passphrase');
+
+		unlockPending.reject('synthetic-passphrase');
 		await settle();
-		expect(controller.error).not.toContain('synthetic-passphrase');
+		expect(session.accounts.error).not.toContain('synthetic-passphrase');
+
 		input(target, 'passphrase', 'synthetic-retry');
 		submit(target);
 		await settle();
-		expect(controller.phase).toBe('ready');
+		expect(session.accounts.phase).toBe('ready');
+		expect(target.querySelector('[role="listbox"][aria-label="Messages"]')).not.toBeNull();
 		await unmount(component);
 	});
+
+	it('gates startup recovery backups (.triagebak) with consent and allows skipping', async () => {
+		const { transport, recoveryTransport, session, target } = fixture({
+			native: true,
+			recoveryAvailable: true
+		});
+		const onNavigate = vi.fn();
+		const component = mount(WdgBootGate, {
+			target,
+			props: { session, onNavigate }
+		});
+		await settle();
+
+		expect(onNavigate).toHaveBeenCalledWith('/onboarding');
+		expect(target.textContent).toContain('Restore from Encrypted Backup');
+		expect(transport.list).not.toHaveBeenCalled();
+
+		input(target, 'passphrase', 'synthetic-backup-key');
+		input(target, 'confirmation', 'synthetic-backup-key');
+		const checkbox = target.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+		checkbox.checked = true;
+		checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+		flushSync();
+
+		submit(target);
+		await settle();
+		expect(recoveryTransport.choose).toHaveBeenCalledWith(false);
+		expect(recoveryTransport.restore).toHaveBeenCalledWith(
+			'/tmp/backup.triagebak',
+			'synthetic-backup-key',
+			true
+		);
+		expect(target.querySelector<HTMLInputElement>('input[name="passphrase"]')).toBeNull();
+		await unmount(component);
+	});
+
 	it('opens account management through settings while keeping existing mail mounted', async () => {
-		const { transport, target } = fixture();
+		const { transport, session, target } = fixture({ native: true });
 		const pending = deferred<AccountConfig[]>();
 		transport.list.mockReturnValueOnce(pending.promise);
-		const component = mount(DesktopApp, {
+		const onNavigate = vi.fn();
+
+		const component = mount(WdgBootGate, {
 			target,
-			props: { transport, available: () => true }
+			props: { session, onNavigate }
 		});
 		flushSync();
 		expect(target.textContent).toContain('Opening local mail');
 		expect(target.querySelector('input')).toBeNull();
+
 		pending.resolve([account]);
 		await settle();
+		expect(onNavigate).not.toHaveBeenCalled();
 		expect(target.textContent).toContain('Loaded Messages');
 		const listbox = target.querySelector('[role="listbox"][aria-label="Messages"]');
 		expect(listbox).not.toBeNull();
-		expect([...target.querySelectorAll('button')].some((b) => b.textContent === 'Accounts')).toBe(false);
 		expect(
 			[...target.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Settings')
 		).toHaveLength(1);
+
 		target.querySelector<HTMLButtonElement>('button[aria-label="Settings"]')!.click();
 		await settle();
 		target.querySelector<HTMLButtonElement>('#tab-accounts')!.click();
 		flushSync();
+
 		const dialog = target.querySelector('[role="dialog"]')!;
 		expect(dialog.textContent).toContain('reader@example.com');
-		expect(dialog.textContent).toContain('Add account');
 		expect(target.querySelector('[role="listbox"][aria-label="Messages"]')).toBe(listbox);
 		dialog.querySelector<HTMLButtonElement>('button[aria-label="Close settings"]')!.click();
 		flushSync();
@@ -161,6 +257,7 @@ describe('account startup', () => {
 		expect(target.querySelector('[role="listbox"][aria-label="Messages"]')).toBe(listbox);
 		await unmount(component);
 	});
+
 	it('suppresses late updates after teardown', async () => {
 		const { controller, transport } = fixture();
 		const pending = deferred<AccountConfig[]>();
@@ -173,15 +270,95 @@ describe('account startup', () => {
 	});
 });
 
+describe('multi-account directory, folder catalog, and demo switcher gating', () => {
+	it('shows the demo phase switcher only outside Tauri and hides it in native mode', async () => {
+		const browser = fixture({ native: false });
+		const demoComponent = mount(WdgOnboardingPage, {
+			target: browser.target,
+			props: { session: browser.session }
+		});
+		await settle();
+		expect(browser.target.querySelector('[aria-label="Onboarding lifecycle phases"]')).not.toBeNull();
+		await unmount(demoComponent);
+
+		const tauri = fixture({ native: true });
+		tauri.transport.list.mockResolvedValueOnce([account]);
+		const nativeComponent = mount(WdgOnboardingPage, {
+			target: tauri.target,
+			props: { session: tauri.session, listFolders: vi.fn().mockResolvedValue([]) }
+		});
+		await settle();
+		expect(tauri.target.querySelector('[aria-label="Onboarding lifecycle phases"]')).toBeNull();
+		expect(tauri.target.textContent).toContain('reader@example.com');
+		await unmount(nativeComponent);
+	});
+
+	it('loads and retries cmd_list_folders lazily per account on /onboarding', async () => {
+		const { transport, session, target } = fixture({ native: true });
+		transport.list.mockResolvedValueOnce([account]);
+		const folders: FolderDto[] = [
+			{
+				account_id: 'account-one',
+				folder_name: 'INBOX',
+				display_name: 'Inbox',
+				role: 'Inbox',
+				delimiter: '/',
+				is_selectable: true,
+				total_messages: 42,
+				unread_messages: 3
+			},
+			{
+				account_id: 'account-one',
+				folder_name: 'Archive',
+				display_name: 'Archive',
+				role: 'Archive',
+				delimiter: '/',
+				is_selectable: true,
+				total_messages: 120,
+				unread_messages: 0
+			}
+		];
+		const listFolders = vi
+			.fn<(accountId: string) => Promise<FolderDto[]>>()
+			.mockRejectedValueOnce(new Error('offline'))
+			.mockResolvedValueOnce(folders);
+
+		const component = mount(WdgOnboardingPage, {
+			target,
+			props: { session, listFolders }
+		});
+		await settle();
+		expect(listFolders).not.toHaveBeenCalled();
+
+		const expandBtn = [...target.querySelectorAll('button')].find((b) =>
+			b.textContent?.includes('Folders')
+		)!;
+		expandBtn.click();
+		await settle();
+		expect(listFolders).toHaveBeenCalledWith('account-one');
+		expect(target.textContent).toContain('Folder catalog unavailable');
+
+		const retryBtn = [...target.querySelectorAll('button')].find(
+			(b) => b.textContent?.trim() === 'Try again'
+		)!;
+		retryBtn.click();
+		await settle();
+		expect(target.textContent).toContain('Inbox');
+		expect(target.textContent).toContain('Archive');
+		expect(target.textContent).toContain('42');
+		await unmount(component);
+	});
+});
+
 describe('account forms and network consent', () => {
 	it('sends password only on submit and immediately clears the unbound input', async () => {
 		const { controller, transport, target } = fixture();
 		controller.phase = 'ready';
 		const pending = deferred<string>();
 		transport.add.mockReturnValue(pending.promise);
-		const component = mount(OnboardingView, {
+		const component = mount(WdgAccountDiscoveryForm, {
 			target,
-			props: { controller, enterInbox: vi.fn() }
+			props: { controller }
 		});
 		flushSync();
 		input(target, 'email', account.email_display);
@@ -204,20 +381,21 @@ describe('account forms and network consent', () => {
 		expect(target.textContent).not.toContain('synthetic-password');
 		await unmount(component);
 	});
-	it('clears mode changes and teardown, uses Bridge credentials, and requests OAuth explicitly', async () => {
+
+	it('clears credentials on auth tab switch and teardown, uses Bridge credentials, and requests OAuth explicitly', async () => {
 		const { controller, transport, target } = fixture();
 		controller.phase = 'ready';
-		const component = mount(OnboardingView, {
+		const component = mount(WdgAccountDiscoveryForm, {
 			target,
-			props: { controller, enterInbox: vi.fn() }
+			props: { controller }
 		});
 		flushSync();
 		const old = input(target, 'secret', 'synthetic-old-password');
-		const select = target.querySelector('select')!;
-		select.value = 'ProtonBridgeLocal';
-		select.dispatchEvent(new Event('change', { bubbles: true }));
+		const authTabs = [...target.querySelectorAll<HTMLButtonElement>('[role="tablist"] button[role="tab"]')];
+		authTabs.find((b) => b.textContent?.includes('Proton Mail Bridge'))!.click();
 		flushSync();
 		expect(old.value).toBe('');
+
 		input(target, 'email', account.email_display);
 		input(target, 'secret', 'synthetic-bridge');
 		submit(target);
@@ -230,8 +408,8 @@ describe('account forms and network consent', () => {
 			}),
 			{ ProtonBridgeLocal: { bridge_password: 'synthetic-bridge' } }
 		);
-		select.value = 'OAuth2ByoCredentials';
-		select.dispatchEvent(new Event('change', { bubbles: true }));
+
+		authTabs.find((b) => b.textContent?.includes('Your client credentials'))!.click();
 		flushSync();
 		input(target, 'email', account.email_display);
 		input(target, 'host', account.imap_host);
@@ -259,7 +437,7 @@ describe('account forms and network consent', () => {
 		);
 		expect(target.textContent).toContain('Finish authorization in your browser');
 		[...target.querySelectorAll('button')]
-			.find((b) => b.textContent === 'Cancel authorization')!
+			.find((b) => b.textContent?.includes('Cancel authorization'))!
 			.click();
 		expect(transport.cancel).toHaveBeenCalledTimes(1);
 		pending.reject('synthetic-code');
@@ -268,6 +446,7 @@ describe('account forms and network consent', () => {
 		await unmount(component);
 		expect(secret.value).toBe('');
 	});
+
 	it('cancels pending OAuth on teardown and reconciles a successful commit racing cancellation', async () => {
 		const { controller, transport } = fixture();
 		const pending = deferred<string>();
@@ -335,33 +514,25 @@ it('defers cancellation until native registration and cancels a late acknowledge
 });
 
 describe('onboarding help guide and language selection', () => {
-	it('switches app language via Apple-style segmented selector', async () => {
-		const { controller, target } = fixture();
-		controller.phase = 'ready';
-		const component = mount(OnboardingView, {
+	it('switches app language via segmented selector on WdgOnboardingPage', async () => {
+		const { session, transport, target } = fixture({ native: true });
+		transport.list.mockResolvedValueOnce([]);
+		const component = mount(WdgOnboardingPage, {
 			target,
-			props: { controller, enterInbox: vi.fn() }
+			props: { session }
 		});
-		flushSync();
+		await settle();
 
 		expect(target.textContent).toContain('Connect an account');
-		expect(target.textContent).toContain('Your accounts');
 
-		const ptButton = [...target.querySelectorAll('button')].find(
-			(b) => b.getAttribute('aria-label') === 'Português'
-		);
-		expect(ptButton).toBeDefined();
-		ptButton!.click();
+		const ptButton = target.querySelector<HTMLButtonElement>('button[aria-label="Português"]')!;
+		ptButton.click();
 		flushSync();
 
 		expect(target.textContent).toContain('Conectar uma conta');
-		expect(target.textContent).toContain('Suas contas');
 
-		const enButton = [...target.querySelectorAll('button')].find(
-			(b) => b.getAttribute('aria-label') === 'English'
-		);
-		expect(enButton).toBeDefined();
-		enButton!.click();
+		const enButton = target.querySelector<HTMLButtonElement>('button[aria-label="English"]')!;
+		enButton.click();
 		flushSync();
 
 		expect(target.textContent).toContain('Connect an account');
@@ -371,22 +542,21 @@ describe('onboarding help guide and language selection', () => {
 	it('toggles interactive sign-in help guide and displays method tabs with step-by-step playbooks', async () => {
 		const { controller, target } = fixture();
 		controller.phase = 'ready';
-		const component = mount(OnboardingView, {
+		const component = mount(WdgAccountDiscoveryForm, {
 			target,
-			props: { controller, enterInbox: vi.fn() }
+			props: { controller }
 		});
 		flushSync();
 
 		const toggleButton = target.querySelector<HTMLButtonElement>(
 			'button[aria-controls="account-help-content"]'
-		);
-		expect(toggleButton).toBeDefined();
-		expect(toggleButton!.getAttribute('aria-expanded')).toBe('false');
+		)!;
+		expect(toggleButton.getAttribute('aria-expanded')).toBe('false');
 
-		toggleButton!.click();
+		toggleButton.click();
 		flushSync();
 
-		expect(toggleButton!.getAttribute('aria-expanded')).toBe('true');
+		expect(toggleButton.getAttribute('aria-expanded')).toBe('true');
 		expect(target.textContent).toContain('Two-Factor Authentication');
 		expect(target.textContent).toContain('Gmail, Google Workspace');
 		expect(target.textContent).toContain('What to fill in the form below:');
@@ -396,7 +566,9 @@ describe('onboarding help guide and language selection', () => {
 		expect(target.textContent).not.toContain('appleid.apple.com');
 		expect(target.textContent).not.toContain('Settings -> Privacy & Security -> Integrations');
 
-		const tabs = [...target.querySelectorAll<HTMLButtonElement>('button[role="tab"]')];
+		const tabs = [
+			...target.querySelectorAll<HTMLButtonElement>('#account-help-content button[role="tab"]')
+		];
 		expect(tabs).toHaveLength(4);
 
 		tabs[1].click();
@@ -419,27 +591,21 @@ describe('onboarding help guide and language selection', () => {
 	it('applies provider presets to pre-fill host, port and authentication method', async () => {
 		const { controller, target } = fixture();
 		controller.phase = 'ready';
-		const component = mount(OnboardingView, {
+		const component = mount(WdgAccountDiscoveryForm, {
 			target,
-			props: { controller, enterInbox: vi.fn() }
+			props: { controller }
 		});
 		flushSync();
 
 		const buttons = [...target.querySelectorAll('button')];
-		const gmailPreset = buttons.find((b) => b.textContent?.trim() === 'Gmail');
-		const gmailOAuthPreset = buttons.find((b) => b.textContent?.trim() === 'Gmail OAuth');
-		const icloudPreset = buttons.find((b) => b.textContent?.trim() === 'iCloud');
-		const protonPreset = buttons.find((b) => b.textContent?.trim() === 'Proton');
-		expect(gmailPreset).toBeDefined();
-		expect(gmailOAuthPreset).toBeDefined();
-		expect(icloudPreset).toBeDefined();
-		expect(protonPreset).toBeDefined();
+		const gmailPreset = buttons.find((b) => b.textContent?.trim() === 'Gmail')!;
+		const gmailOAuthPreset = buttons.find((b) => b.textContent?.trim() === 'Gmail OAuth')!;
+		const icloudPreset = buttons.find((b) => b.textContent?.trim() === 'iCloud')!;
+		const protonPreset = buttons.find((b) => b.textContent?.trim() === 'Proton')!;
 
-		// INVARIANT: Gmail is selected by default on initial render
-		expect(gmailPreset!.getAttribute('aria-pressed')).toBe('true');
-		expect(icloudPreset!.getAttribute('aria-pressed')).toBe('false');
+		expect(gmailPreset.getAttribute('aria-pressed')).toBe('true');
+		expect(icloudPreset.getAttribute('aria-pressed')).toBe('false');
 
-		// Toggle help guide open and check that switching presets switches the displayed playbook
 		const toggleButton = target.querySelector<HTMLButtonElement>(
 			'button[aria-controls="account-help-content"]'
 		)!;
@@ -448,21 +614,21 @@ describe('onboarding help guide and language selection', () => {
 		expect(target.textContent).toContain('myaccount.google.com/apppasswords');
 		expect(target.textContent).not.toContain('appleid.apple.com');
 
-		icloudPreset!.click();
+		icloudPreset.click();
 		flushSync();
-		expect(gmailPreset!.getAttribute('aria-pressed')).toBe('false');
-		expect(icloudPreset!.getAttribute('aria-pressed')).toBe('true');
+		expect(gmailPreset.getAttribute('aria-pressed')).toBe('false');
+		expect(icloudPreset.getAttribute('aria-pressed')).toBe('true');
 		expect(target.textContent).toContain('appleid.apple.com');
 		expect(target.textContent).not.toContain('myaccount.google.com/apppasswords');
 
-		gmailPreset!.click();
+		gmailPreset.click();
 		flushSync();
-		const hostInput = target.querySelector<HTMLInputElement>('input[name="host"]')!;
-		const portInput = target.querySelector<HTMLInputElement>('input[name="port"]')!;
-		expect(hostInput.value).toBe('imap.gmail.com');
-		expect(portInput.value).toBe('993');
+		expect(target.querySelector<HTMLInputElement>('input[name="host"]')!.value).toBe(
+			'imap.gmail.com'
+		);
+		expect(target.querySelector<HTMLInputElement>('input[name="port"]')!.value).toBe('993');
 
-		gmailOAuthPreset!.click();
+		gmailOAuthPreset.click();
 		flushSync();
 		expect(target.querySelector<HTMLInputElement>('input[name="authorize"]')!.value).toBe(
 			'https://accounts.google.com/o/oauth2/v2/auth'
@@ -474,12 +640,10 @@ describe('onboarding help guide and language selection', () => {
 			'https://mail.google.com/'
 		);
 
-		protonPreset!.click();
+		protonPreset.click();
 		flushSync();
-		const bridgeHost = target.querySelector<HTMLInputElement>('input[name="host"]')!;
-		const bridgePort = target.querySelector<HTMLInputElement>('input[name="port"]')!;
-		expect(bridgeHost.value).toBe('127.0.0.1');
-		expect(bridgePort.value).toBe('1143');
+		expect(target.querySelector<HTMLInputElement>('input[name="host"]')!.value).toBe('127.0.0.1');
+		expect(target.querySelector<HTMLInputElement>('input[name="port"]')!.value).toBe('1143');
 
 		await unmount(component);
 	});

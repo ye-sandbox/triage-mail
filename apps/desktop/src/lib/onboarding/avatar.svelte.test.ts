@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { AvatarController, avatarFallback, MAX_AVATAR_BYTES } from './avatar-controller.svelte';
 import type { AccountAvatar, AvatarTransport } from './avatar-types';
-import AccountPhoto from './AccountPhoto.svelte';
+import WdgAccountAvatar from './WdgAccountAvatar.svelte';
 import { i18n } from '../i18n/index.svelte';
 
 const photo: AccountAvatar = {
@@ -107,12 +107,12 @@ it('uses safe fallback when loading fails and derives stable initials and accent
 	expect(avatarFallback('a', 'reader.name@example.com').initials).toBe('RN');
 });
 
-it('renders bilingual controls and preserves the preview after a failed removal', async () => {
+it('renders bilingual controls in WdgAccountAvatar and preserves the preview after a failed removal', async () => {
 	const { transport } = fixture();
 	transport.get.mockResolvedValue(photo);
 	const target = document.createElement('div');
 	document.body.append(target);
-	const component = mount(AccountPhoto, {
+	const component = mount(WdgAccountAvatar, {
 		target,
 		props: { accountId: 'a', label: 'reader@example.com', transport }
 	});
@@ -120,7 +120,9 @@ it('renders bilingual controls and preserves the preview after a failed removal'
 	expect(target.querySelector('input')?.accept).toBe('image/jpeg,image/png,image/webp');
 	expect(target.querySelector('img')?.src).toMatch(/^data:image\/png;base64,/);
 	transport.remove.mockRejectedValueOnce('private-diagnostic');
-	target.querySelector('button')?.click();
+	[...target.querySelectorAll('button')]
+		.find((button) => button.textContent?.includes('Remove photo'))!
+		.click();
 	await settle();
 	expect(target.querySelector('img')).not.toBeNull();
 	expect(target.querySelector('[role="alert"]')?.textContent).toContain('could not be saved');
@@ -131,11 +133,11 @@ it('renders bilingual controls and preserves the preview after a failed removal'
 	await unmount(component);
 });
 
-it('handles file selection through the local input and reloads persisted thumbnails on remount', async () => {
+it('handles file selection through the local input in WdgAccountAvatar and reloads persisted thumbnails on remount', async () => {
 	const { transport } = fixture();
 	const target = document.createElement('div');
 	document.body.append(target);
-	let component = mount(AccountPhoto, {
+	let component = mount(WdgAccountAvatar, {
 		target,
 		props: { accountId: 'a', label: 'reader@example.com', transport }
 	});
@@ -149,7 +151,7 @@ it('handles file selection through the local input and reloads persisted thumbna
 	expect(target.querySelector('img')).not.toBeNull();
 	await unmount(component);
 	transport.get.mockResolvedValue(photo);
-	component = mount(AccountPhoto, {
+	component = mount(WdgAccountAvatar, {
 		target,
 		props: { accountId: 'a', label: 'reader@example.com', transport }
 	});

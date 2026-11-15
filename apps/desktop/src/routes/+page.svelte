@@ -1,9 +1,9 @@
 <script lang="ts">
-	import DesktopApp from '$lib/onboarding/DesktopApp.svelte';
+	import WdgBootGate from '$lib/onboarding/WdgBootGate.svelte';
 </script>
 
 <svelte:head>
 	<title>Triage Mail</title>
 	<meta name="description" content="Your private, local-first unified inbox." />
 </svelte:head>
-<DesktopApp />
+<WdgBootGate />
