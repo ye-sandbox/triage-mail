@@ -4,6 +4,10 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig(({ mode }) => ({
 	plugins: [tailwindcss(), sveltekit()],
+	server: {
+		port: 1420,
+		strictPort: true
+	},
 	...(mode === 'test' ? { resolve: { conditions: ['browser'] } } : {}),
 	test: {
 		environment: 'jsdom',
