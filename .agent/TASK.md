@@ -7,21 +7,17 @@
 
 ## Active Task
 
-### Task [04.16]: UI v2 Boot Gate, Vault Unlock & Multi-Account Onboarding (`/onboarding`)
+### Task [04.17]: UI v2 Due Dates & Reminders Hub (`/due-dates`)
 
 - **Status:** READY FOR PLANNING
-- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.15]`)
-- **Scope:** Replace `DesktopApp`, `OnboardingView`, `AccountForm`, `AccountConnectionFields`, `AccountCredentialFields`, `AccountHelpGuide`, `AccountList`, `AccountPhoto`, and recovery `BackupForm` with `WdgVaultUnlockCard`, `WdgAccountDiscoveryForm`, and `WdgConnectedAccountList` on `/onboarding`. Wire boot gate (recovery/locked/no-accounts -> `/onboarding`) into `onboarding/controller.svelte.ts`, `discovery-controller.svelte.ts`, `avatar-controller.svelte.ts`, and `cmd_list_folders`, preserving `clearCredentialInputs`. Show demo phase switcher only outside Tauri. Update onboarding/avatar tests.
+- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.16]`)
+- **Scope:** Promote `DueDateDashboard` and `RemindersModule` to `/due-dates` using `WdgDueDateKpis`, `WdgBoletoCard`, and `WdgReminderConfigDrawer` wired to `reminders/transport.ts`. Feed live `Overdue + Due Today` badge counts into `SidebarNavRoutes` and route `"View Email"` back to `/` with message selection. Update `reminders.svelte.test.ts`.
 
 ---
 
 ## UI v2 Redesign Queue (`feat/ui-v2-redesign`)
 
 Sequential 100% UI replacement roadmap following `[04.16]`. Priority: match the generated UI v2 layout/polish while preserving Rust backend contracts (`crates/*`, `apps/desktop/src-tauri`) and migrating mock data to real `transport.ts` / controllers progressively.
-
-### Task [04.17]: UI v2 Due Dates & Reminders Hub (`/due-dates`)
-- **Status:** QUEUED (after `[04.16]`)
-- **Scope:** Promote `DueDateDashboard` and `RemindersModule` to `/due-dates` using `WdgDueDateKpis`, `WdgBoletoCard`, and `WdgReminderConfigDrawer` wired to `reminders/transport.ts`. Feed live `Overdue + Due Today` badge counts into `SidebarNavRoutes` and route `"View Email"` back to `/` with message selection. Update `reminders.svelte.test.ts`.
 
 ### Task [04.18]: UI v2 Automation Workspace — Rules Simulator, Alerts & Sender Governance (`/automation`)
 - **Status:** QUEUED (after `[04.17]`)
@@ -34,6 +30,38 @@ Sequential 100% UI replacement roadmap following `[04.16]`. Priority: match the 
 ---
 
 ## Latest Completed Task
+
+### Task [04.16]: UI v2 Boot Gate, Vault Unlock & Multi-Account Onboarding (`/onboarding`)
+
+- **Status:** DONE
+- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.15]`)
+- **Source Reference:** `/mnt/c/Users/y/Downloads/triage-mail` (`src/routes/onboarding/+page.svelte`, `src/lib/onboarding/*`)
+- **Systems Involved:** `apps/desktop/src/routes/+page.svelte`, `apps/desktop/src/routes/onboarding/+page.svelte`, `apps/desktop/src/lib/onboarding/*`, `apps/desktop/src/lib/i18n/{types.ts,translations.ts}`.
+
+#### Completion (2026-11-15)
+
+- **Delivered:**
+  - Added [onboarding/session.svelte.ts](apps/desktop/src/lib/onboarding/session.svelte.ts) (`OnboardingSession` + shared singleton), [onboarding/onboarding.fixtures.ts](apps/desktop/src/lib/onboarding/onboarding.fixtures.ts) (`@example.com`/`@example.org`/`@example.net` only), and extended [onboarding/types.ts](apps/desktop/src/lib/onboarding/types.ts) with `FolderCatalogTransport` and `RecoveryTransport` while keeping `appStore.vaultUnlocked` and `appStore.accounts` synchronized in native runtime.
+  - Ported UI v2 onboarding widgets in pure Svelte 5 Runes: `WdgBootGate.svelte`, `WdgOnboardingPage.svelte`, `WdgVaultUnlockCard.svelte` (passphrase unlock, OS keyring retry, `.triagebak` encrypted backup recovery via `transfer.choose(false)` / `transfer.restore` with `SettingsFormGuard` + `clearCredentialInputs` + `onSkipRecovery`), `WdgAccountDiscoveryForm.svelte` (wired to `AccountController` + `DiscoveryController` with explicit online ISPDB lookup, explicit TLS port 993 probe, `providerPresets`, OAuth `Channel` `onReady` + `cmd_cancel_authorization`, and immediate `clearCredentialInputs`), `WdgAccountHelpGuide.svelte` (collapsible bilingual setup playbooks), `WdgConnectedAccountList.svelte` (lazy `cmd_list_folders` expansion/retry and empty states), and `WdgAccountAvatar.svelte` (`AvatarController` 128×128 PNG normalization, 2 MiB max, `avatarFallback`).
+  - Replaced `DesktopApp` on `/` ([routes/+page.svelte](apps/desktop/src/routes/+page.svelte)) with `WdgBootGate` and `OnboardingView` on `/onboarding` ([routes/onboarding/+page.svelte](apps/desktop/src/routes/onboarding/+page.svelte)) with `WdgOnboardingPage`, gating the demo phase switcher strictly outside Tauri (`!nativeAvailable()`). Legacy `AccountForm`/`AccountList`/`AccountPhoto` remain only until `[04.19]` replaces `SettingsDialog`/`AccountsModule`.
+  - Added 1:1 EN/PT-BR onboarding keys in [i18n/types.ts](apps/desktop/src/lib/i18n/types.ts) and [i18n/translations.ts](apps/desktop/src/lib/i18n/translations.ts), and updated [onboarding.svelte.test.ts](apps/desktop/src/lib/onboarding/onboarding.svelte.test.ts), [discovery.svelte.test.ts](apps/desktop/src/lib/onboarding/discovery.svelte.test.ts), and [avatar.svelte.test.ts](apps/desktop/src/lib/onboarding/avatar.svelte.test.ts).
+- **Validation:**
+  - `pnpm --filter desktop check`: 0 errors, 0 warnings.
+  - `pnpm --filter desktop test`: 33 test files passed, 197 tests passed.
+  - `pnpm --filter desktop build`: Built static SPA to `apps/desktop/build` via `@sveltejs/adapter-static`.
+  - `! grep -rn "export let" apps/desktop/src/`, `node scripts/ci-guard.mjs`, `node --test scripts/ci-guard.test.mjs` (5/5 passed), and `git diff --check` clean.
+  - Rust workspace (`crates/*`, `apps/desktop/src-tauri`): zero files modified; local `cargo` toolchain unavailable in current environment (`/home/yegear/.cargo/bin/cargo` symlink dangling).
+- **Next:** Task `[04.17]` (`READY FOR PLANNING`).
+
+#### Closing Checklist — [04.16]
+
+- [x] Shared `OnboardingSession`, recovery gating, `appStore` state sync, and `@example.*` demo fixtures implemented without touching Rust IPC contracts.
+- [x] `WdgBootGate`, `WdgOnboardingPage`, `WdgVaultUnlockCard`, `WdgAccountDiscoveryForm`, `WdgAccountHelpGuide`, `WdgConnectedAccountList`, and `WdgAccountAvatar` ported in Svelte 5 Runes with `clearCredentialInputs` and `cmd_list_folders`.
+- [x] Demo phase switcher gated strictly to `!nativeAvailable()`; native boot redirects `recovery`/`locked`/`error`/0-accounts to `/onboarding`.
+- [x] `onboarding.svelte.test.ts`, `discovery.svelte.test.ts`, and `avatar.svelte.test.ts` updated; `check`, `test` (197/197), `build`, `ci-guard`, and `git diff --check` passed.
+- [x] Atomic Conventional Commit recorded on `feat/ui-v2-redesign` without pushing.
+
+---
 
 ### Task [04.15]: UI v2 Unified Inbox, Virtualized Message List, Reader & Command Palette (`/`)
 

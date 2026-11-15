@@ -30,3 +30,13 @@ export interface AccountTransport {
 
 export type AccountSubmission =
 	{ credentials: PasswordCredentials } | { authorization: Authorization };
+
+export type FolderCatalogTransport = {
+	listFolders: (accountId: string) => Promise<import('../inbox/types').FolderDto[]>;
+};
+
+export type RecoveryTransport = {
+	available: () => Promise<boolean>;
+	choose: (save: boolean) => Promise<string | null>;
+	restore: (path: string, passphrase: string, consent: boolean) => Promise<void>;
+};

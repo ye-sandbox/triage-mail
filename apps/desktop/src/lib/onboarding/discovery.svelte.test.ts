@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
-import AccountForm from './AccountForm.svelte';
+import WdgAccountDiscoveryForm from './WdgAccountDiscoveryForm.svelte';
 import { AccountController } from './controller.svelte';
 import { DiscoveryController } from './discovery-controller.svelte';
 import { providerPresets } from './presets';
@@ -107,21 +107,19 @@ it('renders email first, requests online lookup only by click and confirms the d
 		authorize: async () => 'a',
 		cancel: async () => {}
 	});
-	const component = mount(AccountForm, {
+	const component = mount(WdgAccountDiscoveryForm, {
 		target,
 		props: { controller, discoveryTransport: api }
 	});
 	flushSync();
 	const input = target.querySelector<HTMLInputElement>('input[name="email"]')!;
 	expect(target.querySelector('input')).toBe(input);
-	const advanced = target.querySelector('details')!;
-	expect(advanced.open).toBe(false);
 	input.value = 'reader@example.com';
 	input.dispatchEvent(new Event('input', { bubbles: true }));
 	flushSync();
 	expect(api.discover).not.toHaveBeenCalled();
 	[...target.querySelectorAll('button')]
-		.find((b) => b.textContent === 'Look up settings online')!
+		.find((b) => b.textContent?.includes('Look up settings online'))!
 		.click();
 	await tick();
 	await tick();
@@ -139,7 +137,7 @@ it('renders email first, requests online lookup only by click and confirms the d
 	await unmount(component);
 });
 
-it('preserves email across Microsoft setup and clears credentials when switching methods', async () => {
+it('preserves email across Outlook PKCE setup and clears credentials when switching methods', async () => {
 	const target = document.createElement('div');
 	document.body.append(target);
 	const authorize = vi.fn().mockResolvedValue('a');
@@ -150,7 +148,7 @@ it('preserves email across Microsoft setup and clears credentials when switching
 		authorize,
 		cancel: async () => {}
 	});
-	const component = mount(AccountForm, {
+	const component = mount(WdgAccountDiscoveryForm, {
 		target,
 		props: { controller, discoveryTransport: transport() }
 	});
@@ -160,7 +158,7 @@ it('preserves email across Microsoft setup and clears credentials when switching
 	const oldPassword = target.querySelector<HTMLInputElement>('input[name="secret"]')!;
 	oldPassword.value = 'synthetic-app-password';
 	[...target.querySelectorAll('button')]
-		.find((b) => b.textContent === 'Set up Microsoft sign-in')!
+		.find((b) => b.textContent?.trim() === 'Outlook')!
 		.click();
 	flushSync();
 	expect(oldPassword.value).toBe('');
@@ -183,7 +181,7 @@ it('preserves email across Microsoft setup and clears credentials when switching
 	await unmount(component);
 });
 
-it('opens advanced settings for unresolved providers and keeps them open while editing', async () => {
+it('surfaces unresolved lookup feedback and preserves manual host input while editing', async () => {
 	const api = transport();
 	api.discover.mockResolvedValue({ ...result, imap_host: null, source: 'Unresolved' });
 	const target = document.createElement('div');
@@ -195,22 +193,24 @@ it('opens advanced settings for unresolved providers and keeps them open while e
 		authorize: async () => 'a',
 		cancel: async () => {}
 	});
-	const component = mount(AccountForm, { target, props: { controller, discoveryTransport: api } });
+	const component = mount(WdgAccountDiscoveryForm, {
+		target,
+		props: { controller, discoveryTransport: api }
+	});
 	flushSync();
 	target.querySelector<HTMLInputElement>('input[name="email"]')!.value = 'reader@example.com';
 	[...target.querySelectorAll('button')]
-		.find((b) => b.textContent === 'Look up settings online')!
+		.find((b) => b.textContent?.includes('Look up settings online'))!
 		.click();
 	await tick();
 	await tick();
 	flushSync();
-	const details = target.querySelector('details')!;
-	expect(details.open).toBe(true);
+	expect(target.textContent).toContain('No matching settings found');
 	const host = target.querySelector<HTMLInputElement>('input[name="host"]')!;
+	expect(host.value).toBe('');
 	host.value = 'manual.example.org';
 	host.dispatchEvent(new Event('input', { bubbles: true }));
 	flushSync();
-	expect(details.open).toBe(true);
 	expect(host.value).toBe('manual.example.org');
 	await unmount(component);
 });

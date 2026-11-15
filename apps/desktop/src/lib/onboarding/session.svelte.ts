@@ -1,0 +1,113 @@
+import { transfer } from '../backup/transport';
+import { nativeAvailable } from '$lib/inbox/transport';
+import { toShellAccounts } from '$lib/inbox/workspace.svelte';
+import { appStore } from '$lib/stores/app.svelte';
+import { AccountController } from './controller.svelte';
+import { nativeAccountTransport } from './transport';
+import type { AccountTransport, RecoveryTransport } from './types';
+
+export interface OnboardingSessionOptions {
+	accountTransport?: AccountTransport;
+	recoveryTransport?: RecoveryTransport;
+	available?: () => boolean;
+}
+
+export class OnboardingSession {
+	readonly accounts: AccountController;
+	readonly recoveryTransport: RecoveryTransport;
+	readonly available: () => boolean;
+
+	recovery = $state(false);
+	booting = $state(false);
+	booted = $state(false);
+	private revision = 0;
+
+	constructor(options: OnboardingSessionOptions = {}) {
+		const accountTransport = options.accountTransport ?? nativeAccountTransport;
+		this.accounts = new AccountController(accountTransport);
+		this.recoveryTransport = options.recoveryTransport ?? transfer;
+		this.available = options.available ?? nativeAvailable;
+	}
+
+	get isNative(): boolean {
+		return this.available();
+	}
+
+	get needsOnboarding(): boolean {
+		if (!this.available()) return false;
+		if (this.recovery) return true;
+		if (this.accounts.phase === 'locked' || this.accounts.phase === 'error') return true;
+		if (this.accounts.phase === 'ready' && this.accounts.accounts.length === 0) return true;
+		return false;
+	}
+
+	syncShellState() {
+		if (!this.available()) return;
+		appStore.vaultUnlocked = !this.recovery && this.accounts.phase === 'ready';
+		if (this.accounts.phase === 'ready') {
+			appStore.accounts = toShellAccounts(this.accounts.accounts);
+		}
+	}
+
+	async boot(force = false): Promise<void> {
+		if (this.booted && !force) return;
+		const revision = ++this.revision;
+		this.booting = true;
+
+		try {
+			if (!this.available()) {
+				this.recovery = false;
+				await this.accounts.load(false);
+				if (revision !== this.revision) return;
+				this.booted = true;
+				return;
+			}
+
+			if (this.accounts.transport === nativeAccountTransport || this.recoveryTransport !== transfer) {
+				try {
+					const hasRecovery = await this.recoveryTransport.available();
+					if (revision !== this.revision) return;
+					if (hasRecovery) {
+						this.recovery = true;
+						this.booted = true;
+						this.syncShellState();
+						return;
+					}
+				} catch {
+					// Older native hosts retain normal startup.
+				}
+			}
+
+			this.recovery = false;
+			await this.accounts.load(true);
+			if (revision !== this.revision) return;
+			this.booted = true;
+			this.syncShellState();
+		} finally {
+			if (revision === this.revision) {
+				this.booting = false;
+			}
+		}
+	}
+
+	async continueWithoutRecovery(): Promise<void> {
+		this.recovery = false;
+		await this.accounts.load(this.available());
+		this.booted = true;
+		this.syncShellState();
+	}
+
+	async completeRecovery(): Promise<void> {
+		this.recovery = false;
+		await this.accounts.load(this.available());
+		this.booted = true;
+		this.syncShellState();
+	}
+
+	dispose() {
+		this.revision++;
+		this.accounts.dispose();
+	}
+}
+
+export const onboardingSession = new OnboardingSession();
