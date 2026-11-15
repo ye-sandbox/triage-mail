@@ -50,6 +50,7 @@ class AppStore {
 	privacyBlockRemoteImages = $state<boolean>(true);
 
 	activeScope = $state<ScopeFilter>({ kind: 'inbox' });
+	pendingSelectMessageId = $state<string | null>(null);
 	loadedCount = $state<number>(0);
 	unreadTotal = $state<number>(0);
 	overdueAndDueTodayCount = $state<number>(0);
@@ -112,6 +113,16 @@ class AppStore {
 	setScope(scope: ScopeFilter) {
 		this.activeScope = scope;
 		this.scopeChangeHook?.(scope);
+	}
+
+	requestSelectMessage(messageId: string) {
+		this.pendingSelectMessageId = messageId;
+	}
+
+	consumePendingSelectMessage(): string | null {
+		const id = this.pendingSelectMessageId;
+		this.pendingSelectMessageId = null;
+		return id;
 	}
 
 	registerShellHooks(hooks: {

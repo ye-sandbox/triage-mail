@@ -71,3 +71,14 @@ export function calculateDueDateStatus(item: DueDateItem, todayIso?: string): Du
 	if (item.due_date_iso === today) return 'DueToday';
 	return 'Upcoming';
 }
+
+export function countOverdueAndDueToday(items: DueDateItem[], todayIso?: string): number {
+	let count = 0;
+	for (const item of items) {
+		const status = calculateDueDateStatus(item, todayIso);
+		if (status === 'Overdue' || status === 'DueToday') {
+			count += 1;
+		}
+	}
+	return count;
+}
