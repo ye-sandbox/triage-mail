@@ -7,21 +7,17 @@
 
 ## Active Task
 
-### Task [04.15]: UI v2 Unified Inbox, Virtualized Message List, Reader & Command Palette (`/`)
+### Task [04.16]: UI v2 Boot Gate, Vault Unlock & Multi-Account Onboarding (`/onboarding`)
 
 - **Status:** READY FOR PLANNING
-- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.14]`)
-- **Scope:** Replace `InboxView`, `Sidebar`, `SearchToolbar`, `MessageList`, `MessageState`, `MessageActions`, `SelectionOverview`, `MessageContent`, `AttachmentDownload`, `TriageBadges`, `CommandPalette`, `SnoozeForm`, and `Conversation*` with `WdgInboxStatsBar`, `WdgMessageList`, `WdgMessageReader`, `WdgReaderHeader`, `WdgExtractionSummary`, `WdgCommandPalette`, and `WdgSnoozeSheet`. Wire into `InboxController`, `virtual.ts` (`ROW_HEIGHT = 88`), `BadgeLoader`, and `reader/transport.ts` (`cmd_get_message_body`, `cmd_fetch_attachment`, `cmd_summarize_message`, `cmd_correct_category`), keeping fixture fallback only when `!nativeAvailable()`. Update inbox/reader/palette `*.svelte.test.ts`.
+- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.15]`)
+- **Scope:** Replace `DesktopApp`, `OnboardingView`, `AccountForm`, `AccountConnectionFields`, `AccountCredentialFields`, `AccountHelpGuide`, `AccountList`, `AccountPhoto`, and recovery `BackupForm` with `WdgVaultUnlockCard`, `WdgAccountDiscoveryForm`, and `WdgConnectedAccountList` on `/onboarding`. Wire boot gate (recovery/locked/no-accounts -> `/onboarding`) into `onboarding/controller.svelte.ts`, `discovery-controller.svelte.ts`, `avatar-controller.svelte.ts`, and `cmd_list_folders`, preserving `clearCredentialInputs`. Show demo phase switcher only outside Tauri. Update onboarding/avatar tests.
 
 ---
 
 ## UI v2 Redesign Queue (`feat/ui-v2-redesign`)
 
-Sequential 100% UI replacement roadmap following `[04.15]`. Priority: match the generated UI v2 layout/polish while preserving Rust backend contracts (`crates/*`, `apps/desktop/src-tauri`) and migrating mock data to real `transport.ts` / controllers progressively.
-
-### Task [04.16]: UI v2 Boot Gate, Vault Unlock & Multi-Account Onboarding (`/onboarding`)
-- **Status:** QUEUED (after `[04.15]`)
-- **Scope:** Replace `DesktopApp`, `OnboardingView`, `AccountForm`, `AccountConnectionFields`, `AccountCredentialFields`, `AccountHelpGuide`, `AccountList`, `AccountPhoto`, and recovery `BackupForm` with `WdgVaultUnlockCard`, `WdgAccountDiscoveryForm`, and `WdgConnectedAccountList` on `/onboarding`. Wire boot gate (recovery/locked/no-accounts -> `/onboarding`) into `onboarding/controller.svelte.ts`, `discovery-controller.svelte.ts`, `avatar-controller.svelte.ts`, and `cmd_list_folders`, preserving `clearCredentialInputs`. Show demo phase switcher only outside Tauri. Update onboarding/avatar tests.
+Sequential 100% UI replacement roadmap following `[04.16]`. Priority: match the generated UI v2 layout/polish while preserving Rust backend contracts (`crates/*`, `apps/desktop/src-tauri`) and migrating mock data to real `transport.ts` / controllers progressively.
 
 ### Task [04.17]: UI v2 Due Dates & Reminders Hub (`/due-dates`)
 - **Status:** QUEUED (after `[04.16]`)
@@ -34,6 +30,40 @@ Sequential 100% UI replacement roadmap following `[04.15]`. Priority: match the 
 ### Task [04.19]: UI v2 Settings, Search Index, Local AI, Backup & Legacy Cleanup (`/settings`)
 - **Status:** QUEUED (after `[04.18]`)
 - **Scope:** Replace `SettingsDialog`, `SettingsView`, `settings/modules/*`, `AiSettingsForm`, `ModelSettings`, `LearnedSearchSettings`, `BackupModule`, `PortableForm`, and `LanguageSelector` with `WdgSearchIndexPanel`, `WdgAiModelsPanel`, `WdgPrivacyPanel`, `WdgBackupDefinitionsPanel`, and `WdgImportPreviewDialog` on `/settings`, wired to `settings/transport.ts`, `settings/guards.ts`, and `backup/transport.ts`. Remove all obsolete `.svelte` files and orphan fixtures, update remaining tests, and pass full repository DoD (`cargo check/test/fmt/clippy`, `pnpm check/test/build`, zero `export let`, zero PII/secrets).
+
+---
+
+## Latest Completed Task
+
+### Task [04.15]: UI v2 Unified Inbox, Virtualized Message List, Reader & Command Palette (`/`)
+
+- **Status:** DONE
+- **Branch:** `feat/ui-v2-redesign` (branched from `main` at `c5423ed`, continuing after `[04.14]`)
+- **Source Reference:** `/mnt/c/Users/y/Downloads/triage-mail` (`src/routes/+page.svelte`, `src/lib/inbox/*`)
+- **Systems Involved:** `apps/desktop/src/routes/+layout.svelte`, `apps/desktop/src/lib/onboarding/InboxSession.svelte`, `apps/desktop/src/lib/shell/SidebarNav.svelte`, `apps/desktop/src/lib/shell/SidebarNavRoutes.svelte`, `apps/desktop/src/lib/inbox/*`, `apps/desktop/src/lib/reader/*`, `apps/desktop/src/lib/i18n/*`.
+
+#### Completion (2026-11-15)
+
+- **Delivered:**
+  - Extended [reader/transport.ts](apps/desktop/src/lib/reader/transport.ts) and [reader/types.ts](apps/desktop/src/lib/reader/types.ts) with `cmd_summarize_message`, `cmd_category_metadata`, and `cmd_correct_category` alongside `cmd_get_message_body` and `cmd_fetch_attachment`, verified in `reader/transport.test.ts`.
+  - Added [inbox.fixtures.ts](apps/desktop/src/lib/inbox/inbox.fixtures.ts) (`@example.com`/`@example.org` only), [demo.svelte.ts](apps/desktop/src/lib/inbox/demo.svelte.ts), and [workspace.svelte.ts](apps/desktop/src/lib/inbox/workspace.svelte.ts) bridging `InboxController`, `BadgeLoader`, `appStore` shell hooks/metrics, and `!nativeAvailable()` fixture demo fallback.
+  - Ported UI v2 inbox widgets in Svelte 5 Runes: `WdgInboxStatsBar.svelte`, `WdgMessageList.svelte` (preserving `virtual.ts` `ROW_HEIGHT = 88`, `OVERSCAN = 5`, scroll anchoring, prefetching, and listbox keyboard nav), `WdgRowBadges.svelte`, `WdgMessageReader.svelte` (identity-keyed stale-response cancellation, CSP/sandbox iframe, remote-image consent, `[04.7]` AI summary consent, lazy attachment download + revocation), `WdgReaderHeader.svelte`, `WdgExtractionSummary.svelte`, `WdgConversationThread.svelte`, `WdgCommandPalette.svelte` (token/substring filter, RFC 8058 gating, local tag 128-byte UTF-8 dialog), and `WdgSnoozeSheet.svelte` (`vaul-svelte` mobile drawer / `bits-ui` desktop dialog with UTC validation).
+  - Replaced `InboxView` usage in `InboxSession.svelte`, mounted `WdgCommandPalette` and `WdgSnoozeSheet` in `+layout.svelte`, guarded `goto()` calls in `SidebarNav.svelte`/`SidebarNavRoutes.svelte`/`WdgCommandPalette.svelte` outside booted SvelteKit client routing, and updated `triage.svelte.test.ts`, `palette.svelte.test.ts`, `settings-shell.svelte.test.ts`, `mailboxes.svelte.test.ts`, `onboarding.svelte.test.ts`, and `reader.svelte.test.ts`.
+- **Validation:**
+  - `pnpm --filter desktop check`: 0 errors, 0 warnings.
+  - `pnpm --filter desktop test`: 33 test files passed, 193 tests passed.
+  - `pnpm --filter desktop build`: Built static SPA to `apps/desktop/build` via `@sveltejs/adapter-static`.
+  - `! grep -rn "export let" apps/desktop/src/`, `node scripts/ci-guard.mjs` (477 tracked text files + 12 untracked files scanned), `node --test scripts/ci-guard.test.mjs` (5/5 passed), and `git diff --check` clean.
+  - Rust workspace (`crates/*`, `apps/desktop/src-tauri`): zero files modified; local `cargo` toolchain unavailable in current environment (`/home/yegear/.cargo/bin/cargo` symlink dangling).
+- **Next:** Task `[04.16]` (`READY FOR PLANNING`).
+
+#### Closing Checklist — [04.15]
+
+- [x] Unified inbox state, `reader/transport.ts` IPC extensions, `appStore` shell bridge, and `!nativeAvailable()` fixtures implemented.
+- [x] `WdgInboxStatsBar`, virtualized `WdgMessageList` (`ROW_HEIGHT = 88`), `WdgRowBadges`, `WdgMessageReader`, `WdgReaderHeader`, `WdgExtractionSummary`, and `WdgConversationThread` ported with Svelte 5 Runes.
+- [x] `WdgCommandPalette` and `WdgSnoozeSheet` mounted in `+layout.svelte` and integrated with `InboxSession.svelte`.
+- [x] `pnpm --filter desktop check`, `pnpm --filter desktop test` (193/193), `pnpm --filter desktop build`, `ci-guard`, and `git diff --check` passed.
+- [x] Atomic Conventional Commit recorded on `feat/ui-v2-redesign` without pushing.
 
 ---
 

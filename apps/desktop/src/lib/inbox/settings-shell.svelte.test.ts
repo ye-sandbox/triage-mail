@@ -1,12 +1,12 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import Sidebar from './Sidebar.svelte';
-import SearchToolbar from './SearchToolbar.svelte';
-import InboxView from './InboxView.svelte';
 import InboxSession from '../onboarding/InboxSession.svelte';
+import WdgInboxStatsBar from './WdgInboxStatsBar.svelte';
 import { InboxController } from './controller.svelte';
-import type { InboxTransport, MessageRowDto, SearchMode } from './types';
+import { createLiveWorkspace } from './workspace.svelte';
+import type { InboxTransport, MessageRowDto } from './types';
 import type { Settings, SettingsTransport } from '$lib/settings/types';
+import { appStore } from '$lib/stores/app.svelte';
 
 beforeAll(() => {
 	vi.stubGlobal(
@@ -19,10 +19,10 @@ beforeAll(() => {
 	);
 });
 
-function createMockInboxTransport(): InboxTransport {
+function createMockInboxTransport(rows: MessageRowDto[] = []): InboxTransport {
 	return {
 		subscribe: vi.fn(async () => vi.fn()),
-		search: vi.fn(async () => []),
+		search: vi.fn(async () => rows),
 		triage: vi.fn(async () => {})
 	};
 }
@@ -51,8 +51,8 @@ function createMockSettingsTransport(initialSettings?: Partial<Settings>): Setti
 			currentSettings.ai = { ...ai };
 			currentSettings.has_api_key = Boolean(key);
 		}),
-		tokenizer: vi.fn(async (t) => {
-			currentSettings.tokenizer = t;
+		tokenizer: vi.fn(async (tok) => {
+			currentSettings.tokenizer = tok;
 		}),
 		setExperimentalSemanticSearch: vi.fn(async (enabled) => {
 			currentSettings.experimental_semantic_search = enabled;
@@ -64,7 +64,7 @@ function createMockSettingsTransport(initialSettings?: Partial<Settings>): Setti
 	};
 }
 
-describe('Settings shell integration and persistent inbox', () => {
+describe('UI v2 Settings shell integration and persistent inbox', () => {
 	let cleanupFns: Array<() => void> = [];
 
 	afterEach(() => {
@@ -73,22 +73,27 @@ describe('Settings shell integration and persistent inbox', () => {
 		}
 		cleanupFns = [];
 		document.body.innerHTML = '';
+		appStore.setScope({ kind: 'inbox' });
 	});
 
-	it('renders Settings gear button in Sidebar footer when openSettings is provided', () => {
+	it('renders Settings trigger button in WdgInboxStatsBar when openSettings is provided', () => {
 		const target = document.createElement('div');
 		document.body.appendChild(target);
 		const openSettings = vi.fn();
+		const workspace = createLiveWorkspace(new InboxController(createMockInboxTransport()), {
+			connected: true
+		});
 
-		const instance = mount(Sidebar, {
+		const instance = mount(WdgInboxStatsBar, {
 			target,
 			props: {
-				status: 'Idle',
+				workspace,
 				openSettings
 			}
 		});
 		flushSync();
 		cleanupFns.push(() => {
+			workspace.inbox.dispose();
 			unmount(instance);
 			target.remove();
 		});
@@ -102,39 +107,7 @@ describe('Settings shell integration and persistent inbox', () => {
 		expect(openSettings).toHaveBeenCalledTimes(1);
 	});
 
-	it('renders Settings gear icon button in SearchToolbar', () => {
-		const target = document.createElement('div');
-		document.body.appendChild(target);
-		const openSettings = vi.fn();
-		const toggleSidebar = vi.fn();
-		const refresh = vi.fn();
-
-		const instance = mount(SearchToolbar, {
-			target,
-			props: {
-				sidebarOpen: false,
-				toggleSidebar,
-				refresh,
-				openSettings
-			}
-		});
-		flushSync();
-		cleanupFns.push(() => {
-			unmount(instance);
-			target.remove();
-		});
-
-		const settingsBtn = target.querySelector<HTMLButtonElement>('button[aria-label="Settings"]');
-		expect(settingsBtn).not.toBeNull();
-		expect(settingsBtn?.getAttribute('aria-haspopup')).toBe('dialog');
-
-		settingsBtn?.click();
-		expect(openSettings).toHaveBeenCalledTimes(1);
-	});
-
-	it('suspends inbox keyboard shortcuts when settingsOpen is true', async () => {
-		const transport = createMockInboxTransport();
-		const inbox = new InboxController(transport);
+	it('suspends inbox keyboard shortcuts while SettingsDialog is open in InboxSession', async () => {
 		const sampleRow: MessageRowDto = {
 			id: 'msg-1',
 			account_id: 'acc-1',
@@ -150,52 +123,16 @@ describe('Settings shell integration and persistent inbox', () => {
 			folder_override: null,
 			triage_badges: []
 		};
-		inbox.rows = [sampleRow];
-		inbox.selectedId = 'msg-1';
-
+		const inboxTransport = createMockInboxTransport([sampleRow]);
+		const settingsTransport = createMockSettingsTransport();
 		const target = document.createElement('div');
 		document.body.appendChild(target);
-
-		const instance = mount(InboxView, {
-			target,
-			props: {
-				inbox,
-				connected: true,
-				settingsOpen: true
-			}
-		});
-		flushSync();
-		cleanupFns.push(() => {
-			unmount(instance);
-			target.remove();
-		});
-
-		// Trigger keyboard shortcuts: 'r' to mark read, 'e' to archive
-		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r' }));
-		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e' }));
-		flushSync();
-
-		// Because settingsOpen is true, shortcuts must be suspended and mutate must not be called
-		expect(transport.triage).not.toHaveBeenCalled();
-
-		// Opening command palette should also be suppressed
-		const paletteBtn = target.querySelector<HTMLButtonElement>('button[aria-keyshortcuts="Meta+K Control+K"]');
-		paletteBtn?.click();
-		flushSync();
-		expect(target.querySelector('[role="combobox"]')).toBeNull();
-	});
-
-	it('mounts InboxSession with persistent inbox and renders SettingsDialog as sibling overlay', async () => {
-		const target = document.createElement('div');
-		document.body.appendChild(target);
-		const settingsTransport = createMockSettingsTransport({
-			experimental_semantic_search: false
-		});
 
 		const instance = mount(InboxSession, {
 			target,
 			props: {
 				connected: true,
+				inboxTransport,
 				settingsTransport
 			}
 		});
@@ -205,36 +142,87 @@ describe('Settings shell integration and persistent inbox', () => {
 			target.remove();
 		});
 
-		// Initially, settings dialog is not open
-		expect(target.querySelector('[role="dialog"]')).toBeNull();
-		expect(target.querySelector('main')).not.toBeNull();
+		await vi.waitFor(() => expect(target.querySelector('[role="option"]')).not.toBeNull());
+		target.querySelector<HTMLElement>('[role="option"]')?.click();
+		flushSync();
 
-		// Click settings gear button in sidebar
+		target.querySelector<HTMLButtonElement>('button[aria-label="Settings"]')?.click();
+		await Promise.resolve();
+		flushSync();
+		expect(target.querySelector('[role="dialog"]')).not.toBeNull();
+
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true }));
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', bubbles: true }));
+		flushSync();
+
+		expect(inboxTransport.triage).not.toHaveBeenCalled();
+	});
+
+	it('mounts InboxSession with persistent listbox and renders SettingsDialog as sibling overlay', async () => {
+		const target = document.createElement('div');
+		document.body.appendChild(target);
+		const inboxTransport = createMockInboxTransport([]);
+		const settingsTransport = createMockSettingsTransport({
+			experimental_semantic_search: false
+		});
+
+		const instance = mount(InboxSession, {
+			target,
+			props: {
+				connected: true,
+				inboxTransport,
+				settingsTransport
+			}
+		});
+		flushSync();
+		cleanupFns.push(() => {
+			unmount(instance);
+			target.remove();
+		});
+
+		expect(target.querySelector('[role="dialog"]')).toBeNull();
+		const listbox = target.querySelector('[role="listbox"][aria-label="Messages"]');
+		expect(listbox).not.toBeNull();
+
 		const settingsBtn = target.querySelector<HTMLButtonElement>('button[aria-label="Settings"]');
 		expect(settingsBtn).not.toBeNull();
 		settingsBtn?.click();
 		flushSync();
 
-		// Await microtasks for SettingsDialog load
 		await Promise.resolve();
 		await Promise.resolve();
 		flushSync();
 
-		// SettingsDialog is mounted as sibling overlay
 		const dialog = target.querySelector('[role="dialog"]');
 		expect(dialog).not.toBeNull();
 		expect(dialog?.getAttribute('aria-modal')).toBe('true');
+		expect(target.querySelector('[role="listbox"][aria-label="Messages"]')).toBe(listbox);
 
-		// The main inbox is still mounted in the background!
-		expect(target.querySelector('main')).not.toBeNull();
-
-		// Close dialog via close button
 		const closeBtn = target.querySelector<HTMLButtonElement>('button[aria-label="Close settings"]');
 		closeBtn?.click();
 		flushSync();
 
-		// Dialog closes and main inbox is still intact
 		expect(target.querySelector('[role="dialog"]')).toBeNull();
-		expect(target.querySelector('main')).not.toBeNull();
+		expect(target.querySelector('[role="listbox"][aria-label="Messages"]')).toBe(listbox);
+	});
+
+	it('activates fixture demo workspace cleanly when connected is false (outside Tauri)', async () => {
+		const target = document.createElement('div');
+		document.body.appendChild(target);
+
+		const instance = mount(InboxSession, {
+			target,
+			props: {
+				connected: false
+			}
+		});
+		flushSync();
+		cleanupFns.push(() => {
+			unmount(instance);
+			target.remove();
+		});
+
+		await vi.waitFor(() => expect(target.querySelectorAll('[role="option"]').length).toBeGreaterThan(0));
+		expect(target.textContent).toContain('Your verification code');
 	});
 });

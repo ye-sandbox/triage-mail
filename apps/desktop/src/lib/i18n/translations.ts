@@ -390,7 +390,16 @@ export const translations: Record<SupportedLocale, Translations> = {
 			windowReopen: 'Reopen triage-mail',
 			openDrawer: 'Open navigation drawer',
 			syncNow: 'Sync now',
-			windowActionError: 'Window action unavailable.'
+			windowActionError: 'Window action unavailable.',
+			blockRemoteImages: 'Block images again',
+			downloaded: 'Downloaded',
+			noSubject: '(No subject)',
+			unknownSender: 'Unknown sender',
+			loadingMessage: 'Loading message…',
+			loadMessageError: 'Message could not be loaded. Please try again.',
+			tryAgain: 'Try again',
+			resetCategory: 'Reset to automatic',
+			noDisplayableContent: 'This message has no displayable content.'
 		}
 	},
 	'pt-BR': {
@@ -784,7 +793,16 @@ export const translations: Record<SupportedLocale, Translations> = {
 			windowReopen: 'Reabrir triage-mail',
 			openDrawer: 'Abrir menu de navegação',
 			syncNow: 'Sincronizar agora',
-			windowActionError: 'Ação da janela indisponível.'
+			windowActionError: 'Ação da janela indisponível.',
+			blockRemoteImages: 'Bloquear imagens novamente',
+			downloaded: 'Baixado',
+			noSubject: '(Sem assunto)',
+			unknownSender: 'Remetente desconhecido',
+			loadingMessage: 'Carregando mensagem…',
+			loadMessageError: 'Não foi possível carregar a mensagem. Tente novamente.',
+			tryAgain: 'Tentar novamente',
+			resetCategory: 'Restaurar automático',
+			noDisplayableContent: 'Esta mensagem não possui conteúdo exibível.'
 		}
 	}
 };

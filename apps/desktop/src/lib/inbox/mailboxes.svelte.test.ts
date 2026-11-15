@@ -2,11 +2,16 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { InboxController, PAGE_SIZE } from './controller.svelte';
 import { Mailboxes, folderGroups } from './mailboxes.svelte';
-import InboxView from './InboxView.svelte';
-import SnoozeForm from './SnoozeForm.svelte';
+import WdgInboxStatsBar from './WdgInboxStatsBar.svelte';
+import WdgMessageReader from './WdgMessageReader.svelte';
+import WdgSnoozeSheet from './WdgSnoozeSheet.svelte';
+import { createLiveWorkspace, toShellAccounts } from './workspace.svelte';
+import SidebarNav from '../shell/SidebarNav.svelte';
+import { appStore } from '../stores/app.svelte';
 import type { FolderDto, InboxTransport, MailboxScope, MessageRowDto } from './types';
 import type { AccountConfig } from '../onboarding/types';
 import { i18n } from '../i18n/index.svelte';
+
 const accounts: AccountConfig[] = ['first', 'second'].map((account_id) => ({
 	account_id,
 	email_display: `${account_id}@example.com`,
@@ -14,6 +19,7 @@ const accounts: AccountConfig[] = ['first', 'second'].map((account_id) => ({
 	imap_port: 993,
 	auth_method: 'AppPassword'
 }));
+
 const row: MessageRowDto = {
 	id: 'message',
 	account_id: 'first',
@@ -30,9 +36,11 @@ const row: MessageRowDto = {
 	folder_override: null,
 	category_badge: null
 };
+
 const scope = (account_id: string): MailboxScope => ({
 	AccountView: { account_id, view: 'Inbox' }
 });
+
 const folder = (folder_name: string, role = 'other', is_selectable = true): FolderDto => ({
 	account_id: 'first',
 	folder_name,
@@ -43,6 +51,7 @@ const folder = (folder_name: string, role = 'other', is_selectable = true): Fold
 	total_messages: null,
 	unread_messages: null
 });
+
 function deferred<T>() {
 	let resolve!: (value: T) => void;
 	let reject!: (reason: unknown) => void;
@@ -52,6 +61,7 @@ function deferred<T>() {
 	});
 	return { promise, resolve, reject };
 }
+
 function setup() {
 	const search = vi.fn<InboxTransport['search']>().mockResolvedValue([]);
 	const triage = vi.fn<InboxTransport['triage']>().mockResolvedValue(undefined);
@@ -71,7 +81,9 @@ function setup() {
 	});
 	return { inbox, search, triage, listFolders };
 }
+
 let cleanup: (() => Promise<void>) | undefined;
+
 beforeAll(() => {
 	vi.stubGlobal(
 		'ResizeObserver',
@@ -82,15 +94,22 @@ beforeAll(() => {
 		}
 	);
 });
+
 beforeEach(() => {
 	localStorage.clear();
 	i18n.setLocale('en');
+	appStore.accounts = [];
+	appStore.setScope({ kind: 'inbox' });
+	appStore.registerShellHooks({});
 });
+
 afterEach(async () => {
 	await cleanup?.();
 	cleanup = undefined;
 	vi.useRealTimers();
 	document.body.innerHTML = '';
+	appStore.registerShellHooks({});
+	appStore.accounts = [];
 });
 
 describe('mailbox scope isolation', () => {
@@ -116,6 +135,7 @@ describe('mailbox scope isolation', () => {
 		});
 		inbox.dispose();
 	});
+
 	it('scopes deep pages and ignores late pagination after a view switch', async () => {
 		const { inbox, search } = setup();
 		search.mockResolvedValueOnce(
@@ -135,6 +155,7 @@ describe('mailbox scope isolation', () => {
 		expect(inbox.loading).toBe(false);
 		inbox.dispose();
 	});
+
 	it('keeps scoped refreshes and does not accept an old refresh in a new account', async () => {
 		const { inbox, search } = setup();
 		await inbox.selectScope(scope('first'));
@@ -150,6 +171,7 @@ describe('mailbox scope isolation', () => {
 		expect(search.mock.calls.at(-1)?.[0]).not.toHaveProperty('scope');
 		inbox.dispose();
 	});
+
 	it.each([true, false])(
 		'isolates delayed mutation feedback and rollback (success=%s)',
 		async (success) => {
@@ -170,6 +192,7 @@ describe('mailbox scope isolation', () => {
 			inbox.dispose();
 		}
 	);
+
 	it('preserves IMAP identity through star/snooze actions and rolls back rejected snooze', async () => {
 		const { inbox, triage } = setup();
 		inbox.rows = [row];
@@ -213,6 +236,7 @@ describe('folder catalogs and local preferences', () => {
 		expect(boxes.catalogs.first.folders.map((f) => f.folder_name)).toEqual(['New']);
 		boxes.dispose();
 	});
+
 	it('invalidates catalogs on account removal and teardown', async () => {
 		const old = deferred<FolderDto[]>();
 		const boxes = new Mailboxes(() => old.promise);
@@ -224,6 +248,7 @@ describe('folder catalogs and local preferences', () => {
 		expect(boxes.catalogs).toEqual({});
 		boxes.dispose();
 	});
+
 	it('persists independent disclosures using only opaque IDs and handles malformed preferences', () => {
 		localStorage.setItem('triage-mail.mailbox-expansion', '{broken');
 		const boxes = new Mailboxes(async () => []);
@@ -240,6 +265,7 @@ describe('folder catalogs and local preferences', () => {
 		boxes.dispose();
 		remount.dispose();
 	});
+
 	it('groups only actual selectable server folders and recognizes the native junk role', () => {
 		const groups = folderGroups([
 			folder('INBOX', 'inbox'),
@@ -252,113 +278,75 @@ describe('folder catalogs and local preferences', () => {
 	});
 });
 
-describe('account navigation components', () => {
-	async function mountInbox() {
-		const { inbox, search, listFolders, triage } = setup();
-		const avatarTransport = { get: vi.fn().mockResolvedValue(null), set: vi.fn(), remove: vi.fn() };
+describe('UI v2 account navigation, localization, and snooze expiry', () => {
+	it('wires SidebarNav scopes into InboxWorkspace and updates WdgInboxStatsBar breadcrumb', async () => {
+		const { inbox, search } = setup();
+		appStore.accounts = toShellAccounts(accounts);
+		const workspace = createLiveWorkspace(inbox, { connected: true, accounts });
+		appStore.registerShellHooks({
+			onScopeChange: (s) => void workspace.applyShellScope(s)
+		});
+
 		const target = document.createElement('div');
 		document.body.append(target);
-		const component = mount(InboxView, {
-			target,
-			props: { inbox, connected: true, accounts, avatarTransport }
-		});
+		const nav = mount(SidebarNav, { target });
+		const bar = mount(WdgInboxStatsBar, { target, props: { workspace } });
 		flushSync();
 		cleanup = async () => {
 			inbox.dispose();
-			await unmount(component);
+			await unmount(bar);
+			await unmount(nav);
 			target.remove();
 		};
-		await vi.waitFor(() => expect(listFolders).toHaveBeenCalledTimes(2));
+
+		expect(target.textContent).toContain('first@example.com');
+		const archiveBtn = Array.from(target.querySelectorAll('button')).find(
+			(b) => b.textContent?.trim() === 'Archive'
+		)!;
+		expect(archiveBtn).toBeDefined();
+		archiveBtn.click();
 		await tick();
 		flushSync();
-		return { inbox, search, triage, target, avatarTransport };
-	}
-	it('expands accounts independently, scopes real folders, and preserves expansion on remount', async () => {
-		const { target, search, inbox, avatarTransport } = await mountInbox();
-		const headers = accounts.map((a) =>
-			target.querySelector<HTMLButtonElement>(`button[title="${a.email_display}"]`)!
-		);
-		headers[0].click();
-		headers[1].click();
-		flushSync();
-		expect(headers.map((h) => h.getAttribute('aria-expanded'))).toEqual(['true', 'true']);
-		expect(inbox.scope).toBeUndefined();
-		expect(search).not.toHaveBeenCalled();
-		const nav = target.querySelector('nav')!;
-		const spam = Array.from(nav.querySelectorAll('button')).find((b) => b.textContent === 'Spam')!;
-		spam.click();
-		flushSync();
-		await tick();
+
 		expect(search).toHaveBeenLastCalledWith(
 			expect.objectContaining({
-				scope: { AccountView: { account_id: 'first', view: { Folder: 'Spam' } } }
+				scope: { AccountView: { account_id: 'first', view: { Folder: 'Archive' } } }
 			})
 		);
-		expect(spam.getAttribute('aria-current')).toBe('page');
-		expect(target.querySelector('h1')?.textContent).toContain('first@example.com');
-		expect(avatarTransport.get).toHaveBeenCalledWith('first');
-		expect(target.querySelectorAll('img')).toHaveLength(0);
-		expect(JSON.parse(localStorage.getItem('triage-mail.mailbox-expansion')!)).toEqual([
-			'first',
-			'second'
-		]);
-		headers[0].click();
-		flushSync();
-		expect(headers[1].getAttribute('aria-expanded')).toBe('true');
+		expect(target.textContent).toContain('first@example.com / Archive');
 	});
-	it('keeps the shell mounted for account additions/removal and restores disclosures on remount', async () => {
-		const { inbox, search, listFolders } = setup();
-		const avatarTransport = { get: vi.fn().mockResolvedValue(null), set: vi.fn(), remove: vi.fn() };
-		const props = $state({ inbox, connected: true, accounts: [accounts[0]], avatarTransport });
+
+	it('localizes workspace scopes and controls in Portuguese', async () => {
+		i18n.setLocale('pt-BR');
+		const { inbox } = setup();
+		appStore.accounts = toShellAccounts(accounts);
+		const workspace = createLiveWorkspace(inbox, { connected: true, accounts });
+
 		const target = document.createElement('div');
 		document.body.append(target);
-		let component = mount(InboxView, { target, props });
+		const nav = mount(SidebarNav, { target });
+		const bar = mount(WdgInboxStatsBar, { target, props: { workspace } });
 		flushSync();
 		cleanup = async () => {
 			inbox.dispose();
-			await unmount(component);
+			await unmount(bar);
+			await unmount(nav);
+			target.remove();
 		};
-		const main = target.querySelector('main');
-		const first = target.querySelector<HTMLButtonElement>('button[title="first@example.com"]')!;
-		first.focus();
-		first.click();
-		flushSync();
-		props.accounts = accounts;
-		flushSync();
-		expect(target.querySelector('main')).toBe(main);
-		expect(target.querySelector('button[title="second@example.com"]')).not.toBeNull();
-		expect(first.getAttribute('aria-expanded')).toBe('true');
-		await vi.waitFor(() => expect(listFolders).toHaveBeenCalledWith('second'));
-		await inbox.selectScope(scope('second'));
-		props.accounts = [accounts[0]];
-		flushSync();
-		await tick();
-		expect(inbox.scope).toBeUndefined();
-		expect(search.mock.calls.at(-1)?.[0]).not.toHaveProperty('scope');
-		await unmount(component);
-		component = mount(InboxView, { target, props });
-		flushSync();
-		expect(
-			target.querySelector('button[title="first@example.com"]')?.getAttribute('aria-expanded')
-		).toBe('true');
-	});
-	it('localizes account views, controls and empty states in Portuguese', async () => {
-		i18n.setLocale('pt-BR');
-		const { target } = await mountInbox();
-		target.querySelector<HTMLButtonElement>('button[title="first@example.com"]')!.click();
-		flushSync();
-		expect(target.textContent).toContain('Todos os emails');
-		expect(target.textContent).toContain('Com estrela');
+
+		expect(target.textContent).toContain('Todos os E-mails');
+		expect(target.textContent).toContain('Com Estrela');
 		expect(target.textContent).toContain('Adiados');
-		expect(target.textContent).toContain('Nenhuma mensagem em cache');
+		expect(target.textContent).toContain('Carregadas');
 	});
-	it('refreshes expired snoozes and keeps canonical reader/attachment identity', async () => {
+
+	it('displays snoozed header state, refreshes expired snoozes, and preserves lazy attachments', async () => {
 		vi.useFakeTimers();
 		const { inbox, search } = setup();
-		inbox.rows = [{ ...row, snooze_until_epoch_ms: Date.now() + 1000 }];
+		const snoozedRow: MessageRowDto = { ...row, snooze_until_epoch_ms: Date.now() + 1000 };
+		search.mockResolvedValue([snoozedRow]);
+		inbox.rows = [snoozedRow];
 		inbox.selectedId = row.id;
-		const target = document.createElement('div');
-		document.body.append(target);
 		const body = vi.fn().mockResolvedValue({
 			id: row.id,
 			headers: '',
@@ -366,49 +354,84 @@ describe('account navigation components', () => {
 			html_raw: null,
 			attachments_meta: [],
 			triage_badges: [],
-			triage_result: { badges: [] }
+			triage_result: { category: 'Personal', badges: [] }
 		});
 		const attachment = vi.fn();
-		const component = mount(InboxView, {
-			target,
-			props: { inbox, connected: true, readerTransport: { body, attachment } }
+		const workspace = createLiveWorkspace(inbox, {
+			connected: true,
+			readerTransport: { body, attachment }
 		});
+
+		const target = document.createElement('div');
+		document.body.append(target);
+		const reader = mount(WdgMessageReader, { target, props: { workspace } });
 		flushSync();
-		cleanup = async () => {
-			inbox.dispose();
-			await unmount(component);
-		};
-		expect(target.querySelector('[aria-label="Message state"]')?.textContent).toContain(
-			'Snoozed until'
-		);
+		expect(target.textContent).toContain('Snoozed until');
 		expect(body).toHaveBeenCalledWith(row.id);
 		expect(attachment).not.toHaveBeenCalled();
-		await vi.advanceTimersByTimeAsync(1002);
-		expect(search).toHaveBeenCalled();
+
+		const sessionTarget = document.createElement('div');
+		document.body.append(sessionTarget);
+		const session = mount(
+			(await import('../onboarding/InboxSession.svelte')).default,
+			{
+				target: sessionTarget,
+				props: {
+					connected: true,
+					inboxTransport: {
+						search,
+						triage: vi.fn(async () => {}),
+						subscribe: async () => () => {}
+					}
+				}
+			}
+		);
+		flushSync();
+		await Promise.resolve();
+		await Promise.resolve();
+		flushSync();
+		const callsBefore = search.mock.calls.length;
+		await vi.advanceTimersByTimeAsync(1100);
+		expect(search.mock.calls.length).toBeGreaterThan(callsBefore);
+
+		cleanup = async () => {
+			inbox.dispose();
+			await unmount(reader);
+			await unmount(session);
+			target.remove();
+			sessionTarget.remove();
+		};
 	});
 });
 
-describe('snooze deadline input', () => {
+describe('UI v2 WdgSnoozeSheet deadline input and presets', () => {
 	it('converts local date/time into UTC and rejects expired dates without sending', async () => {
-		const execute = vi.fn();
+		const onExecute = vi.fn();
 		const target = document.createElement('div');
 		document.body.append(target);
-		const component = mount(SnoozeForm, { target, props: { execute } });
+		const component = mount(WdgSnoozeSheet, {
+			target,
+			props: { open: true, onExecute }
+		});
 		flushSync();
 		cleanup = async () => {
 			await unmount(component);
+			target.remove();
 		};
-		const input = target.querySelector<HTMLInputElement>('input')!;
-		const form = target.querySelector('form')!;
+
+		const input = document.querySelector<HTMLInputElement>('input[type="datetime-local"]')!;
+		const form = document.querySelector<HTMLFormElement>('[role=dialog] form')!;
 		const submit = () =>
 			form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
 		input.value = '2000-01-01T12:00';
 		input.dispatchEvent(new Event('input', { bubbles: true }));
 		flushSync();
 		submit();
 		flushSync();
-		expect(execute).not.toHaveBeenCalled();
-		expect(target.querySelector('[role=alert]')).not.toBeNull();
+		expect(onExecute).not.toHaveBeenCalled();
+		expect(document.querySelector('[role=dialog] [role=alert]')).not.toBeNull();
+
 		const date = new Date(Date.now() + 86400000);
 		const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
 			.toISOString()
@@ -417,6 +440,8 @@ describe('snooze deadline input', () => {
 		input.dispatchEvent(new Event('input', { bubbles: true }));
 		flushSync();
 		submit();
-		expect(execute).toHaveBeenCalledWith({ Snooze: { until_epoch_ms: new Date(local).getTime() } });
+		expect(onExecute).toHaveBeenCalledWith({
+			Snooze: { until_epoch_ms: new Date(local).getTime() }
+		});
 	});
 });

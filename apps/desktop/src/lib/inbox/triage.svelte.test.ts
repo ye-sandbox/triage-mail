@@ -1,7 +1,9 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import { InboxController } from './controller.svelte';
-import MessageList from './MessageList.svelte';
+import WdgMessageList from './WdgMessageList.svelte';
+import { createLiveWorkspace } from './workspace.svelte';
+import { ROW_HEIGHT } from './virtual';
 import { validTag, shortcut } from './triage';
 import { BadgeLoader, badgeText } from './badges';
 import type { InboxTransport, MessageRowDto } from './types';
@@ -207,14 +209,13 @@ describe('badge loading', () => {
 			'One-click unavailable'
 		);
 	});
-	it('renders triage badges directly from row summary without calling badgeLoader', () => {
+	it('renders triage badges directly from row summary without calling badgeLoader in WdgMessageList', () => {
 		const rowWithBadge: MessageRowDto = {
 			...row,
 			id: 'badge-row',
 			triage_badges: [{ OtpCode: { code: '998877' } }]
 		};
 		const body = vi.fn();
-		const loader = new BadgeLoader({ body, attachment: vi.fn() });
 		const target = document.createElement('div');
 		document.body.appendChild(target);
 		const inbox = new InboxController({
@@ -223,14 +224,58 @@ describe('badge loading', () => {
 			subscribe: async () => () => {}
 		});
 		inbox.rows = [rowWithBadge];
-		const instance = mount(MessageList, {
+		const workspace = createLiveWorkspace(inbox, {
+			readerTransport: { body, attachment: vi.fn() }
+		});
+		const instance = mount(WdgMessageList, {
 			target,
-			props: { inbox, badgeLoader: loader }
+			props: { workspace }
 		});
 		flushSync();
 		expect(target.textContent).toContain('998877');
 		expect(body).not.toHaveBeenCalled();
 		unmount(instance);
+		inbox.dispose();
+		target.remove();
+	});
+
+	it('virtualizes large lists using ROW_HEIGHT=88 without mounting all rows and supports keyboard navigation', () => {
+		const rows: MessageRowDto[] = Array.from({ length: 200 }, (_, i) => ({
+			...row,
+			id: `row-${i}`,
+			uid: i + 1,
+			subject: `Message ${i}`
+		}));
+		const inbox = new InboxController({
+			triage: async () => {},
+			search: async () => rows,
+			subscribe: async () => () => {}
+		});
+		inbox.rows = rows;
+		const workspace = createLiveWorkspace(inbox, {
+			readerTransport: { body: vi.fn().mockResolvedValue({ id: '', triage_badges: [] }), attachment: vi.fn() }
+		});
+		const target = document.createElement('div');
+		document.body.appendChild(target);
+		const instance = mount(WdgMessageList, { target, props: { workspace } });
+		flushSync();
+
+		const spacer = target.querySelector<HTMLElement>('[role="listbox"] > div');
+		expect(spacer?.style.height).toBe(`${200 * ROW_HEIGHT}px`);
+		const mountedOptions = target.querySelectorAll('[role="option"]');
+		expect(mountedOptions.length).toBeGreaterThan(0);
+		expect(mountedOptions.length).toBeLessThan(30);
+
+		const listbox = target.querySelector<HTMLElement>('[role="listbox"]')!;
+		listbox.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+		flushSync();
+		expect(inbox.selectedId).toBe('row-0');
+		listbox.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+		flushSync();
+		expect(inbox.selectedId).toBe('row-199');
+
+		unmount(instance);
+		inbox.dispose();
 		target.remove();
 	});
 });

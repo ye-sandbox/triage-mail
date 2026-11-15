@@ -140,8 +140,9 @@ describe('account startup', () => {
 		expect(target.querySelector('input')).toBeNull();
 		pending.resolve([account]);
 		await settle();
-		expect(target.textContent).toContain('Message actions');
-		const inbox = target.querySelector('main');
+		expect(target.textContent).toContain('Loaded Messages');
+		const listbox = target.querySelector('[role="listbox"][aria-label="Messages"]');
+		expect(listbox).not.toBeNull();
 		expect([...target.querySelectorAll('button')].some((b) => b.textContent === 'Accounts')).toBe(false);
 		expect(
 			[...target.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Settings')
@@ -153,11 +154,11 @@ describe('account startup', () => {
 		const dialog = target.querySelector('[role="dialog"]')!;
 		expect(dialog.textContent).toContain('reader@example.com');
 		expect(dialog.textContent).toContain('Add account');
-		expect(target.querySelector('main')).toBe(inbox);
+		expect(target.querySelector('[role="listbox"][aria-label="Messages"]')).toBe(listbox);
 		dialog.querySelector<HTMLButtonElement>('button[aria-label="Close settings"]')!.click();
 		flushSync();
 		expect(target.querySelector('[role="dialog"]')).toBeNull();
-		expect(target.querySelector('main')).toBe(inbox);
+		expect(target.querySelector('[role="listbox"][aria-label="Messages"]')).toBe(listbox);
 		await unmount(component);
 	});
 	it('suppresses late updates after teardown', async () => {

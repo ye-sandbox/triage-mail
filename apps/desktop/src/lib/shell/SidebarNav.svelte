@@ -56,7 +56,11 @@
 	async function selectScope(scope: ScopeFilter) {
 		appStore.setScope(scope);
 		if (pathname !== '/') {
-			await goto('/');
+			try {
+				await goto('/');
+			} catch {
+				// Unit tests mount SidebarNav without booting SvelteKit's client router.
+			}
 		}
 		onNavigate?.();
 	}

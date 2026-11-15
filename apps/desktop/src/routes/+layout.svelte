@@ -12,6 +12,8 @@
 	import '@fontsource/jetbrains-mono/600.css';
 	import '../app.css';
 	import { Toaster } from 'svelte-sonner';
+	import WdgCommandPalette from '$lib/inbox/WdgCommandPalette.svelte';
+	import WdgSnoozeSheet from '$lib/inbox/WdgSnoozeSheet.svelte';
 	import AppShell from '$lib/shell/AppShell.svelte';
 	import { appStore } from '$lib/stores/app.svelte';
 	import type { WindowTransport } from '$lib/window/types';
@@ -33,3 +35,6 @@
 <AppShell {transport}>
 	{@render children()}
 </AppShell>
+
+<WdgCommandPalette />
+<WdgSnoozeSheet />
