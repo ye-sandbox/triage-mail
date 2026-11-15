@@ -83,11 +83,7 @@ fn is_false_positive(candidate: &str, surrounding_text: &str) -> bool {
 
     // 5. Reject if preceded by telephone indicator
     let phone_plus = format!("+{candidate}");
-    if surrounding_text.contains(&phone_plus) {
-        return true;
-    }
-
-    false
+    surrounding_text.contains(&phone_plus)
 }
 
 /// Extracts a 2FA/OTP verification code from subject or message body.
