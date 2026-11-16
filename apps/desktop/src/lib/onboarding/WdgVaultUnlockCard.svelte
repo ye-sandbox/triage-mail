@@ -6,11 +6,12 @@
 	import { SettingsFormGuard } from '../settings/guards';
 	import type { AccountController } from './controller.svelte';
 	import { clearCredentialInputs } from './forms';
-	import type { RecoveryTransport } from './types';
+	import type { RecoveryTransport, VaultStatus } from './types';
 
 	interface Props {
 		controller?: AccountController;
 		vaultUnlocked?: boolean;
+		vaultStatus?: VaultStatus | null;
 		recovery?: boolean;
 		demoMode?: boolean;
 		recoveryTransport?: RecoveryTransport;
@@ -22,6 +23,7 @@
 	let {
 		controller,
 		vaultUnlocked = false,
+		vaultStatus = null,
 		recovery = false,
 		demoMode = false,
 		recoveryTransport = transfer,
@@ -45,6 +47,8 @@
 	let active = true;
 
 	const t = $derived(i18n.t.onboarding);
+	const isFirstRun = $derived(!recovery && vaultStatus?.exists === false);
+	const keyringUnavailable = $derived(vaultStatus?.keyring_available === false);
 	const busy = $derived(demoMode ? demoBusy : Boolean(controller?.busy) || recoveryBusy);
 	const displayError = $derived(localError || (!demoMode ? (controller?.error ?? '') : ''));
 
@@ -64,8 +68,15 @@
 		event.preventDefault();
 		if (busy || !unlockForm) return;
 		const input = unlockForm.elements.namedItem('passphrase') as HTMLInputElement | null;
+		const confirmInput = unlockForm.elements.namedItem('confirmation') as HTMLInputElement | null;
 		const value = input?.value ?? '';
+		const confirmValue = confirmInput?.value ?? '';
 		clearCredentialInputs(unlockForm);
+
+		if (isFirstRun && (value.length < 8 || value !== confirmValue)) {
+			localError = t.vaultPassphraseMismatch;
+			return;
+		}
 
 		if (demoMode) {
 			if (value.trim().length < 4) {
@@ -181,7 +192,7 @@
 				</div>
 				<div>
 					<h2 id="vault-gate-title" class="font-display text-base font-semibold text-foreground">
-						{recovery ? t.restoreBackupTitle : t.unlockTitle}
+						{recovery ? t.restoreBackupTitle : isFirstRun ? t.createVaultTitle : t.unlockTitle}
 					</h2>
 					<p class="mt-0.5 text-xs text-secondary">
 						Argon2id + AES-GCM Fallback · Local SQLCipher Storage
@@ -189,7 +200,13 @@
 				</div>
 			</div>
 			<span class="shrink-0 whitespace-nowrap font-mono text-[11px] font-medium text-status-warning">
-				{recovery ? t.recoveryModeBadge : vaultUnlocked ? t.vaultUnlockedBadge : t.vaultLockedBadge}
+				{recovery
+					? t.recoveryModeBadge
+					: isFirstRun
+						? t.createVaultBadge
+						: vaultUnlocked
+							? t.vaultUnlockedBadge
+							: t.vaultLockedBadge}
 			</span>
 		</div>
 
@@ -279,7 +296,13 @@
 			<div class="mt-4 rounded-md border border-separator bg-field px-3.5 py-2.5 text-xs text-secondary">
 				<div class="flex items-start gap-2">
 					<ShieldAlert class="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-warning" />
-					<p class="leading-relaxed">{t.vaultLockedHelp}</p>
+					<p class="leading-relaxed">
+						{isFirstRun
+							? keyringUnavailable
+								? t.vaultCreateKeyringUnavailableHelp
+								: t.vaultCreateHelp
+							: t.vaultLockedHelp}
+					</p>
 				</div>
 			</div>
 
@@ -300,6 +323,7 @@
 							type={showPassphrase ? 'text' : 'password'}
 							data-credential
 							required
+							minlength={isFirstRun ? 8 : undefined}
 							maxlength="4096"
 							autocomplete="off"
 							spellcheck="false"
@@ -319,7 +343,31 @@
 							{/if}
 						</button>
 					</div>
+					{#if isFirstRun}
+						<span class="text-[11px] text-secondary">{t.vaultPassphraseMinHint}</span>
+					{/if}
 				</div>
+
+				{#if isFirstRun}
+					<div class="flex flex-col gap-1.5">
+						<label for="vault-passphrase-confirm-input" class="text-xs font-medium text-foreground">
+							{t.vaultConfirmPassphraseLabel}
+						</label>
+						<input
+							id="vault-passphrase-confirm-input"
+							name="confirmation"
+							type={showPassphrase ? 'text' : 'password'}
+							data-credential
+							required
+							minlength="8"
+							maxlength="4096"
+							autocomplete="off"
+							spellcheck="false"
+							disabled={busy}
+							class="h-10 w-full rounded-md border border-separator bg-field px-3 font-mono text-xs text-foreground placeholder:font-sans placeholder:text-secondary focus:border-accent focus:outline-none"
+						/>
+					</div>
+				{/if}
 
 				{#if displayError}
 					<p role="alert" class="text-xs font-medium text-status-danger">
@@ -334,18 +382,28 @@
 						class="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-xs font-medium text-accent-foreground whitespace-nowrap shrink-0 transition-transform duration-100 ease-out hover:opacity-95 active:scale-[0.98] disabled:opacity-60 md:min-h-[38px]"
 					>
 						<KeyRound class="h-3.5 w-3.5 shrink-0" />
-						<span>{busy ? t.unlocking : t.unlockVault}</span>
+						<span>
+							{isFirstRun
+								? busy
+									? t.creatingVault
+									: t.createVaultAction
+								: busy
+									? t.unlocking
+									: t.unlockVault}
+						</span>
 					</button>
 
-					<button
-						type="button"
-						onclick={() => void handleRetryKeyring()}
-						disabled={busy}
-						class="flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-separator bg-surface px-4 py-2 text-xs font-medium text-foreground whitespace-nowrap shrink-0 transition-transform duration-100 ease-out hover:bg-field active:scale-[0.98] disabled:opacity-60 md:min-h-[38px]"
-					>
-						<RefreshCw class="h-3.5 w-3.5 shrink-0 {busy ? 'animate-spin' : ''}" />
-						<span>{t.retryKeyring}</span>
-					</button>
+					{#if !isFirstRun}
+						<button
+							type="button"
+							onclick={() => void handleRetryKeyring()}
+							disabled={busy}
+							class="flex min-h-[44px] items-center justify-center gap-2 rounded-md border border-separator bg-surface px-4 py-2 text-xs font-medium text-foreground whitespace-nowrap shrink-0 transition-transform duration-100 ease-out hover:bg-field active:scale-[0.98] disabled:opacity-60 md:min-h-[38px]"
+						>
+							<RefreshCw class="h-3.5 w-3.5 shrink-0 {busy ? 'animate-spin' : ''}" />
+							<span>{t.retryKeyring}</span>
+						</button>
+					{/if}
 				</div>
 			</form>
 

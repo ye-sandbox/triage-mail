@@ -124,6 +124,15 @@ export interface Translations {
 		noAccountsHelp: string;
 		configureFirstAccount: string;
 		vaultUnlockError: string;
+		createVaultTitle: string;
+		createVaultBadge: string;
+		vaultCreateHelp: string;
+		vaultCreateKeyringUnavailableHelp: string;
+		vaultConfirmPassphraseLabel: string;
+		vaultPassphraseMinHint: string;
+		vaultPassphraseMismatch: string;
+		createVaultAction: string;
+		creatingVault: string;
 	};
 	accountForm: {
 		discoveryIntro: string;
@@ -193,6 +202,18 @@ export interface Translations {
 		localArchiveConflictError: string;
 		localArchiveImportError: string;
 		localArchiveBadge: string;
+		allSignInMethods: string;
+		fewerSignInMethods: string;
+		recommendedOption: string;
+		googleCloudJsonOption: string;
+		offlineImportOption: string;
+		customImapOption: string;
+		resolvedServerSummary: string;
+		providerGuidanceGoogle: string;
+		providerGuidanceMicrosoft: string;
+		providerGuidanceAppPassword: string;
+		providerGuidanceProton: string;
+		providerGuidanceCustom: string;
 	};
 	guide: {
 		title: string;

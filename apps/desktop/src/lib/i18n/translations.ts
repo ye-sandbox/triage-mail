@@ -123,7 +123,19 @@ export const translations: Record<SupportedLocale, Translations> = {
 			noAccountsHelp:
 				'Run domain-only ISPDB discovery or connect a local Proton Bridge loopback mailbox.',
 			configureFirstAccount: 'Configure First Account',
-			vaultUnlockError: 'Vault could not be unlocked. Check your passphrase and try again.'
+			vaultUnlockError: 'Vault could not be unlocked. Check your passphrase and try again.',
+			createVaultTitle: 'Create local master passphrase',
+			createVaultBadge: 'New Local Vault',
+			vaultCreateHelp:
+				'Set a local master passphrase to encrypt your vault and mail database on this device.',
+			vaultCreateKeyringUnavailableHelp:
+				'No OS keyring (Secret Service) is available in this session. Create a local master passphrase to encrypt your accounts and mail database with Argon2id + AES-GCM. Keep it safe—it cannot be recovered if lost.',
+			vaultConfirmPassphraseLabel: 'Confirm master passphrase',
+			vaultPassphraseMinHint: 'Use at least 8 characters.',
+			vaultPassphraseMismatch:
+				'Passphrase and confirmation must match and be at least 8 characters.',
+			createVaultAction: 'Create vault & continue',
+			creatingVault: 'Creating vault…'
 		},
 		accountForm: {
 			discoveryIntro:
@@ -213,7 +225,24 @@ export const translations: Record<SupportedLocale, Translations> = {
 				'This email belongs to an active or recovered IMAP account. Choose a distinct email address for local archives.',
 			localArchiveImportError:
 				'Archive could not be imported. Verify the file format (.mbox or .eml) and permissions.',
-			localArchiveBadge: 'Offline Archive (Local Only)'
+			localArchiveBadge: 'Offline Archive (Local Only)',
+			allSignInMethods: 'More sign-in methods',
+			fewerSignInMethods: 'Fewer sign-in methods',
+			recommendedOption: 'Recommended',
+			googleCloudJsonOption: 'Google Cloud OAuth JSON',
+			offlineImportOption: 'Offline .mbox / .eml Import',
+			customImapOption: 'Custom IMAP / Advanced',
+			resolvedServerSummary: 'Server settings resolved',
+			providerGuidanceGoogle:
+				'Choose App Password (easiest with 2FA), import a Google Cloud OAuth JSON desktop client, or import a Google Takeout .mbox offline.',
+			providerGuidanceMicrosoft:
+				'Use Microsoft sign-in (Public PKCE) with your client ID, an App Password, or import an offline .mbox/.eml archive.',
+			providerGuidanceAppPassword:
+				'Sign in with a provider App Password, or import an offline .mbox/.eml archive.',
+			providerGuidanceProton:
+				'Connect to Proton Mail Bridge running locally (127.0.0.1:1143), or import an offline .mbox/.eml archive.',
+			providerGuidanceCustom:
+				'Configure your IMAP server host and port below, or choose an offline .mbox/.eml import.'
 		},
 		guide: {
 			title: 'How sign-in methods work & step-by-step setup',
@@ -230,9 +259,9 @@ export const translations: Record<SupportedLocale, Translations> = {
 				requirements:
 					'Two-Factor Authentication (2FA) must be enabled on your account. IMAP must be turned on in webmail settings.',
 				services:
-					'Gmail, Google Workspace, iCloud, Yahoo, AOL, Fastmail, Outlook.com, and custom IMAP servers.',
+					'Gmail, Google Workspace, iCloud, Yahoo, AOL, Fastmail, Zoho, UOL, BOL, Terra, Outlook.com, and custom IMAP servers.',
 				hostTip:
-					'Popular hosts: imap.gmail.com:993, imap.mail.me.com:993, imap.mail.yahoo.com:993, outlook.office365.com:993',
+					'Popular hosts: imap.gmail.com:993, imap.mail.me.com:993, imap.mail.yahoo.com:993, imap.zoho.com:993, imap.uol.com.br:993',
 				fields: [
 					'Email address: Your full email address (e.g. reader@example.com).',
 					'IMAP host & Port: Click your provider in Quick fill (or enter your server host and port 993).',
@@ -274,6 +303,39 @@ export const translations: Record<SupportedLocale, Translations> = {
 						steps: [
 							'Go to Settings -> Privacy & Security -> Integrations -> New app password, select IMAP access, and copy the password.',
 							'Click "Fastmail" in Quick fill, enter your email, and paste the App Password.'
+						]
+					},
+					{
+						id: 'Zoho',
+						provider: 'Zoho Mail',
+						steps: [
+							'Sign in to accounts.zoho.com -> Security -> App Passwords and generate a dedicated password for "Triage Mail" (requires 2FA).',
+							'In Zoho Mail Settings -> Mail Accounts -> IMAP, verify IMAP Access is enabled.',
+							'Click "Zoho" in Quick fill, enter your email, and paste the generated App Password.'
+						]
+					},
+					{
+						id: 'UOL',
+						provider: 'UOL Mail',
+						steps: [
+							'Open UOL Segurança / Minha Conta, enable IMAP access in webmail settings, and generate an App Password if 2FA is active.',
+							'Click "UOL" in Quick fill (imap.uol.com.br:993), enter your full @uol.com.br email, and paste your password.'
+						]
+					},
+					{
+						id: 'BOL',
+						provider: 'BOL Mail',
+						steps: [
+							'Verify IMAP access is enabled in your BOL webmail settings (and generate an App Password if 2FA is enabled).',
+							'Click "BOL" in Quick fill (imap.bol.com.br:993), enter your full @bol.com.br email, and paste your password.'
+						]
+					},
+					{
+						id: 'Terra',
+						provider: 'Terra Mail',
+						steps: [
+							'Verify IMAP access is enabled in Terra Mail settings and generate an App Password if two-step verification is active.',
+							'Click "Terra" in Quick fill (imap.terra.com.br:993), enter your full @terra.com.br email, and paste your password.'
 						]
 					}
 				]
@@ -607,7 +669,19 @@ export const translations: Record<SupportedLocale, Translations> = {
 			noAccountsHelp:
 				'Execute a descoberta ISPDB por domínio ou conecte uma caixa local Proton Bridge.',
 			configureFirstAccount: 'Configurar Primeira Conta',
-			vaultUnlockError: 'Não foi possível desbloquear o cofre. Confira sua frase secreta e tente novamente.'
+			vaultUnlockError: 'Não foi possível desbloquear o cofre. Confira sua frase secreta e tente novamente.',
+			createVaultTitle: 'Criar frase secreta mestre local',
+			createVaultBadge: 'Novo Cofre Local',
+			vaultCreateHelp:
+				'Defina uma frase secreta mestre local para criptografar seu cofre e banco de e-mails neste dispositivo.',
+			vaultCreateKeyringUnavailableHelp:
+				'Nenhum chaveiro do sistema (Secret Service) está disponível nesta sessão. Crie uma frase secreta mestre local para criptografar suas contas e banco de e-mails com Argon2id + AES-GCM. Guarde-a com segurança — ela não pode ser recuperada se perdida.',
+			vaultConfirmPassphraseLabel: 'Confirmar frase secreta mestre',
+			vaultPassphraseMinHint: 'Use pelo menos 8 caracteres.',
+			vaultPassphraseMismatch:
+				'A frase secreta e a confirmação devem coincidir e ter pelo menos 8 caracteres.',
+			createVaultAction: 'Criar cofre e continuar',
+			creatingVault: 'Criando cofre…'
 		},
 		accountForm: {
 			discoveryIntro:
@@ -698,7 +772,24 @@ export const translations: Record<SupportedLocale, Translations> = {
 				'Este endereço pertence a uma conta IMAP ativa ou recuperada. Escolha outro e-mail para arquivos locais.',
 			localArchiveImportError:
 				'Não foi possível importar o arquivo. Verifique o formato (.mbox ou .eml) e as permissões.',
-			localArchiveBadge: 'Arquivo Offline (Somente Local)'
+			localArchiveBadge: 'Arquivo Offline (Somente Local)',
+			allSignInMethods: 'Mais métodos de acesso',
+			fewerSignInMethods: 'Menos métodos de acesso',
+			recommendedOption: 'Recomendado',
+			googleCloudJsonOption: 'JSON OAuth do Google Cloud',
+			offlineImportOption: 'Importação Offline .mbox / .eml',
+			customImapOption: 'IMAP Personalizado / Avançado',
+			resolvedServerSummary: 'Configurações do servidor resolvidas',
+			providerGuidanceGoogle:
+				'Escolha Senha de Aplicativo (mais simples com 2FA), importe um JSON OAuth Desktop do Google Cloud ou importe um .mbox do Google Takeout offline.',
+			providerGuidanceMicrosoft:
+				'Use o login Microsoft (PKCE Público) com seu ID do cliente, uma Senha de Aplicativo ou importe um arquivo .mbox/.eml offline.',
+			providerGuidanceAppPassword:
+				'Entre com uma Senha de Aplicativo do provedor ou importe um arquivo .mbox/.eml offline.',
+			providerGuidanceProton:
+				'Conecte-se ao Proton Mail Bridge em execução local (127.0.0.1:1143) ou importe um arquivo .mbox/.eml offline.',
+			providerGuidanceCustom:
+				'Configure o host e a porta IMAP abaixo ou escolha uma importação .mbox/.eml offline.'
 		},
 		guide: {
 			title: 'Como funcionam os métodos de login e passo a passo',
@@ -715,9 +806,9 @@ export const translations: Record<SupportedLocale, Translations> = {
 				requirements:
 					'Verificação em duas etapas (2FA) ativada na conta de e-mail e acesso IMAP habilitado nas configurações do webmail.',
 				services:
-					'Gmail, Google Workspace, iCloud, Yahoo, AOL, Fastmail, Outlook.com e servidores IMAP próprios.',
+					'Gmail, Google Workspace, iCloud, Yahoo, AOL, Fastmail, Zoho, UOL, BOL, Terra, Outlook.com e servidores IMAP próprios.',
 				hostTip:
-					'Hosts comuns: imap.gmail.com:993, imap.mail.me.com:993, imap.mail.yahoo.com:993, outlook.office365.com:993',
+					'Hosts comuns: imap.gmail.com:993, imap.mail.me.com:993, imap.mail.yahoo.com:993, imap.zoho.com:993, imap.uol.com.br:993',
 				fields: [
 					'Endereço de e-mail: Seu e-mail completo (ex.: leitor@example.com).',
 					'Host IMAP e Porta: Clique no botão do seu provedor em "Preenchimento rápido" (ou informe o host do servidor e a porta 993).',
@@ -759,6 +850,39 @@ export const translations: Record<SupportedLocale, Translations> = {
 						steps: [
 							'Acesse Settings -> Privacy & Security -> Integrations -> New app password, marque acesso IMAP e copie a senha.',
 							'Clique em "Fastmail" no Preenchimento rápido, preencha seu e-mail e cole a Senha de aplicativo.'
+						]
+					},
+					{
+						id: 'Zoho',
+						provider: 'Zoho Mail',
+						steps: [
+							'Acesse accounts.zoho.com -> Segurança -> Senhas de aplicativo e gere uma senha dedicada para "Triage Mail" (requer 2FA).',
+							'Em Zoho Mail Configurações -> Contas de e-mail -> IMAP, confirme que o acesso IMAP está ativado.',
+							'Clique em "Zoho" no Preenchimento rápido, digite seu e-mail e cole a Senha de aplicativo gerada.'
+						]
+					},
+					{
+						id: 'UOL',
+						provider: 'UOL Mail',
+						steps: [
+							'Acesse Segurança / Minha Conta do UOL, habilite o acesso IMAP no webmail e gere uma Senha de app caso a verificação em duas etapas esteja ativa.',
+							'Clique em "UOL" no Preenchimento rápido (imap.uol.com.br:993), informe seu e-mail @uol.com.br e cole sua senha.'
+						]
+					},
+					{
+						id: 'BOL',
+						provider: 'BOL Mail',
+						steps: [
+							'Confirme que o acesso IMAP está ativado nas configurações do webmail BOL (e gere uma Senha de app se o 2FA estiver ativo).',
+							'Clique em "BOL" no Preenchimento rápido (imap.bol.com.br:993), informe seu e-mail @bol.com.br e cole sua senha.'
+						]
+					},
+					{
+						id: 'Terra',
+						provider: 'Terra Mail',
+						steps: [
+							'Verifique se o acesso IMAP está habilitado no Terra Mail e gere uma Senha de app caso a verificação em duas etapas esteja ativa.',
+							'Clique em "Terra" no Preenchimento rápido (imap.terra.com.br:993), informe seu e-mail @terra.com.br e cole sua senha.'
 						]
 					}
 				]

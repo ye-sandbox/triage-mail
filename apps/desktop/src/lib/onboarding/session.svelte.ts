@@ -4,7 +4,7 @@ import { toShellAccounts } from '$lib/inbox/workspace.svelte';
 import { appStore } from '$lib/stores/app.svelte';
 import { AccountController } from './controller.svelte';
 import { nativeAccountTransport } from './transport';
-import type { AccountTransport, RecoveryTransport } from './types';
+import type { AccountTransport, RecoveryTransport, VaultStatus } from './types';
 
 export interface OnboardingSessionOptions {
 	accountTransport?: AccountTransport;
@@ -18,6 +18,7 @@ export class OnboardingSession {
 	readonly available: () => boolean;
 
 	recovery = $state(false);
+	vaultStatus = $state<VaultStatus | null>(null);
 	booting = $state(false);
 	booted = $state(false);
 	private revision = 0;
@@ -49,6 +50,17 @@ export class OnboardingSession {
 		}
 	}
 
+	private async loadVaultStatus(revision: number): Promise<void> {
+		if (!this.available() || !this.accounts.transport.vaultStatus) return;
+		try {
+			const status = await this.accounts.transport.vaultStatus();
+			if (revision !== this.revision) return;
+			this.vaultStatus = status;
+		} catch {
+			// Older native hosts or partial mocks retain default unlock presentation.
+		}
+	}
+
 	async boot(force = false): Promise<void> {
 		if (this.booted && !force) return;
 		const revision = ++this.revision;
@@ -57,6 +69,7 @@ export class OnboardingSession {
 		try {
 			if (!this.available()) {
 				this.recovery = false;
+				this.vaultStatus = null;
 				await this.accounts.load(false);
 				if (revision !== this.revision) return;
 				this.booted = true;
@@ -79,6 +92,8 @@ export class OnboardingSession {
 			}
 
 			this.recovery = false;
+			await this.loadVaultStatus(revision);
+			if (revision !== this.revision) return;
 			await this.accounts.load(true);
 			if (revision !== this.revision) return;
 			this.booted = true;
@@ -91,15 +106,23 @@ export class OnboardingSession {
 	}
 
 	async continueWithoutRecovery(): Promise<void> {
+		const revision = ++this.revision;
 		this.recovery = false;
+		await this.loadVaultStatus(revision);
+		if (revision !== this.revision) return;
 		await this.accounts.load(this.available());
+		if (revision !== this.revision) return;
 		this.booted = true;
 		this.syncShellState();
 	}
 
 	async completeRecovery(): Promise<void> {
+		const revision = ++this.revision;
 		this.recovery = false;
+		await this.loadVaultStatus(revision);
+		if (revision !== this.revision) return;
 		await this.accounts.load(this.available());
+		if (revision !== this.revision) return;
 		this.booted = true;
 		this.syncShellState();
 	}

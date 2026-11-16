@@ -10,6 +10,18 @@ export interface ConnectionSettings {
 	token: string;
 	scopes: string;
 }
+export function hasValidEmailDomain(email: string): boolean {
+	const trimmed = email.trim();
+	const at = trimmed.lastIndexOf('@');
+	if (at <= 0) return false;
+	const local = trimmed.slice(0, at);
+	const domain = trimmed.slice(at + 1);
+	if (!local || (/\s/.test(local) && !(local.startsWith('"') && local.endsWith('"')))) {
+		return false;
+	}
+	return /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,63}$/i.test(domain);
+}
+
 export class DiscoveryController {
 	settings = $state<ConnectionSettings>({
 		host: 'imap.gmail.com',
@@ -28,6 +40,7 @@ export class DiscoveryController {
 	private active = true;
 	private revision = 0;
 	private manual = false;
+	private lastOfflineEmail = '';
 	private timer: ReturnType<typeof setTimeout> | undefined;
 	constructor(
 		private readonly transport: DiscoveryTransport,
@@ -40,6 +53,7 @@ export class DiscoveryController {
 		this.busy = false;
 		this.provider = null;
 		this.status = 'idle';
+		this.lastOfflineEmail = '';
 	}
 	protectCredentials() {
 		// INVARIANT: A late suggestion must not change the identity/mode after credential entry.
@@ -65,24 +79,41 @@ export class DiscoveryController {
 			scopes: preset.scopes ?? ''
 		};
 	}
-	input() {
+	input(email?: string) {
 		this.invalidate();
+		if (!this.active || this.manual || !email) return;
+		const trimmed = email.trim();
+		if (hasValidEmailDomain(trimmed)) {
+			this.timer = setTimeout(() => void this.lookup(trimmed, false), 250);
+		}
 	}
 	blur(email: string) {
 		clearTimeout(this.timer);
-		if (!this.manual && email.trim())
-			this.timer = setTimeout(() => void this.lookup(email, false), 200);
+		const trimmed = email.trim();
+		if (!this.manual && trimmed) {
+			if (
+				this.lastOfflineEmail === trimmed &&
+				(this.status === 'found' || this.status === 'unresolved')
+			) {
+				return;
+			}
+			this.timer = setTimeout(() => void this.lookup(trimmed, false), 200);
+		}
 	}
 	async lookup(email: string, online: boolean) {
 		if (!this.active || this.manual) return;
 		this.invalidate();
 		const revision = this.revision;
+		const trimmed = email.trim();
 		this.busy = true;
 		try {
-			const provider = await this.transport.discover(email, online);
+			const provider = await this.transport.discover(trimmed, online);
 			if (!this.active || revision !== this.revision) return;
 			this.beforeReplace();
 			this.provider = provider;
+			if (!online) {
+				this.lastOfflineEmail = trimmed;
+			}
 			this.status = provider.imap_host ? 'found' : 'unresolved';
 			this.selectedPreset = provider.imap_host ? provider.provider_name : '';
 			this.settings = {

@@ -49,7 +49,12 @@ export const providerPresets: ProviderPreset[] = [
 	{ name: 'iCloud', host: 'imap.mail.me.com', port: 993, method: 'AppPassword' },
 	{ name: 'Yahoo', host: 'imap.mail.yahoo.com', port: 993, method: 'AppPassword' },
 	{ name: 'Fastmail', host: 'imap.fastmail.com', port: 993, method: 'AppPassword' },
-	{ name: 'Proton', host: '127.0.0.1', port: 1143, method: 'ProtonBridgeLocal' }
+	{ name: 'Zoho', host: 'imap.zoho.com', port: 993, method: 'AppPassword' },
+	{ name: 'UOL', host: 'imap.uol.com.br', port: 993, method: 'AppPassword' },
+	{ name: 'BOL', host: 'imap.bol.com.br', port: 993, method: 'AppPassword' },
+	{ name: 'Terra', host: 'imap.terra.com.br', port: 993, method: 'AppPassword' },
+	{ name: 'Proton', host: '127.0.0.1', port: 1143, method: 'ProtonBridgeLocal' },
+	{ name: 'Other IMAP', host: '', port: 993, method: 'AppPassword' }
 ];
 
 export function oauthDefaultsForHost(host: string): {

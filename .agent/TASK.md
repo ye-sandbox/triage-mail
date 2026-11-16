@@ -9,7 +9,7 @@
 
 ### Task [04.20]: Streamlined First-Run Vault & Onboarding UX
 
-- **Status:** PLANNING
+- **Status:** RUNNING
 - **Priority:** 2 (Email-Access Improvement Initiative — 2026-11-16)
 - **Systems Involved:** `apps/desktop/src-tauri`, `apps/desktop/src/lib/onboarding`, `apps/desktop/src/lib/i18n`.
 - **Problem:**

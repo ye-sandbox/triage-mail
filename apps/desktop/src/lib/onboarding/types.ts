@@ -27,8 +27,14 @@ export type Authorization = {
 	client_id: string;
 	client_secret?: string;
 };
+export type VaultStatus = {
+	exists: boolean;
+	keyring_available: boolean;
+};
+
 export interface AccountTransport {
 	list(): Promise<AccountConfig[]>;
+	vaultStatus?(): Promise<VaultStatus>;
 	unlock(passphrase: string): Promise<void>;
 	add(config: AccountConfig, credentials: PasswordCredentials): Promise<string>;
 	authorize(

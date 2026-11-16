@@ -321,6 +321,7 @@
 			<WdgVaultUnlockCard
 				controller={session.accounts}
 				vaultUnlocked={false}
+				vaultStatus={session.vaultStatus}
 				recoveryTransport={session.recoveryTransport}
 			/>
 		{:else if session.accounts.phase === 'error'}

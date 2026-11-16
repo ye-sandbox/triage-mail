@@ -532,6 +532,40 @@ pub async fn cmd_rule_draft(
         .await
 }
 
+/// Read-only probe for local vault files and OS keyring availability without initializing storage.
+fn vault_status_for_dir(data_dir: &std::path::Path) -> VaultStatusDto {
+    let exists = std::fs::symlink_metadata(data_dir.join("mail.db")).is_ok()
+        || std::fs::symlink_metadata(data_dir.join("vault.enc")).is_ok();
+    let keyring_available = match vault::VaultKey::for_account("application", "database-key") {
+        Ok(key) => {
+            use vault::SecretStore as _;
+            match vault::KeyringStore::new().get_secret(&key) {
+                Ok(secret) => {
+                    drop(Zeroizing::new(secret));
+                    true
+                }
+                Err(vault::VaultError::NotFound(_)) => true,
+                Err(_) => false,
+            }
+        }
+        Err(_) => false,
+    };
+    VaultStatusDto {
+        exists,
+        keyring_available,
+    }
+}
+
+/// Read-only status check for first-run vs unlock vault UI; never creates directories or provisions keys.
+#[tauri::command]
+pub async fn cmd_vault_status(state: State<'_, RuntimeState>) -> Result<VaultStatusDto, IpcError> {
+    let _guard = state.recovery_gate.lock().await;
+    let path = state.data_dir.clone();
+    tokio::task::spawn_blocking(move || vault_status_for_dir(&path))
+        .await
+        .map_err(|_| IpcError::Internal)
+}
+
 /// Optional explicit unlock for machines without an OS keyring. Passphrases never leave the vault cipher.
 #[tauri::command]
 pub async fn cmd_unlock_vault(
@@ -965,6 +999,7 @@ pub fn run() {
             cmd_set_experimental_semantic_search,
             cmd_download_model,
             cmd_summarize_message,
+            cmd_vault_status,
             cmd_unlock_vault,
             cmd_list_accounts,
             cmd_discover_email_provider,
@@ -1037,6 +1072,37 @@ mod tests {
             .unwrap();
         assert!(Arc::ptr_eq(&first, service._ownership.as_ref().unwrap()));
         state.workers.get().unwrap().shutdown();
+    }
+
+    #[tokio::test]
+    async fn vault_status_reports_mail_db_or_vault_enc_existence_without_initializing_storage() {
+        let dir = tempfile::tempdir().unwrap();
+        let data_dir = dir.path().join("absent-installation");
+        let app = mock_builder()
+            .manage(RuntimeState::new(data_dir.clone()))
+            .invoke_handler(tauri::generate_handler![cmd_vault_status])
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .unwrap();
+
+        let initial = invoke(&window, "cmd_vault_status", json!({})).unwrap();
+        assert_eq!(initial["exists"], json!(false));
+        assert!(initial["keyring_available"].is_boolean());
+        assert!(!initial.to_string().contains("absent-installation"));
+        assert!(!data_dir.exists());
+
+        std::fs::create_dir(&data_dir).unwrap();
+        assert!(!vault_status_for_dir(&data_dir).exists);
+
+        std::fs::write(data_dir.join("vault.enc"), b"{}").unwrap();
+        assert!(vault_status_for_dir(&data_dir).exists);
+
+        std::fs::remove_file(data_dir.join("vault.enc")).unwrap();
+        std::fs::write(data_dir.join("mail.db"), b"sqlite").unwrap();
+        let after_db = invoke(&window, "cmd_vault_status", json!({})).unwrap();
+        assert_eq!(after_db["exists"], json!(true));
     }
     use vault::SecretStore;
 
@@ -1140,6 +1206,7 @@ mod tests {
                 cmd_reorder_rules,
                 cmd_simulate_rules,
                 cmd_rule_draft,
+                cmd_vault_status,
                 cmd_list_accounts,
                 cmd_discover_email_provider,
                 cmd_probe_email_provider,
@@ -1170,6 +1237,9 @@ mod tests {
             invoke(&window, "cmd_recovery_available", json!({})).unwrap(),
             json!(false)
         );
+        let vault_status = invoke(&window, "cmd_vault_status", json!({})).unwrap();
+        assert_eq!(vault_status["exists"], json!(false));
+        assert!(vault_status["keyring_available"].is_boolean());
         let malformed = invoke(
             &window,
             "cmd_write_backup",

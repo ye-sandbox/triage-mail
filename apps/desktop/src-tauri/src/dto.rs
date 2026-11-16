@@ -21,6 +21,13 @@ pub struct AccountConfigDto {
     pub auth_method: AuthMethod,
 }
 
+/// Read-only status of local vault/database files and OS keyring availability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VaultStatusDto {
+    pub exists: bool,
+    pub keyring_available: bool,
+}
+
 impl AccountConfigDto {
     /// Converts the public DTO into an engine endpoint config and its corresponding `VaultKey`.
     pub fn into_endpoint_and_vault_key(self) -> Result<(ImapEndpointConfig, VaultKey), String> {

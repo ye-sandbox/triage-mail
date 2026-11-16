@@ -181,3 +181,13 @@ it('dispatches archive picker and streaming local archive import and stops forwa
 	channel.onmessage(evt);
 	expect(onProgress).toHaveBeenCalledTimes(1);
 });
+
+it('queries vault existence and keyring availability via cmd_vault_status', async () => {
+	vi.mocked(invoke).mockResolvedValueOnce({ exists: false, keyring_available: false });
+	await expect(nativeAccountTransport.vaultStatus!()).resolves.toEqual({
+		exists: false,
+		keyring_available: false
+	});
+	expect(vi.mocked(invoke).mock.calls).toEqual([['cmd_vault_status']]);
+});
+

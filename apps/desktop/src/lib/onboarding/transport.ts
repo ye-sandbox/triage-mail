@@ -1,8 +1,9 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import type { SyncProgressEvent } from '../inbox/types';
-import type { AccountTransport, LocalArchiveImportResult } from './types';
+import type { AccountTransport, LocalArchiveImportResult, VaultStatus } from './types';
 export const nativeAccountTransport: AccountTransport = {
 	list: () => invoke('cmd_list_accounts'),
+	vaultStatus: () => invoke<VaultStatus>('cmd_vault_status'),
 	unlock: (passphrase) => invoke('cmd_unlock_vault', { passphrase }),
 	add: (config, credentials) => invoke('cmd_add_account', { config, credentials }),
 	authorize(config, authorization, ready) {

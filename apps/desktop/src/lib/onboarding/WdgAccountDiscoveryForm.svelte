@@ -2,6 +2,7 @@
 	import { tick, untrack } from 'svelte';
 	import {
 		CheckCircle2,
+		ChevronDown,
 		FileArchive,
 		FileUp,
 		GlobeLock,
@@ -56,6 +57,8 @@
 	let demoArchiveInput = $state<HTMLInputElement>();
 	let archivePath = $state('');
 	let archiveFormat = $state<LocalArchiveFormat>('Mbox');
+	let advancedExpanded = $state(false);
+	let showAllMethods = $state(false);
 
 	const discovery = new DiscoveryController(
 		untrack(() => discoveryTransport),
@@ -78,6 +81,43 @@
 	const isBridge = $derived(method === 'ProtonBridgeLocal');
 	const isArchive = $derived(method === 'LocalArchive');
 
+	const providerKind = $derived.by<'google' | 'microsoft' | 'proton' | 'custom' | 'appPassword'>(() => {
+		const host = discovery.settings.host.trim().toLowerCase();
+		const presetName = discovery.selectedPreset;
+		if (
+			presetName === 'Gmail' ||
+			presetName === 'Gmail OAuth' ||
+			presetName === 'Google Workspace' ||
+			host === 'imap.gmail.com' ||
+			host === 'imap.googlemail.com'
+		) {
+			return 'google';
+		}
+		if (presetName === 'Outlook' || host === 'outlook.office365.com') {
+			return 'microsoft';
+		}
+		if (presetName === 'Proton' || method === 'ProtonBridgeLocal' || host === '127.0.0.1') {
+			return 'proton';
+		}
+		if (presetName === 'Other IMAP' || discovery.status === 'unresolved' || !host) {
+			return 'custom';
+		}
+		return 'appPassword';
+	});
+
+	const needsManualServer = $derived(
+		!isArchive &&
+			!isBridge &&
+			(discovery.selectedPreset === 'Other IMAP' ||
+				discovery.status === 'unresolved' ||
+				!discovery.settings.host.trim() ||
+				(oauth &&
+					(!discovery.settings.authorize.trim() ||
+						!discovery.settings.token.trim() ||
+						!discovery.settings.scopes.trim())))
+	);
+	const showAdvanced = $derived(advancedExpanded || needsManualServer);
+
 	const authTabs = $derived<{ id: AuthMethod; label: string }[]>([
 		{ id: 'AppPassword', label: t.methodAppPassword },
 		{ id: 'OAuth2PublicPkce', label: t.methodOAuthPublic },
@@ -85,6 +125,22 @@
 		{ id: 'ProtonBridgeLocal', label: t.methodProton },
 		{ id: 'LocalArchive', label: t.methodLocalArchive }
 	]);
+
+	function isTabPrimary(tabId: AuthMethod): boolean {
+		if (tabId === method || tabId === 'LocalArchive' || providerKind === 'custom' || showAllMethods) {
+			return true;
+		}
+		switch (providerKind) {
+			case 'google':
+				return tabId === 'AppPassword' || tabId === 'OAuth2ByoCredentials';
+			case 'microsoft':
+				return tabId === 'OAuth2PublicPkce' || tabId === 'AppPassword';
+			case 'proton':
+				return tabId === 'ProtonBridgeLocal';
+			default:
+				return tabId === 'AppPassword';
+		}
+	}
 
 	const INPUT_CLS =
 		'h-10 w-full rounded-md border border-separator bg-field px-3 text-xs text-foreground placeholder:text-secondary focus:border-accent focus:outline-none disabled:opacity-60';
@@ -124,7 +180,13 @@
 		clearCredentialInputs(form);
 		archivePath = '';
 		discovery.preset(preset);
+		advancedExpanded = preset.name === 'Other IMAP';
 		demoTls = null;
+	}
+
+	function selectPresetByName(name: string) {
+		const found = providerPresets.find((preset) => preset.name === name);
+		if (found) applyPreset(found);
 	}
 
 	function inferArchiveFormat(pathOrName: string): LocalArchiveFormat {
@@ -223,6 +285,7 @@
 			token: parsed.tokenEndpoint,
 			scopes: parsed.scopes
 		};
+		advancedExpanded = false;
 		demoTls = null;
 		await tick();
 		// INVARIANT: Imported client_id/client_secret live only in unbound DOM inputs, never Runes state.
@@ -235,6 +298,7 @@
 
 	function handleLookupClick() {
 		const emailValue = emailInput?.value ?? '';
+		advancedExpanded = false;
 		if (!demoMode) {
 			void discovery.online(emailValue);
 			return;
@@ -432,9 +496,9 @@
 						maxlength="320"
 						autocomplete="off"
 						placeholder="alex.work@example.com"
-						oninput={() => {
+						oninput={(event) => {
 							clearCredentialInputs(form);
-							if (!isArchive) discovery.input();
+							if (!isArchive) discovery.input(demoMode ? undefined : event.currentTarget.value);
 						}}
 						onblur={(event) => {
 							if (!demoMode && !isArchive) discovery.blur(event.currentTarget.value);
@@ -520,25 +584,144 @@
 			</div>
 
 			<div class="flex flex-col gap-4">
-				<div
-					role="tablist"
-					aria-label={t.methodLabel}
-					class="grid grid-cols-2 gap-1 rounded-md border border-separator bg-field p-1 sm:grid-cols-5"
-				>
-					{#each authTabs as tab (tab.id)}
+				{#if !isArchive}
+					<div class="space-y-2.5 rounded-md border border-separator bg-field/70 px-3.5 py-3">
+						<p class="text-xs leading-relaxed text-secondary">
+							{#if providerKind === 'google'}
+								{t.providerGuidanceGoogle}
+							{:else if providerKind === 'microsoft'}
+								{t.providerGuidanceMicrosoft}
+							{:else if providerKind === 'proton'}
+								{t.providerGuidanceProton}
+							{:else if providerKind === 'custom'}
+								{t.providerGuidanceCustom}
+							{:else}
+								{t.providerGuidanceAppPassword}
+							{/if}
+						</p>
+						<div class="flex flex-wrap items-center gap-2">
+							{#if providerKind === 'google'}
+								<button
+									type="button"
+									onclick={() => selectPresetByName('Gmail')}
+									class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {method === 'AppPassword'
+										? 'border-accent bg-selection-soft text-accent'
+										: 'border-separator bg-surface text-foreground hover:bg-selection-soft'}"
+								>
+									{t.methodAppPassword} · {t.recommendedOption}
+								</button>
+								<button
+									type="button"
+									onclick={() => selectPresetByName('Gmail OAuth')}
+									class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {method === 'OAuth2ByoCredentials'
+										? 'border-accent bg-selection-soft text-accent'
+										: 'border-separator bg-surface text-foreground hover:bg-selection-soft'}"
+								>
+									{t.googleCloudJsonOption}
+								</button>
+							{:else if providerKind === 'microsoft'}
+								<button
+									type="button"
+									onclick={() => selectPresetByName('Outlook')}
+									class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {method === 'OAuth2PublicPkce'
+										? 'border-accent bg-selection-soft text-accent'
+										: 'border-separator bg-surface text-foreground hover:bg-selection-soft'}"
+								>
+									{t.microsoftSetup} · {t.recommendedOption}
+								</button>
+								<button
+									type="button"
+									onclick={() => switchMethod('AppPassword')}
+									class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {method === 'AppPassword'
+										? 'border-accent bg-selection-soft text-accent'
+										: 'border-separator bg-surface text-foreground hover:bg-selection-soft'}"
+								>
+									{t.methodAppPassword}
+								</button>
+							{:else if providerKind === 'proton'}
+								<button
+									type="button"
+									onclick={() => selectPresetByName('Proton')}
+									class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {method === 'ProtonBridgeLocal'
+										? 'border-accent bg-selection-soft text-accent'
+										: 'border-separator bg-surface text-foreground hover:bg-selection-soft'}"
+								>
+									{t.methodProton} · {t.recommendedOption}
+								</button>
+							{:else if providerKind === 'custom'}
+								<button
+									type="button"
+									onclick={() => {
+										switchMethod('AppPassword');
+										advancedExpanded = true;
+									}}
+									class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {method === 'AppPassword'
+										? 'border-accent bg-selection-soft text-accent'
+										: 'border-separator bg-surface text-foreground hover:bg-selection-soft'}"
+								>
+									{t.customImapOption}
+								</button>
+							{:else}
+								<button
+									type="button"
+									onclick={() => switchMethod('AppPassword')}
+									class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {method === 'AppPassword'
+										? 'border-accent bg-selection-soft text-accent'
+										: 'border-separator bg-surface text-foreground hover:bg-selection-soft'}"
+								>
+									{t.methodAppPassword} · {t.recommendedOption}
+								</button>
+								<button
+									type="button"
+									onclick={() => (advancedExpanded = true)}
+									class="rounded-md border border-separator bg-surface px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-selection-soft"
+								>
+									{t.customImapOption}
+								</button>
+							{/if}
+							<button
+								type="button"
+								onclick={() => switchMethod('LocalArchive')}
+								class="rounded-md border border-separator bg-surface px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-selection-soft"
+							>
+								{t.offlineImportOption}
+							</button>
+						</div>
+					</div>
+				{/if}
+
+				<div class="flex flex-wrap items-center gap-2">
+					<div
+						role="tablist"
+						aria-label={t.methodLabel}
+						class="flex flex-1 flex-wrap gap-1 rounded-md border border-separator bg-field p-1"
+					>
+						{#each authTabs as tab (tab.id)}
+							<button
+								type="button"
+								role="tab"
+								hidden={!isTabPrimary(tab.id)}
+								aria-selected={method === tab.id}
+								onclick={() => switchMethod(tab.id)}
+								class="min-h-[36px] flex-1 rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors {method ===
+								tab.id
+									? 'bg-surface text-foreground shadow-xs'
+									: 'text-secondary hover:text-foreground'}"
+							>
+								{tab.label}
+							</button>
+						{/each}
+					</div>
+					{#if providerKind !== 'custom'}
 						<button
 							type="button"
-							role="tab"
-							aria-selected={method === tab.id}
-							onclick={() => switchMethod(tab.id)}
-							class="min-h-[38px] rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors {method ===
-							tab.id
-								? 'bg-surface text-foreground shadow-xs'
-								: 'text-secondary hover:text-foreground'}"
+							aria-expanded={showAllMethods}
+							onclick={() => (showAllMethods = !showAllMethods)}
+							class="min-h-[38px] shrink-0 rounded-md border border-separator bg-surface px-3 py-1.5 text-[11px] font-medium text-secondary whitespace-nowrap hover:bg-field hover:text-foreground"
 						>
-							{tab.label}
+							{showAllMethods ? t.fewerSignInMethods : t.allSignInMethods}
 						</button>
-					{/each}
+					{/if}
 				</div>
 
 				{#if isArchive}
@@ -618,102 +801,144 @@
 						</div>
 					{/if}
 
-					<div class="grid grid-cols-1 gap-3 sm:grid-cols-6">
-						<label class="flex flex-col gap-1 sm:col-span-4">
-							<span class="text-xs font-medium text-secondary">{t.hostLabel}</span>
+					{#if method === 'OAuth2ByoCredentials'}
+						<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-separator bg-field px-3.5 py-2.5">
+							<span class="text-xs text-secondary">{t.importGoogleJsonHelp}</span>
 							<input
-								name="host"
-								type="text"
-								required
-								maxlength="253"
-								readonly={isBridge}
-								bind:value={discovery.settings.host}
-								oninput={() => discovery.edit()}
-								placeholder={isBridge ? '127.0.0.1' : 'imap.example.com'}
-								class="{INPUT_CLS} font-mono"
+								bind:this={googleJsonInput}
+								type="file"
+								accept=".json,application/json"
+								aria-label={t.importGoogleJson}
+								onchange={handleGoogleJsonChange}
+								class="sr-only"
 							/>
-						</label>
-						<label class="flex flex-col gap-1 sm:col-span-2">
-							<span class="text-xs font-medium text-secondary">{t.portLabel}</span>
-							<input
-								name="port"
-								type="number"
-								required
-								min="1"
-								max="65535"
-								readonly={isBridge}
-								bind:value={discovery.settings.port}
-								oninput={() => discovery.edit()}
-								class="{INPUT_CLS} font-mono tabular-nums"
+							<button
+								type="button"
+								onclick={() => googleJsonInput?.click()}
+								class="flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-foreground whitespace-nowrap hover:bg-selection-soft"
+							>
+								<FileUp class="h-3.5 w-3.5 shrink-0 text-accent" />
+								<span>{t.importGoogleJson}</span>
+							</button>
+						</div>
+					{/if}
+
+					<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-separator bg-field px-3.5 py-2.5">
+						<span class="min-w-0 truncate font-mono text-[11px] text-secondary">
+							{discovery.settings.host.trim()
+								? `${t.resolvedServerSummary} · ${discovery.settings.host}:${discovery.settings.port}`
+								: t.customImapOption}
+						</span>
+						<button
+							type="button"
+							aria-expanded={showAdvanced}
+							aria-controls="advanced-connection-settings"
+							onclick={() => (advancedExpanded = !showAdvanced)}
+							class="flex min-h-[32px] shrink-0 items-center gap-1.5 rounded-md border border-separator bg-surface px-2.5 py-1 text-xs font-medium text-foreground whitespace-nowrap hover:bg-selection-soft"
+						>
+							<span>{t.advancedSettings}</span>
+							<ChevronDown
+								class="h-3.5 w-3.5 transition-transform duration-150 {showAdvanced ? 'rotate-180' : ''}"
 							/>
-						</label>
+						</button>
 					</div>
 
-					{#if oauth}
-						<p class="text-xs text-secondary">{t.oauthHelp}</p>
-						{#if method === 'OAuth2ByoCredentials'}
-							<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-separator bg-field px-3.5 py-2.5">
-								<span class="text-xs text-secondary">{t.importGoogleJsonHelp}</span>
+					<div
+						id="advanced-connection-settings"
+						hidden={!showAdvanced}
+						class="space-y-3 rounded-md border border-separator bg-field/50 p-3.5"
+					>
+						<div class="grid grid-cols-1 gap-3 sm:grid-cols-6">
+							<label class="flex flex-col gap-1 sm:col-span-4">
+								<span class="text-xs font-medium text-secondary">{t.hostLabel}</span>
 								<input
-									bind:this={googleJsonInput}
-									type="file"
-									accept=".json,application/json"
-									aria-label={t.importGoogleJson}
-									onchange={handleGoogleJsonChange}
-									class="sr-only"
-								/>
-								<button
-									type="button"
-									onclick={() => googleJsonInput?.click()}
-									class="flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-foreground whitespace-nowrap hover:bg-selection-soft"
-								>
-									<FileUp class="h-3.5 w-3.5 shrink-0 text-accent" />
-									<span>{t.importGoogleJson}</span>
-								</button>
-							</div>
-						{/if}
-						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-							<label class="flex flex-col gap-1">
-								<span class="text-xs font-medium text-secondary">{t.authEndpointLabel}</span>
-								<input
-									name="authorize"
-									type="url"
+									name="host"
+									type="text"
 									required
-									pattern="https://.*"
-									maxlength="2048"
-									bind:value={discovery.settings.authorize}
-									oninput={() => discovery.edit()}
-									class="{INPUT_CLS} font-mono"
-								/>
-							</label>
-							<label class="flex flex-col gap-1">
-								<span class="text-xs font-medium text-secondary">{t.tokenEndpointLabel}</span>
-								<input
-									name="token"
-									type="url"
-									required
-									pattern="https://.*"
-									maxlength="2048"
-									bind:value={discovery.settings.token}
-									oninput={() => discovery.edit()}
+									maxlength="253"
+									readonly={isBridge}
+									bind:value={discovery.settings.host}
+									oninput={() => {
+										advancedExpanded = true;
+										discovery.edit();
+									}}
+									placeholder={isBridge ? '127.0.0.1' : 'imap.example.com'}
 									class="{INPUT_CLS} font-mono"
 								/>
 							</label>
 							<label class="flex flex-col gap-1 sm:col-span-2">
-								<span class="text-xs font-medium text-secondary">{t.scopesLabel}</span>
+								<span class="text-xs font-medium text-secondary">{t.portLabel}</span>
 								<input
-									name="scopes"
-									type="text"
+									name="port"
+									type="number"
 									required
-									maxlength="4096"
-									bind:value={discovery.settings.scopes}
-									oninput={() => discovery.edit()}
-									class="{INPUT_CLS} font-mono"
+									min="1"
+									max="65535"
+									readonly={isBridge}
+									bind:value={discovery.settings.port}
+									oninput={() => {
+										advancedExpanded = true;
+										discovery.edit();
+									}}
+									class="{INPUT_CLS} font-mono tabular-nums"
 								/>
-								<span class="text-[11px] text-secondary">{t.scopesHelp}</span>
 							</label>
 						</div>
-					{/if}
+
+						{#if oauth}
+							<p class="text-xs text-secondary">{t.oauthHelp}</p>
+							<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+								<label class="flex flex-col gap-1">
+									<span class="text-xs font-medium text-secondary">{t.authEndpointLabel}</span>
+									<input
+										name="authorize"
+										type="url"
+										required
+										pattern="https://.*"
+										maxlength="2048"
+										bind:value={discovery.settings.authorize}
+										oninput={() => {
+											advancedExpanded = true;
+											discovery.edit();
+										}}
+										class="{INPUT_CLS} font-mono"
+									/>
+								</label>
+								<label class="flex flex-col gap-1">
+									<span class="text-xs font-medium text-secondary">{t.tokenEndpointLabel}</span>
+									<input
+										name="token"
+										type="url"
+										required
+										pattern="https://.*"
+										maxlength="2048"
+										bind:value={discovery.settings.token}
+										oninput={() => {
+											advancedExpanded = true;
+											discovery.edit();
+										}}
+										class="{INPUT_CLS} font-mono"
+									/>
+								</label>
+								<label class="flex flex-col gap-1 sm:col-span-2">
+									<span class="text-xs font-medium text-secondary">{t.scopesLabel}</span>
+									<input
+										name="scopes"
+										type="text"
+										required
+										maxlength="4096"
+										bind:value={discovery.settings.scopes}
+										oninput={() => {
+											advancedExpanded = true;
+											discovery.edit();
+										}}
+										class="{INPUT_CLS} font-mono"
+									/>
+									<span class="text-[11px] text-secondary">{t.scopesHelp}</span>
+								</label>
+							</div>
+						{/if}
+					</div>
 
 					{#key method}
 						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
