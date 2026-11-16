@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
 	import {
+		AlertTriangle,
 		CheckCircle2,
 		ChevronDown,
 		FileArchive,
@@ -32,7 +33,13 @@
 		type TlsProbeResult
 	} from './onboarding.fixtures';
 	import { oauthDefaultsForHost, providerPresets, type ProviderPreset } from './presets';
-	import type { AccountConfig, AccountSubmission, AuthMethod, LocalArchiveFormat } from './types';
+	import type {
+		AccountConfig,
+		AccountSubmission,
+		AuthMethod,
+		LocalArchiveFormat,
+		PasswordCredentials
+	} from './types';
 	import WdgAccountHelpGuide from './WdgAccountHelpGuide.svelte';
 
 	interface Props {
@@ -178,6 +185,7 @@
 
 	function applyPreset(preset: ProviderPreset) {
 		clearCredentialInputs(form);
+		controller.clearDiagnostics();
 		archivePath = '';
 		discovery.preset(preset);
 		advancedExpanded = preset.name === 'Other IMAP';
@@ -214,6 +222,7 @@
 	function switchMethod(next: AuthMethod) {
 		if (next === method) return;
 		clearCredentialInputs(form);
+		controller.clearDiagnostics();
 		if (next !== 'LocalArchive') {
 			archivePath = '';
 		}
@@ -275,6 +284,7 @@
 			return;
 		}
 		clearCredentialInputs(form);
+		controller.clearDiagnostics();
 		discovery.edit();
 		discovery.selectedPreset = 'Gmail OAuth';
 		discovery.settings = {
@@ -363,9 +373,44 @@
 		demoPkceReady = false;
 	}
 
+	async function handleTestLoginClick() {
+		if (
+			demoMode ||
+			isArchive ||
+			oauth ||
+			controller.busy ||
+			controller.testing ||
+			discovery.busy ||
+			!form
+		) {
+			return;
+		}
+		if (typeof form.reportValidity === 'function' && !form.reportValidity()) {
+			return;
+		}
+		const data = new FormData(form);
+		const value = (key: string) => String(data.get(key) ?? '').trim();
+		const config: AccountConfig = {
+			account_id: '',
+			email_display: value('email'),
+			imap_host: isBridge ? '127.0.0.1' : value('host'),
+			imap_port: isBridge ? 1143 : Number(value('port')),
+			auth_method: method
+		};
+		const secret = String(data.get('secret') ?? '');
+		let credentials: PasswordCredentials = isBridge
+			? { ProtonBridgeLocal: { bridge_password: secret } }
+			: { AppPassword: { secret } };
+		const pending = controller.testConnection(config, credentials);
+		credentials = { AppPassword: { secret: '' } };
+		for (const key of ['secret', 'client']) data.delete(key);
+		clearCredentialInputs(form);
+		await pending;
+	}
+
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		if (controller.busy || discovery.busy || !form) return;
+		if (controller.busy || controller.testing || discovery.busy || !form) return;
 		discovery.invalidate();
 		const data = new FormData(form);
 		const value = (key: string) => String(data.get(key) ?? '').trim();
@@ -481,7 +526,7 @@
 	</div>
 
 	<form bind:this={form} onsubmit={submit} class="flex flex-col gap-5" autocomplete="off">
-		<fieldset disabled={controller.busy} class="flex flex-col gap-5">
+		<fieldset disabled={controller.busy || controller.testing} class="flex flex-col gap-5">
 			<div class="flex flex-col gap-2">
 				<label for="discovery-email" class="text-xs font-medium text-foreground">
 					{isArchive ? t.localArchiveEmailLabel : isBridge ? t.emailLabelBridge : t.emailLabel}
@@ -498,6 +543,7 @@
 						placeholder="alex.work@example.com"
 						oninput={(event) => {
 							clearCredentialInputs(form);
+							controller.clearDiagnostics();
 							if (!isArchive) discovery.input(demoMode ? undefined : event.currentTarget.value);
 						}}
 						onblur={(event) => {
@@ -1043,19 +1089,32 @@
 				<p class="text-xs text-secondary">
 					{isArchive ? t.localArchiveNoticeFooter : oauth ? t.oauthVaultNotice : t.connectVaultNotice}
 				</p>
-				<button
-					type="submit"
-					disabled={discovery.busy || controller.busy || (isArchive && !archivePath)}
-					class="flex min-h-[42px] shrink-0 items-center gap-2 rounded-md bg-accent px-5 py-2 text-xs font-medium text-accent-foreground whitespace-nowrap hover:opacity-95 active:scale-[0.98] disabled:opacity-60 md:min-h-[38px]"
-				>
-					{#if isArchive}
-						<FileArchive class="h-3.5 w-3.5" />
-						<span>{controller.busy ? t.localArchiveImporting : t.localArchiveSubmit}</span>
-					{:else}
-						<MailPlus class="h-3.5 w-3.5" />
-						<span>{controller.busy ? t.connecting : oauth ? t.authorizeAndConnect : t.connectAccount}</span>
+				<div class="flex flex-wrap items-center gap-2">
+					{#if !demoMode && !isArchive && !oauth && controller.transport.testConnection}
+						<button
+							type="button"
+							disabled={discovery.busy || controller.busy || controller.testing}
+							onclick={() => void handleTestLoginClick()}
+							class="flex min-h-[42px] shrink-0 items-center gap-2 rounded-md border border-separator bg-surface px-4 py-2 text-xs font-medium text-foreground whitespace-nowrap hover:bg-field disabled:opacity-60 md:min-h-[38px]"
+						>
+							<ShieldCheck class="h-3.5 w-3.5 text-secondary" />
+							<span>{controller.testing ? t.testingLogin : t.testLogin}</span>
+						</button>
 					{/if}
-				</button>
+					<button
+						type="submit"
+						disabled={discovery.busy || controller.busy || controller.testing || (isArchive && !archivePath)}
+						class="flex min-h-[42px] shrink-0 items-center gap-2 rounded-md bg-accent px-5 py-2 text-xs font-medium text-accent-foreground whitespace-nowrap hover:opacity-95 active:scale-[0.98] disabled:opacity-60 md:min-h-[38px]"
+					>
+						{#if isArchive}
+							<FileArchive class="h-3.5 w-3.5" />
+							<span>{controller.busy ? t.localArchiveImporting : t.localArchiveSubmit}</span>
+						{:else}
+							<MailPlus class="h-3.5 w-3.5" />
+							<span>{controller.busy ? t.connecting : oauth ? t.authorizeAndConnect : t.connectAccount}</span>
+						{/if}
+					</button>
+				</div>
 			</div>
 		</fieldset>
 	</form>
@@ -1077,7 +1136,27 @@
 		</div>
 	{/if}
 
-	{#if controller.error}
+	{#if controller.testResult?.ok}
+		<div
+			role="status"
+			class="flex items-start gap-2.5 rounded-md border border-status-healthy/40 bg-field px-4 py-3 text-xs"
+		>
+			<CheckCircle2 class="mt-0.5 h-4 w-4 shrink-0 text-status-healthy" />
+			<p class="font-medium text-foreground">{t.testLoginSuccess}</p>
+		</div>
+	{:else if controller.diagnostic}
+		{@const guidance = t.diagnostics[controller.diagnostic]}
+		<div
+			role="alert"
+			class="flex items-start gap-2.5 rounded-md border border-status-warning/50 bg-field px-4 py-3 text-xs"
+		>
+			<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-status-warning" />
+			<div class="space-y-1">
+				<p class="font-semibold text-foreground">{guidance.title}</p>
+				<p class="leading-relaxed text-secondary">{guidance.hint}</p>
+			</div>
+		</div>
+	{:else if controller.error}
 		<p role="alert" class="rounded-md border border-separator bg-field px-4 py-3 text-xs font-medium text-status-danger">
 			{controller.error}
 		</p>

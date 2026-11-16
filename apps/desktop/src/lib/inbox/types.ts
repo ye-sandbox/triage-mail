@@ -37,6 +37,14 @@ export type MessageRowDto = {
 	folder_override: string | null;
 	triage_badges?: import('../reader/types').TriageBadge[];
 };
+export type ConnectionDiagnosticCode =
+	| 'TlsHandshakeFailed'
+	| 'AuthenticationRejected'
+	| 'ImapDisabledHint'
+	| 'OAuthAccessDenied'
+	| 'OAuthInvalidClient'
+	| 'OAuthCancelled'
+	| 'NetworkTimeout';
 export type SyncState =
 	'Syncing' | 'Idle' | 'Retrying' | 'MutationPending' | 'MutationFailed' | 'ResyncRequired';
 export type SyncProgressEvent = {
@@ -45,6 +53,7 @@ export type SyncProgressEvent = {
 	new_messages_count: number;
 	triage_alerts: unknown[];
 	embedding_errors_count?: number;
+	diagnostic?: ConnectionDiagnosticCode;
 };
 export interface InboxTransport {
 	conversations?: import('../conversations/types').ConversationTransport;

@@ -8,7 +8,10 @@ use tokio::sync::OnceCell;
 use zeroize::Zeroizing;
 
 use crate::dto::*;
-use crate::onboarding::{self, AuthorizationSessions, IncomingAuthorization, NativeTokenExchange};
+use crate::onboarding::{
+    self, AuthorizationSessions, IncomingAuthorization, IncomingReauthorization,
+    NativeTokenExchange,
+};
 use crate::ownership::bootstrap;
 use crate::service::{DesktopService, IncomingCredentials, IpcError};
 use crate::worker::WorkerSupervisor;
@@ -719,6 +722,51 @@ pub fn cmd_cancel_authorization(state: State<'_, RuntimeState>, window: tauri::W
 }
 
 #[tauri::command]
+pub async fn cmd_test_account_connection(
+    state: State<'_, RuntimeState>,
+    config: AccountConfigDto,
+    credentials: IncomingCredentials,
+) -> Result<ConnectionTestResultDto, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .test_account_connection(config, credentials)
+        .await
+}
+
+#[tauri::command]
+pub async fn cmd_reauthorize_account<R: tauri::Runtime>(
+    state: State<'_, RuntimeState>,
+    window: tauri::WebviewWindow<R>,
+    reauthorization: IncomingReauthorization,
+    on_ready: Channel<()>,
+) -> Result<String, IpcError> {
+    let (_lease, cancel) = state.authorizations.begin(window.label())?;
+    // INVARIANT: Enable UI cancellation only after the native session exists.
+    on_ready.send(()).map_err(|_| IpcError::RemoteUnavailable)?;
+    let service = state.initialize(None).await?;
+    let id = onboarding::reauthorize(
+        service.clone(),
+        reauthorization,
+        cancel,
+        onboarding::open_browser,
+        &NativeTokenExchange,
+    )
+    .await?;
+    if let Some(workers) = state.workers.get() {
+        workers.restart_account(service.account(id.clone()).await?)?;
+    }
+    Ok(id)
+}
+
+#[tauri::command]
+pub async fn cmd_account_diagnostics(
+    state: State<'_, RuntimeState>,
+) -> Result<HashMap<String, ConnectionDiagnosticCode>, IpcError> {
+    state.initialize(None).await?.account_diagnostics().await
+}
+
+#[tauri::command]
 pub async fn cmd_get_settings(
     state: State<'_, RuntimeState>,
 ) -> Result<crate::settings::SettingsDto, IpcError> {
@@ -846,6 +894,7 @@ pub async fn cmd_subscribe_sync(
                                 new_messages_count: 0,
                                 triage_alerts: Vec::new(),
                                 embedding_errors_count: 0,
+                                diagnostic: None,
                             };
                             if on_progress.send(event).is_err() {
                                 return;
@@ -1009,9 +1058,12 @@ pub fn run() {
             cmd_set_account_avatar,
             cmd_remove_account_avatar,
             cmd_add_account,
+            cmd_test_account_connection,
             cmd_import_local_archive,
             cmd_authorize_account,
+            cmd_reauthorize_account,
             cmd_cancel_authorization,
+            cmd_account_diagnostics,
             cmd_search_messages,
             cmd_triage_action,
             cmd_get_message_body,
@@ -1214,7 +1266,10 @@ mod tests {
                 cmd_set_account_avatar,
                 cmd_remove_account_avatar,
                 cmd_add_account,
+                cmd_test_account_connection,
                 cmd_import_local_archive,
+                cmd_reauthorize_account,
+                cmd_account_diagnostics,
                 cmd_search_messages,
                 cmd_get_message_body,
                 cmd_triage_action,
@@ -1544,6 +1599,44 @@ mod tests {
             ),
             Ok(json!(null))
         );
+        assert_eq!(
+            invoke(&window, "cmd_account_diagnostics", json!({})),
+            Ok(json!({}))
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_test_account_connection",
+                json!({
+                    "config": {"account_id":"","email_display":"reader@example.com","imap_host":"","imap_port":0,"auth_method":"LocalArchive"},
+                    "credentials": "LocalArchive"
+                })
+            ),
+            Err(json!("InvalidRequest"))
+        );
+        let test_cred_err = invoke(
+            &window,
+            "cmd_test_account_connection",
+            json!({
+                "config": {"account_id":"","email_display":"reader@example.com","imap_host":"imap.example.com","imap_port":993,"auth_method":"AppPassword"},
+                "credentials": {"AppPassword": {"secret": 42}}
+            }),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(test_cred_err.contains("invalid credential material"));
+        let reauth_err = invoke(
+            &window,
+            "cmd_reauthorize_account",
+            json!({
+                "reauthorization": {"account_id":"acct-1","client_secret":"synthetic-secret-value","client_id":123},
+                "onReady": "ipc://channel/0"
+            }),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(reauth_err.contains("invalid reauthorization material"));
+        assert!(!reauth_err.contains("synthetic-secret-value"));
     }
 }
 

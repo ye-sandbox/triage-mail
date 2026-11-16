@@ -326,7 +326,7 @@ async fn cancellation_drops_callback_listener_and_cleans_staged_secrets() {
         &exchange,
     )
     .await;
-    assert_eq!(result, Err(IpcError::RemoteUnavailable));
+    assert_eq!(result, Err(IpcError::OAuthCancelled));
     assert_eq!(exchange.0.load(Ordering::SeqCst), 0);
     assert!(vault.0.lock().unwrap().is_empty());
     let port = address.lock().unwrap().unwrap();
@@ -418,4 +418,214 @@ async fn discovery_ipc_service_is_offline_by_default_and_returns_secret_free_met
         probe_provider("127.0.0.1", &transport).await,
         Err(IpcError::InvalidRequest)
     );
+}
+
+#[tokio::test]
+async fn oauth_callback_errors_classify_without_echoing_provider_text() {
+    for (oauth_error, expected) in [
+        ("access_denied", IpcError::OAuthAccessDenied),
+        ("redirect_uri_mismatch", IpcError::OAuthInvalidClient),
+    ] {
+        let (service, vault, config, input) = fixture();
+        let (_sender, cancel) = watch::channel(false);
+        let exchange = TestExchange(AtomicUsize::new(0));
+        let err_code = oauth_error.to_string();
+        let result = authorize(
+            service.clone(),
+            config,
+            input,
+            cancel,
+            move |url| {
+                let parsed = Url::parse(url).unwrap();
+                let redirect = parsed
+                    .query_pairs()
+                    .find(|(k, _)| k == "redirect_uri")
+                    .unwrap()
+                    .1
+                    .into_owned();
+                let state = parsed
+                    .query_pairs()
+                    .find(|(k, _)| k == "state")
+                    .unwrap()
+                    .1
+                    .into_owned();
+                let port = Url::parse(&redirect).unwrap().port().unwrap();
+                tokio::spawn(async move {
+                    let mut socket = tokio::net::TcpStream::connect(("127.0.0.1", port))
+                        .await
+                        .unwrap();
+                    socket
+                        .write_all(
+                            format!(
+                                "GET /callback?error={err_code}&error_description=synthetic-secret-desc&state={state} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+                            )
+                            .as_bytes(),
+                        )
+                        .await
+                        .unwrap();
+                    let mut response = Vec::new();
+                    socket.read_to_end(&mut response).await.unwrap();
+                    let body = String::from_utf8_lossy(&response);
+                    assert!(!body.contains("synthetic-secret-desc"));
+                });
+                Ok(())
+            },
+            &exchange,
+        )
+        .await;
+        assert_eq!(result, Err(expected));
+        assert_eq!(exchange.0.load(Ordering::SeqCst), 0);
+        assert!(vault.0.lock().unwrap().is_empty());
+    }
+}
+
+struct ReauthExchange;
+#[async_trait]
+impl TokenExchange for ReauthExchange {
+    async fn exchange(&self, request: TokenRequest<'_>) -> Result<TokenResponse, IpcError> {
+        assert_eq!(request.client_id, "synthetic-client");
+        assert_eq!(request.client_secret, Some("synthetic-secret"));
+        Ok(TokenResponse {
+            access_token: "synthetic-renewed-access".into(),
+            refresh_token: Some("synthetic-renewed-refresh".into()),
+            token_type: "Bearer".into(),
+        })
+    }
+}
+
+#[tokio::test]
+async fn reauthorize_updates_vault_tokens_in_place_without_deleting_indexed_mail() {
+    let parse_err = serde_json::from_str::<IncomingReauthorization>(
+        r#"{"account_id":"a1","client_secret":42,"client_id":"synthetic-private-id"}"#,
+    )
+    .err()
+    .unwrap()
+    .to_string();
+    assert!(parse_err.contains("invalid reauthorization material"));
+    assert!(!parse_err.contains("synthetic-private-id"));
+
+    let (service, vault, mut config, mut input) = fixture();
+    config.auth_method = AuthMethod::OAuth2ByoCredentials;
+    input.0.client_secret = Some("synthetic-secret".into());
+    let (_sender, cancel) = watch::channel(false);
+    let exchange = TestExchange(AtomicUsize::new(0));
+    let id = authorize(
+        service.clone(),
+        config,
+        input,
+        cancel.clone(),
+        |url| callback(url, true),
+        &exchange,
+    )
+    .await
+    .unwrap();
+
+    use storage::MailRepository;
+    // Seed indexed local message + checkpoint + diagnostic on the existing account.
+    service
+        .store
+        .upsert_folder_sync_state(&storage::FolderSyncState {
+            account_id: id.clone(),
+            folder_name: "INBOX".into(),
+            uidvalidity: 99,
+            uidnext: 10,
+            highest_modseq: Some(42),
+        })
+        .unwrap();
+    service
+        .store
+        .insert_message(&storage::MessageRecord {
+            id: "preserved-msg-1".into(),
+            account_id: id.clone(),
+            folder: "INBOX".into(),
+            uid: 9,
+            message_id_header: Some("<preserved@example.org>".into()),
+            in_reply_to: None,
+            references_header: None,
+            subject: "Existing indexed email".into(),
+            sender: "sender@example.org".into(),
+            recipients: "reader@example.com".into(),
+            received_at_epoch_ms: 1_730_000_000_000,
+            is_read: false,
+            has_attachments: false,
+            category_badge: Some("Personal".into()),
+            triage_badges: Vec::new(),
+            raw_headers: "From: sender@example.org\r\nSubject: Existing\r\n\r\n".into(),
+            text_body: Some("Keep me after reauthorization".into()),
+            html_body: None,
+            list_unsubscribe: None,
+            list_unsubscribe_post: None,
+            one_click_unsubscribe_supported: false,
+            created_at_epoch_ms: 1_730_000_000_000,
+            attachments: Vec::new(),
+            tags: vec!["important".into()],
+            is_starred: true,
+            snooze_until_epoch_ms: None,
+            provider_message_id: None,
+        })
+        .unwrap();
+    service.record_account_diagnostic(
+        &id,
+        Some(crate::ConnectionDiagnosticCode::OAuthAccessDenied),
+    );
+    assert_eq!(
+        service
+            .account_diagnostics()
+            .await
+            .unwrap()
+            .get(&id)
+            .copied(),
+        Some(crate::ConnectionDiagnosticCode::OAuthAccessDenied)
+    );
+
+    // Reauthorize omits client_id / client_secret / token_endpoint to reuse vault material.
+    let reauth = IncomingReauthorization(ReauthorizationFields {
+        account_id: id.clone(),
+        authorization_endpoint: "https://auth.example.com/authorize".into(),
+        token_endpoint: None,
+        scopes: "imap offline_access".into(),
+        client_id: None,
+        client_secret: None,
+    });
+    let reauthorized_id = reauthorize(
+        service.clone(),
+        reauth,
+        cancel,
+        |url| callback(url, true),
+        &ReauthExchange,
+    )
+    .await
+    .unwrap();
+    assert_eq!(reauthorized_id, id);
+
+    // Vault tokens rotated in place while account ID, messages, tags, and sync state stay intact.
+    let key = VaultKey::for_account(&id, "imap-auth").unwrap();
+    let auth = AccountAuthMaterial::from_bytes(&vault.get_secret(&key).unwrap()).unwrap();
+    match auth {
+        AccountAuthMaterial::OAuth2ByoCredentials {
+            access_token,
+            refresh_token,
+            ..
+        } => {
+            assert_eq!(access_token, "synthetic-renewed-access");
+            assert_eq!(refresh_token.as_deref(), Some("synthetic-renewed-refresh"));
+        }
+        other => panic!("unexpected auth variant: {other:?}"),
+    }
+    assert_eq!(service.list_accounts().await.unwrap().len(), 1);
+    let preserved = service
+        .store
+        .get_message_by_id("preserved-msg-1")
+        .unwrap()
+        .unwrap();
+    assert_eq!(preserved.account_id, id);
+    assert_eq!(preserved.tags, vec!["important"]);
+    assert!(preserved.is_starred);
+    let checkpoint = service
+        .store
+        .get_folder_sync_state(&id, "INBOX")
+        .unwrap()
+        .unwrap();
+    assert_eq!(checkpoint.uidvalidity, 99);
+    assert!(service.account_diagnostics().await.unwrap().is_empty());
 }

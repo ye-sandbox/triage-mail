@@ -190,3 +190,53 @@ it('queries vault existence and keyring availability via cmd_vault_status', asyn
 	});
 	expect(vi.mocked(invoke).mock.calls).toEqual([['cmd_vault_status']]);
 });
+
+it('dispatches pre-save login test, account diagnostics, and reauthorization with ready-channel cleanup', async () => {
+	const config: AccountConfig = {
+		account_id: '',
+		email_display: 'reader@example.com',
+		imap_host: 'imap.example.com',
+		imap_port: 993,
+		auth_method: 'AppPassword'
+	};
+	const credentials = { AppPassword: { secret: 'synthetic-app-secret' } };
+	vi.mocked(invoke).mockResolvedValueOnce({ ok: false, diagnostic: 'ImapDisabledHint' });
+	await expect(nativeAccountTransport.testConnection!(config, credentials)).resolves.toEqual({
+		ok: false,
+		diagnostic: 'ImapDisabledHint'
+	});
+
+	vi.mocked(invoke).mockResolvedValueOnce({ 'acct-1': 'OAuthAccessDenied' });
+	await expect(nativeAccountTransport.diagnostics!()).resolves.toEqual({
+		'acct-1': 'OAuthAccessDenied'
+	});
+
+	let resolveReauth!: (id: string) => void;
+	const pending = new Promise<string>((done) => {
+		resolveReauth = done;
+	});
+	vi.mocked(invoke).mockReturnValueOnce(pending);
+	const ready = vi.fn();
+	const reauth = {
+		account_id: 'acct-1',
+		authorization_endpoint: 'https://auth.example.com/authorize',
+		token_endpoint: 'https://auth.example.com/token',
+		scopes: 'https://mail.google.com/'
+	};
+	const op = nativeAccountTransport.reauthorize!(reauth, ready);
+	const { onReady } = vi.mocked(invoke).mock.calls[2][1] as {
+		onReady: Channel<null>;
+	};
+	onReady.onmessage(null);
+	expect(ready).toHaveBeenCalledTimes(1);
+	resolveReauth('acct-1');
+	await expect(op).resolves.toBe('acct-1');
+	onReady.onmessage(null);
+	expect(ready).toHaveBeenCalledTimes(1);
+
+	expect(vi.mocked(invoke).mock.calls).toEqual([
+		['cmd_test_account_connection', { config, credentials }],
+		['cmd_account_diagnostics'],
+		['cmd_reauthorize_account', { reauthorization: reauth, onReady: expect.anything() }]
+	]);
+});

@@ -1,6 +1,11 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
-import type { SyncProgressEvent } from '../inbox/types';
-import type { AccountTransport, LocalArchiveImportResult, VaultStatus } from './types';
+import type { ConnectionDiagnosticCode, SyncProgressEvent } from '../inbox/types';
+import type {
+	AccountTransport,
+	ConnectionTestResult,
+	LocalArchiveImportResult,
+	VaultStatus
+} from './types';
 export const nativeAccountTransport: AccountTransport = {
 	list: () => invoke('cmd_list_accounts'),
 	vaultStatus: () => invoke<VaultStatus>('cmd_vault_status'),
@@ -20,6 +25,20 @@ export const nativeAccountTransport: AccountTransport = {
 		);
 	},
 	cancel: () => invoke('cmd_cancel_authorization'),
+	testConnection: (config, credentials) =>
+		invoke<ConnectionTestResult>('cmd_test_account_connection', { config, credentials }),
+	reauthorize(reauthorization, ready) {
+		let active = true;
+		const onReady = new Channel<null>();
+		onReady.onmessage = () => {
+			if (active) ready();
+		};
+		return invoke<string>('cmd_reauthorize_account', { reauthorization, onReady }).finally(() => {
+			active = false;
+			onReady.onmessage = () => {};
+		});
+	},
+	diagnostics: () => invoke<Record<string, ConnectionDiagnosticCode>>('cmd_account_diagnostics'),
 	chooseArchiveFile: () => invoke<string | null>('cmd_choose_transfer_file', { save: false }),
 	importLocalArchive(path, emailDisplay, format, onProgress) {
 		let active = true;

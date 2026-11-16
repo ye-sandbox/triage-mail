@@ -135,7 +135,20 @@ export const translations: Record<SupportedLocale, Translations> = {
 			vaultPassphraseMismatch:
 				'Passphrase and confirmation must match and be at least 8 characters.',
 			createVaultAction: 'Create vault & continue',
-			creatingVault: 'Creating vault…'
+			creatingVault: 'Creating vault…',
+			reauthorize: 'Reauthorize',
+			reauthorizing: 'Reauthorizing…',
+			reauthorizeHelp:
+				'Sign in again in your browser to refresh OAuth tokens without deleting locally indexed mail.',
+			reauthorizeClientOverrideHint:
+				'Leave Client ID and Client secret blank to reuse the credentials saved in your vault.',
+			reauthorizeSubmit: 'Start browser sign-in',
+			reauthorizeCancel: 'Cancel',
+			reauthorizeSuccess:
+				'OAuth tokens refreshed. Sync resumed without touching local mail.',
+			reauthorizeError:
+				'Reauthorization did not complete. Review the guidance below and try again.',
+			accountDiagnosticBanner: 'Connection attention required'
 		},
 		accountForm: {
 			discoveryIntro:
@@ -194,6 +207,42 @@ export const translations: Record<SupportedLocale, Translations> = {
 			connecting: 'Connecting…',
 			authorizeAndConnect: 'Authorize and connect',
 			connectAccount: 'Connect account',
+			testLogin: 'Test login',
+			testingLogin: 'Testing login…',
+			testLoginSuccess:
+				'Login verified. Credentials were cleared—re-enter your password to connect.',
+			testLoginFailed:
+				'Login test failed. Verify your host, port, and credentials.',
+			diagnostics: {
+				TlsHandshakeFailed: {
+					title: 'TLS certificate or port mismatch',
+					hint: 'Verify the IMAP host and port (993 for IMAPS). For Proton Mail Bridge, confirm Bridge is running on 127.0.0.1:1143 with SSL/TLS mode enabled.'
+				},
+				AuthenticationRejected: {
+					title: 'Email or password rejected by provider',
+					hint: 'Double-check your email address and password. For Gmail, iCloud, Yahoo, or Zoho, enable 2-Step Verification and generate a 16-character App Password instead of your account password.'
+				},
+				ImapDisabledHint: {
+					title: 'IMAP access is disabled on this mailbox',
+					hint: 'Open your webmail settings (e.g. Gmail Forwarding and POP/IMAP, Zoho Mail Accounts -> IMAP, or UOL/BOL/Terra settings) and enable IMAP access before connecting.'
+				},
+				OAuthAccessDenied: {
+					title: 'Provider denied OAuth authorization',
+					hint: 'Access was declined or blocked. If you are using a personal Google Cloud project in Testing mode, add your email under OAuth consent screen -> Test users and approve access in the browser.'
+				},
+				OAuthInvalidClient: {
+					title: 'OAuth client configuration mismatch',
+					hint: 'Check your Client ID, Client secret, and endpoints. Create a "Desktop app" (or "Public client/native") client and register http://127.0.0.1/callback as the redirect URI.'
+				},
+				OAuthCancelled: {
+					title: 'Authorization cancelled',
+					hint: 'Browser sign-in was cancelled before finishing. Start authorization again when you are ready.'
+				},
+				NetworkTimeout: {
+					title: 'Connection timed out',
+					hint: 'The server did not respond in time. Check your internet connection, firewall/VPN, and that the IMAP host and port are reachable.'
+				}
+			},
 			browserAuthPending:
 				'Finish authorization in your browser. This attempt expires in five minutes.',
 			cancelAuth: 'Cancel authorization',
@@ -681,7 +730,20 @@ export const translations: Record<SupportedLocale, Translations> = {
 			vaultPassphraseMismatch:
 				'A frase secreta e a confirmação devem coincidir e ter pelo menos 8 caracteres.',
 			createVaultAction: 'Criar cofre e continuar',
-			creatingVault: 'Criando cofre…'
+			creatingVault: 'Criando cofre…',
+			reauthorize: 'Reautorizar',
+			reauthorizing: 'Reautorizando…',
+			reauthorizeHelp:
+				'Entre novamente no navegador para renovar os tokens OAuth sem apagar os e-mails indexados localmente.',
+			reauthorizeClientOverrideHint:
+				'Deixe ID do cliente e Chave secreta em branco para reutilizar as credenciais salvas no cofre.',
+			reauthorizeSubmit: 'Iniciar login no navegador',
+			reauthorizeCancel: 'Cancelar',
+			reauthorizeSuccess:
+				'Tokens OAuth renovados. A sincronização foi retomada sem alterar os e-mails locais.',
+			reauthorizeError:
+				'A reautorização não foi concluída. Confira a orientação abaixo e tente novamente.',
+			accountDiagnosticBanner: 'Atenção necessária na conexão'
 		},
 		accountForm: {
 			discoveryIntro:
@@ -741,6 +803,42 @@ export const translations: Record<SupportedLocale, Translations> = {
 			connecting: 'Conectando…',
 			authorizeAndConnect: 'Autorizar e conectar',
 			connectAccount: 'Conectar conta',
+			testLogin: 'Testar login',
+			testingLogin: 'Testando login…',
+			testLoginSuccess:
+				'Login verificado. As credenciais foram limpas — digite a senha novamente para conectar.',
+			testLoginFailed:
+				'O teste de login falhou. Verifique host, porta e credenciais.',
+			diagnostics: {
+				TlsHandshakeFailed: {
+					title: 'Falha de certificado TLS ou porta',
+					hint: 'Verifique o host e a porta IMAP (993 para IMAPS). Para Proton Mail Bridge, confirme que o Bridge está em execução em 127.0.0.1:1143 com modo SSL/TLS ativo.'
+				},
+				AuthenticationRejected: {
+					title: 'E-mail ou senha rejeitados pelo provedor',
+					hint: 'Confira seu e-mail e senha. Para Gmail, iCloud, Yahoo ou Zoho, ative a verificação em duas etapas e gere uma Senha de App dedicada de 16 caracteres em vez da senha normal.'
+				},
+				ImapDisabledHint: {
+					title: 'Acesso IMAP desativado nesta conta',
+					hint: 'Abra as configurações do seu webmail (ex.: Gmail Encaminhamento e POP/IMAP, Zoho Contas -> IMAP ou configurações UOL/BOL/Terra) e habilite o acesso IMAP antes de conectar.'
+				},
+				OAuthAccessDenied: {
+					title: 'Provedor negou a autorização OAuth',
+					hint: 'O acesso foi recusado ou bloqueado. Em projetos pessoais do Google Cloud em modo Teste, adicione seu e-mail em Tela de permissão OAuth -> Usuários de teste e aprove no navegador.'
+				},
+				OAuthInvalidClient: {
+					title: 'Configuração do cliente OAuth inválida',
+					hint: 'Verifique seu ID do cliente, Chave secreta e endpoints. Crie um cliente do tipo "App para computador" (ou "Cliente público/nativo") e registre http://127.0.0.1/callback como URI de redirecionamento.'
+				},
+				OAuthCancelled: {
+					title: 'Autorização cancelada',
+					hint: 'O login no navegador foi cancelado antes de concluir. Inicie a autorização novamente quando estiver pronto.'
+				},
+				NetworkTimeout: {
+					title: 'Tempo limite de conexão esgotado',
+					hint: 'O servidor não respondeu a tempo. Verifique sua conexão com a internet, firewall/VPN e se o host e a porta IMAP estão acessíveis.'
+				}
+			},
 			browserAuthPending:
 				'Conclua a autorização no seu navegador. Esta tentativa expira em cinco minutos.',
 			cancelAuth: 'Cancelar autorização',

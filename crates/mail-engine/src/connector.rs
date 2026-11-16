@@ -57,13 +57,23 @@ impl DefaultImapConnector {
         &self,
         endpoint: &ImapEndpointConfig,
     ) -> Result<(ImapSession<TlsStream<TcpStream>>, ServerCapabilities), EngineError> {
+        const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
         let connector = create_tls_connector(endpoint)?;
         let addr = format!("{}:{}", endpoint.host, endpoint.port);
-        let tcp_stream = TcpStream::connect((endpoint.host.as_str(), endpoint.port))
-            .await
-            .map_err(|e| {
+        let tcp_stream = tokio::time::timeout(
+            CONNECT_TIMEOUT,
+            TcpStream::connect((endpoint.host.as_str(), endpoint.port)),
+        )
+        .await
+        .map_err(|_| EngineError::ImapProtocol("network timeout during TCP connect".into()))?
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::TimedOut {
+                EngineError::ImapProtocol("network timeout during TCP connect".into())
+            } else {
                 EngineError::ImapProtocol(format!("TCP connect to `{addr}` failed: {e}"))
-            })?;
+            }
+        })?;
 
         let server_name = ServerName::try_from(endpoint.host.as_str())
             .map_err(|e| {
@@ -71,16 +81,27 @@ impl DefaultImapConnector {
             })?
             .to_owned();
 
-        let tls_stream = connector
-            .connect(server_name, tcp_stream)
-            .await
-            .map_err(|e| EngineError::ImapProtocol(format!("TLS handshake failed: {e}")))?;
+        let tls_stream =
+            tokio::time::timeout(CONNECT_TIMEOUT, connector.connect(server_name, tcp_stream))
+                .await
+                .map_err(|_| {
+                    EngineError::ImapProtocol("network timeout during TLS handshake".into())
+                })?
+                .map_err(|e| EngineError::ImapProtocol(format!("TLS handshake failed: {e}")))?;
 
         let mut session = ImapSession::new(tls_stream);
 
         // Read server greeting banner
-        let _greeting = session.read_greeting().await?;
-        let caps = session.capability().await.unwrap_or_default();
+        let _greeting = tokio::time::timeout(CONNECT_TIMEOUT, session.read_greeting())
+            .await
+            .map_err(|_| {
+                EngineError::ImapProtocol("network timeout waiting for IMAP greeting".into())
+            })??;
+        let caps = tokio::time::timeout(CONNECT_TIMEOUT, session.capability())
+            .await
+            .ok()
+            .and_then(Result::ok)
+            .unwrap_or_default();
 
         Ok((session, caps))
     }
@@ -158,6 +179,42 @@ impl DefaultImapConnector {
         }
 
         Ok((session, caps))
+    }
+
+    /// Performs a transient, zero-persistence connection and authentication check.
+    /// Does not write to `vault` or refresh tokens; closes the IMAP session politely on success.
+    pub async fn test_connection_as(
+        &self,
+        endpoint: &ImapEndpointConfig,
+        username: &str,
+        auth: &AccountAuthMaterial,
+    ) -> Result<ServerCapabilities, EngineError> {
+        if endpoint.auth_method == crate::AuthMethod::LocalArchive
+            || matches!(auth, AccountAuthMaterial::LocalArchive)
+        {
+            return Err(EngineError::ImapProtocol(
+                "local archive accounts do not support remote login tests".into(),
+            ));
+        }
+        if username.is_empty() || username.chars().any(char::is_control) {
+            return Err(EngineError::ImapProtocol("invalid IMAP username".into()));
+        }
+        endpoint.validate_tls_policy()?;
+
+        let (mut session, caps) = self.open_raw_session(endpoint).await?;
+        let auth_timeout = std::time::Duration::from_secs(15);
+        tokio::time::timeout(
+            auth_timeout,
+            Self::try_authenticate(&mut session, username, auth),
+        )
+        .await
+        .map_err(|_| EngineError::ImapProtocol("network timeout during IMAP login".into()))??;
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            session.execute_command("LOGOUT"),
+        )
+        .await;
+        Ok(caps)
     }
 }
 

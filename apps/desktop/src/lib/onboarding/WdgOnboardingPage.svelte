@@ -369,10 +369,17 @@
 			<WdgConnectedAccountList
 				accounts={session.accounts.accounts}
 				busy={session.accounts.busy}
+				authorizing={session.accounts.authorizing}
+				reauthorizingAccountId={session.accounts.reauthorizingAccountId}
+				accountDiagnostics={session.accounts.accountDiagnostics}
+				diagnostic={session.accounts.diagnostic}
+				error={session.accounts.error}
 				{avatarTransport}
 				{listFolders}
 				onAddAccount={() => (showNativeDiscovery = true)}
 				onOpenInbox={handleOpenInbox}
+				onReauthorize={(input) => session.accounts.reauthorize(input)}
+				onCancelReauthorize={() => session.accounts.cancel()}
 			/>
 		{/if}
 	</div>

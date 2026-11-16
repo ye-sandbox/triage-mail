@@ -78,6 +78,16 @@ impl WorkerSupervisor {
         Ok(())
     }
 
+    pub fn restart_account(&self, config: AccountConfigDto) -> Result<(), IpcError> {
+        {
+            let mut accounts = self.accounts.lock().map_err(|_| IpcError::Internal)?;
+            if let Some(handle) = accounts.remove(&config.account_id) {
+                handle.abort();
+            }
+        }
+        self.start_account(config)
+    }
+
     pub fn shutdown(&self) {
         self.shutdown.send_replace(true);
     }
@@ -90,12 +100,27 @@ impl Drop for WorkerSupervisor {
 }
 
 pub(crate) fn status(service: &DesktopService, account: &str, state: SyncState) {
+    status_with_diagnostic(service, account, state, None);
+}
+
+pub(crate) fn status_with_diagnostic(
+    service: &DesktopService,
+    account: &str,
+    state: SyncState,
+    diagnostic: Option<crate::ConnectionDiagnosticCode>,
+) {
+    if matches!(state, SyncState::Retrying) {
+        service.record_account_diagnostic(account, diagnostic);
+    } else if matches!(state, SyncState::Idle | SyncState::ResyncRequired) {
+        service.record_account_diagnostic(account, None);
+    }
     service.events.publish(SyncProgressEvent {
         account_id: account.into(),
         state,
         new_messages_count: 0,
         triage_alerts: Vec::new(),
         embedding_errors_count: 0,
+        diagnostic,
     });
 }
 
@@ -105,28 +130,42 @@ async fn account_loop(service: Arc<DesktopService>, config: AccountConfigDto) {
         status(&service, &config.account_id, SyncState::Syncing);
         match sync_account_once(&service, &config).await {
             Ok(count) => {
+                service.record_account_diagnostic(&config.account_id, None);
                 if count > 0 {
                     schedule.record_activity();
                 } else {
                     schedule.record_empty_poll();
+                    status(&service, &config.account_id, SyncState::Idle);
                 }
                 let checkpoint = checkpoint(&service, &config.account_id, "INBOX").await;
                 let wait = async { service.remote.wait_for_change(&config, &checkpoint?).await };
                 let deadline = Duration::from_secs(mail_engine::DEFAULT_IDLE_HEARTBEAT_SECS + 30);
                 match tokio::time::timeout(deadline, wait)
                     .await
-                    .unwrap_or(Err(IpcError::RemoteUnavailable))
+                    .unwrap_or(Err(IpcError::NetworkTimeout))
                 {
                     Ok(true) => continue,
                     Ok(false) => tokio::time::sleep(schedule.current_interval()).await,
-                    Err(_) => {
-                        status(&service, &config.account_id, SyncState::Retrying);
+                    Err(err) => {
+                        let diagnostic = crate::service::ipc_error_to_diagnostic(err);
+                        status_with_diagnostic(
+                            &service,
+                            &config.account_id,
+                            SyncState::Retrying,
+                            diagnostic,
+                        );
                         tokio::time::sleep(schedule.record_error()).await;
                     }
                 }
             }
-            Err(_) => {
-                status(&service, &config.account_id, SyncState::Retrying);
+            Err(err) => {
+                let diagnostic = crate::service::ipc_error_to_diagnostic(err);
+                status_with_diagnostic(
+                    &service,
+                    &config.account_id,
+                    SyncState::Retrying,
+                    diagnostic,
+                );
                 tokio::time::sleep(schedule.record_error()).await;
             }
         }

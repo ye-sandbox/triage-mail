@@ -52,6 +52,15 @@ function fixture(options?: {
 		add: vi.fn<AccountTransport['add']>().mockResolvedValue('account-one'),
 		authorize: vi.fn<AccountTransport['authorize']>().mockResolvedValue('account-one'),
 		cancel: vi.fn<AccountTransport['cancel']>().mockResolvedValue(),
+		testConnection: vi
+			.fn<NonNullable<AccountTransport['testConnection']>>()
+			.mockResolvedValue({ ok: true }),
+		reauthorize: vi
+			.fn<NonNullable<AccountTransport['reauthorize']>>()
+			.mockResolvedValue('account-one'),
+		diagnostics: vi
+			.fn<NonNullable<AccountTransport['diagnostics']>>()
+			.mockResolvedValue({}),
 		chooseArchiveFile: vi
 			.fn<NonNullable<AccountTransport['chooseArchiveFile']>>()
 			.mockResolvedValue('/tmp/takeout.mbox'),
@@ -841,5 +850,172 @@ describe('onboarding help guide and language selection', () => {
 		expect(listTarget.textContent).toContain('Offline Archive (Local Only)');
 		expect(listTarget.textContent).not.toContain('Disconnected');
 		await unmount(listComponent);
+	});
+});
+
+describe('actionable connection diagnostics, pre-save login test, and OAuth reauthorization', () => {
+	it('runs pre-save Test login without persisting credentials, clears DOM inputs immediately, and surfaces EN/PT-BR recovery hints', async () => {
+		const { controller, transport, target } = fixture();
+		controller.phase = 'ready';
+		transport.testConnection
+			.mockResolvedValueOnce({ ok: false, diagnostic: 'ImapDisabledHint' })
+			.mockResolvedValueOnce({ ok: true });
+
+		const component = mount(WdgAccountDiscoveryForm, {
+			target,
+			props: { controller }
+		});
+		flushSync();
+
+		input(target, 'email', 'reader@example.com');
+		input(target, 'host', 'imap.example.com');
+		const secret = input(target, 'secret', 'synthetic-test-secret');
+
+		const testBtn = [...target.querySelectorAll('button')].find((b) =>
+			b.textContent?.includes('Test login')
+		)!;
+		expect(testBtn).toBeDefined();
+		testBtn.click();
+		expect(secret.value).toBe('');
+		expect(JSON.stringify(controller)).not.toContain('synthetic-test-secret');
+		await settle();
+
+		expect(transport.add).not.toHaveBeenCalled();
+		expect(transport.testConnection).toHaveBeenCalledWith(
+			{ ...account, account_id: '' },
+			{ AppPassword: { secret: 'synthetic-test-secret' } }
+		);
+		expect(target.textContent).toContain('IMAP access is disabled on this mailbox');
+
+		i18n.setLocale('pt-BR');
+		flushSync();
+		expect(target.textContent).toContain('Acesso IMAP desativado nesta conta');
+		i18n.setLocale('en');
+		flushSync();
+
+		input(target, 'secret', 'synthetic-valid-secret');
+		testBtn.click();
+		expect(secret.value).toBe('');
+		await settle();
+		expect(target.textContent).toContain('Login verified');
+
+		// Hidden on OAuth and Offline Archive methods.
+		const archiveTab = [...target.querySelectorAll<HTMLButtonElement>('button[role="tab"]')].find(
+			(b) => b.textContent?.trim() === 'Offline Archive'
+		)!;
+		archiveTab.click();
+		flushSync();
+		expect(
+			[...target.querySelectorAll('button')].find((b) => b.textContent?.includes('Test login'))
+		).toBeUndefined();
+
+		await unmount(component);
+	});
+
+	it('classifies OAuth registration errors into localized guidance without echoing provider errors', async () => {
+		const { controller, transport, target } = fixture();
+		controller.phase = 'ready';
+		transport.authorize.mockRejectedValueOnce('OAuthAccessDenied');
+
+		const component = mount(WdgAccountDiscoveryForm, {
+			target,
+			props: { controller }
+		});
+		flushSync();
+
+		const tabs = [...target.querySelectorAll<HTMLButtonElement>('[role="tablist"] button[role="tab"]')];
+		tabs.find((b) => b.textContent?.includes('Your client credentials'))!.click();
+		flushSync();
+
+		input(target, 'email', 'oauth@example.com');
+		input(target, 'host', 'imap.gmail.com');
+		input(target, 'authorize', 'https://auth.example.com/authorize');
+		input(target, 'token', 'https://auth.example.com/token');
+		input(target, 'scopes', 'https://mail.google.com/');
+		input(target, 'client', 'synthetic-client-id');
+		input(target, 'secret', 'synthetic-client-secret');
+		submit(target);
+		await settle();
+
+		expect(target.textContent).toContain('Provider denied OAuth authorization');
+		expect(target.textContent).toContain('Test users');
+
+		i18n.setLocale('pt-BR');
+		flushSync();
+		expect(target.textContent).toContain('Provedor negou a autorização OAuth');
+
+		await unmount(component);
+	});
+
+	it('displays per-account sync diagnostics and reauthorizes OAuth accounts in place while preserving vault client creds', async () => {
+		const gmailOAuth: AccountConfig = {
+			account_id: 'oauth-1',
+			email_display: 'gmail.user@example.com',
+			imap_host: 'imap.gmail.com',
+			imap_port: 993,
+			auth_method: 'OAuth2ByoCredentials'
+		};
+		const { session, transport, target } = fixture({ native: true });
+		transport.list.mockResolvedValue([gmailOAuth, account]);
+		transport.diagnostics
+			.mockResolvedValueOnce({ 'oauth-1': 'OAuthAccessDenied' })
+			.mockResolvedValueOnce({});
+
+		const pending = deferred<string>();
+		transport.reauthorize.mockImplementationOnce((_reauth, ready) => {
+			ready();
+			return pending.promise;
+		});
+
+		const component = mount(WdgOnboardingPage, {
+			target,
+			props: { session, listFolders: vi.fn().mockResolvedValue([]) }
+		});
+		await settle();
+
+		expect(target.textContent).toContain('Connection attention required');
+		expect(target.textContent).toContain('Provider denied OAuth authorization');
+
+		const reauthButtons = [...target.querySelectorAll('button')].filter((b) =>
+			b.textContent?.includes('Reauthorize')
+		);
+		expect(reauthButtons).toHaveLength(1);
+		reauthButtons[0].click();
+		flushSync();
+
+		// Host OAuth defaults should prefill Gmail endpoints & scope automatically.
+		const authInput = target.querySelector<HTMLInputElement>('input[name="authorize"]')!;
+		const tokenInput = target.querySelector<HTMLInputElement>('input[name="token"]')!;
+		const scopesInput = target.querySelector<HTMLInputElement>('input[name="scopes"]')!;
+		expect(authInput.value).toBe('https://accounts.google.com/o/oauth2/v2/auth');
+		expect(tokenInput.value).toBe('https://oauth2.googleapis.com/token');
+		expect(scopesInput.value).toBe('https://mail.google.com/');
+
+		// Leaving client_id / client_secret blank submits without overriding vault client creds, and still clears any typed credential inputs.
+		const clientInput = input(target, 'client', '');
+		const secretInput = input(target, 'secret', 'synthetic-optional-secret');
+		submit(target);
+		expect(clientInput.value).toBe('');
+		expect(secretInput.value).toBe('');
+		expect(transport.reauthorize).toHaveBeenCalledWith(
+			{
+				account_id: 'oauth-1',
+				authorization_endpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+				token_endpoint: 'https://oauth2.googleapis.com/token',
+				scopes: 'https://mail.google.com/',
+				client_secret: 'synthetic-optional-secret'
+			},
+			expect.any(Function)
+		);
+		expect(target.textContent).toContain('Finish authorization in your browser');
+
+		pending.resolve('oauth-1');
+		await settle();
+
+		expect(target.textContent).toContain('OAuth tokens refreshed');
+		expect(target.textContent).not.toContain('Connection attention required');
+		expect(session.accounts.accounts).toEqual([gmailOAuth, account]);
+
+		await unmount(component);
 	});
 });

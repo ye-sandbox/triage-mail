@@ -1,9 +1,16 @@
+import type { ConnectionDiagnosticCode } from '../inbox/types';
+
 export type SupportedLocale = 'en' | 'pt-BR';
 
 export interface GuidePlaybook {
 	id?: string;
 	provider: string;
 	steps: string[];
+}
+
+export interface DiagnosticGuidance {
+	title: string;
+	hint: string;
 }
 
 export interface Translations {
@@ -133,6 +140,15 @@ export interface Translations {
 		vaultPassphraseMismatch: string;
 		createVaultAction: string;
 		creatingVault: string;
+		reauthorize: string;
+		reauthorizing: string;
+		reauthorizeHelp: string;
+		reauthorizeClientOverrideHint: string;
+		reauthorizeSubmit: string;
+		reauthorizeCancel: string;
+		reauthorizeSuccess: string;
+		reauthorizeError: string;
+		accountDiagnosticBanner: string;
 	};
 	accountForm: {
 		discoveryIntro: string;
@@ -179,6 +195,11 @@ export interface Translations {
 		connecting: string;
 		authorizeAndConnect: string;
 		connectAccount: string;
+		testLogin: string;
+		testingLogin: string;
+		testLoginSuccess: string;
+		testLoginFailed: string;
+		diagnostics: Record<ConnectionDiagnosticCode, DiagnosticGuidance>;
 		browserAuthPending: string;
 		cancelAuth: string;
 		quickFillLabel: string;

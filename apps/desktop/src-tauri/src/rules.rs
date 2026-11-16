@@ -38,6 +38,7 @@ pub(crate) fn process_jobs(service: &DesktopService) -> Result<(), IpcError> {
             new_messages_count: 0,
             triage_alerts: vec![],
             embedding_errors_count: 0,
+            diagnostic: None,
         });
     }
     Ok(())

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use mail_engine::{AttachmentMeta, AuthMethod, UnsubscribeDescriptor};
@@ -35,12 +35,51 @@ pub enum IpcError {
     EmbeddingUnavailable,
     #[error("remote service unavailable")]
     RemoteUnavailable,
+    #[error("tls handshake failed")]
+    TlsHandshakeFailed,
+    #[error("authentication rejected")]
+    AuthenticationRejected,
+    #[error("imap disabled")]
+    ImapDisabledHint,
+    #[error("oauth access denied")]
+    OAuthAccessDenied,
+    #[error("oauth invalid client")]
+    OAuthInvalidClient,
+    #[error("oauth cancelled")]
+    OAuthCancelled,
+    #[error("network timeout")]
+    NetworkTimeout,
     #[error("stale message identity")]
     StaleMessage,
     #[error("operation unsupported by server")]
     Unsupported,
     #[error("internal operation failed")]
     Internal,
+}
+
+pub(crate) fn diagnostic_to_ipc(code: ConnectionDiagnosticCode) -> IpcError {
+    match code {
+        ConnectionDiagnosticCode::TlsHandshakeFailed => IpcError::TlsHandshakeFailed,
+        ConnectionDiagnosticCode::AuthenticationRejected => IpcError::AuthenticationRejected,
+        ConnectionDiagnosticCode::ImapDisabledHint => IpcError::ImapDisabledHint,
+        ConnectionDiagnosticCode::OAuthAccessDenied => IpcError::OAuthAccessDenied,
+        ConnectionDiagnosticCode::OAuthInvalidClient => IpcError::OAuthInvalidClient,
+        ConnectionDiagnosticCode::OAuthCancelled => IpcError::OAuthCancelled,
+        ConnectionDiagnosticCode::NetworkTimeout => IpcError::NetworkTimeout,
+    }
+}
+
+pub(crate) fn ipc_error_to_diagnostic(error: IpcError) -> Option<ConnectionDiagnosticCode> {
+    match error {
+        IpcError::TlsHandshakeFailed => Some(ConnectionDiagnosticCode::TlsHandshakeFailed),
+        IpcError::AuthenticationRejected => Some(ConnectionDiagnosticCode::AuthenticationRejected),
+        IpcError::ImapDisabledHint => Some(ConnectionDiagnosticCode::ImapDisabledHint),
+        IpcError::OAuthAccessDenied => Some(ConnectionDiagnosticCode::OAuthAccessDenied),
+        IpcError::OAuthInvalidClient => Some(ConnectionDiagnosticCode::OAuthInvalidClient),
+        IpcError::OAuthCancelled => Some(ConnectionDiagnosticCode::OAuthCancelled),
+        IpcError::NetworkTimeout => Some(ConnectionDiagnosticCode::NetworkTimeout),
+        _ => None,
+    }
 }
 
 /// Input-only envelope: never part of a command response, event, or persistent metadata.
@@ -130,6 +169,7 @@ pub struct DesktopService {
     pub events: Arc<EventBus>,
     pub(crate) learned: Option<Arc<triage_ai::onnx::OnnxEmbeddingProvider>>,
     account_gate: Mutex<()>,
+    account_diagnostics: Mutex<HashMap<String, ConnectionDiagnosticCode>>,
     pub(crate) settings_gate: Mutex<()>,
     pub(crate) download_gate: tokio::sync::Mutex<()>,
     pub(crate) mutation_gate: tokio::sync::Mutex<()>,
@@ -168,6 +208,7 @@ impl DesktopService {
             learned: None,
             events: Arc::new(EventBus::default()),
             account_gate: Mutex::new(()),
+            account_diagnostics: Mutex::new(HashMap::new()),
             settings_gate: Mutex::new(()),
             download_gate: tokio::sync::Mutex::new(()),
             mutation_gate: tokio::sync::Mutex::new(()),
@@ -345,6 +386,164 @@ impl DesktopService {
         validate_config(&config, &AccountAuthMaterial::LocalArchive)?;
         self.insert_account_with_vault(&config, &AccountAuthMaterial::LocalArchive)?;
         Ok(config.account_id)
+    }
+
+    pub(crate) fn record_account_diagnostic(
+        &self,
+        account_id: &str,
+        diagnostic: Option<ConnectionDiagnosticCode>,
+    ) {
+        if account_id.is_empty() {
+            return;
+        }
+        if let Ok(mut map) = self.account_diagnostics.lock() {
+            match diagnostic {
+                Some(code) => {
+                    map.insert(account_id.to_string(), code);
+                }
+                None => {
+                    map.remove(account_id);
+                }
+            }
+        }
+    }
+
+    pub async fn account_diagnostics(
+        self: &Arc<Self>,
+    ) -> Result<HashMap<String, ConnectionDiagnosticCode>, IpcError> {
+        self.account_diagnostics
+            .lock()
+            .map(|map| map.clone())
+            .map_err(|_| IpcError::Internal)
+    }
+
+    pub async fn test_account_connection(
+        self: &Arc<Self>,
+        mut config: AccountConfigDto,
+        credentials: IncomingCredentials,
+    ) -> Result<ConnectionTestResultDto, IpcError> {
+        if config.auth_method == AuthMethod::LocalArchive {
+            return Err(IpcError::InvalidRequest);
+        }
+        // INVARIANT: VaultKey rejects empty account IDs, so use a transient placeholder
+        // strictly for pre-save endpoint validation without touching vault or SQLite.
+        if config.account_id.is_empty() {
+            config.account_id = String::from("transient-test");
+        }
+        validate_config(&config, &credentials.0)?;
+        match self.remote.test_connection(&config, &credentials).await {
+            Ok(()) => Ok(ConnectionTestResultDto {
+                ok: true,
+                diagnostic: None,
+            }),
+            Err(err) => match ipc_error_to_diagnostic(err) {
+                Some(code) => Ok(ConnectionTestResultDto {
+                    ok: false,
+                    diagnostic: Some(code),
+                }),
+                None => Err(err),
+            },
+        }
+    }
+
+    pub(crate) async fn load_oauth_client_material(
+        self: &Arc<Self>,
+        account_id: String,
+    ) -> Result<StoredOAuthClient, IpcError> {
+        if account_id.is_empty() {
+            return Err(IpcError::InvalidRequest);
+        }
+        self.blocking(move |s| {
+            let json = s
+                .store
+                .get_account_connection(&account_id)
+                .map_err(storage_error)?
+                .ok_or(IpcError::NotFound)?;
+            let config: AccountConfigDto =
+                serde_json::from_str(&json).map_err(|_| IpcError::StorageUnavailable)?;
+            if !matches!(
+                config.auth_method,
+                AuthMethod::OAuth2PublicPkce | AuthMethod::OAuth2ByoCredentials
+            ) {
+                return Err(IpcError::InvalidRequest);
+            }
+            let key = vault::VaultKey::for_account(&account_id, "imap-auth")
+                .map_err(|_| IpcError::InvalidRequest)?;
+            let bytes = Zeroizing::new(
+                s.vault
+                    .get_secret(&key)
+                    .map_err(|_| IpcError::VaultUnavailable)?,
+            );
+            let auth = IncomingCredentials(
+                AccountAuthMaterial::from_bytes(&bytes).map_err(|_| IpcError::VaultUnavailable)?,
+            );
+            let (client_id, client_secret, token_endpoint) = match &auth.0 {
+                AccountAuthMaterial::OAuth2PublicPkce {
+                    client_id,
+                    token_endpoint,
+                    ..
+                } => (client_id.clone(), None, token_endpoint.clone()),
+                AccountAuthMaterial::OAuth2ByoCredentials {
+                    client_id,
+                    client_secret,
+                    token_endpoint,
+                    ..
+                } => (
+                    client_id.clone(),
+                    Some(client_secret.clone()),
+                    token_endpoint.clone(),
+                ),
+                _ => return Err(IpcError::InvalidRequest),
+            };
+            Ok(StoredOAuthClient {
+                config,
+                client_id,
+                client_secret,
+                token_endpoint,
+            })
+        })
+        .await
+    }
+
+    /// Updates existing vault auth material in place without deleting or altering indexed mail.
+    pub async fn update_account_auth(
+        self: &Arc<Self>,
+        config: AccountConfigDto,
+        credentials: IncomingCredentials,
+    ) -> Result<(), IpcError> {
+        if config.account_id.is_empty() {
+            return Err(IpcError::InvalidRequest);
+        }
+        validate_config(&config, &credentials.0)?;
+        self.blocking(move |s| {
+            let _guard = s.account_gate.lock().map_err(|_| IpcError::Internal)?;
+            let json = s
+                .store
+                .get_account_connection(&config.account_id)
+                .map_err(storage_error)?
+                .ok_or(IpcError::NotFound)?;
+            let existing: AccountConfigDto =
+                serde_json::from_str(&json).map_err(|_| IpcError::StorageUnavailable)?;
+            if existing.auth_method != config.auth_method {
+                return Err(IpcError::InvalidRequest);
+            }
+            let (_, key) = config
+                .clone()
+                .into_endpoint_and_vault_key()
+                .map_err(|_| IpcError::InvalidRequest)?;
+            let bytes = Zeroizing::new(
+                credentials
+                    .0
+                    .to_bytes()
+                    .map_err(|_| IpcError::InvalidRequest)?,
+            );
+            s.vault
+                .set_secret(&key, &bytes)
+                .map_err(|_| IpcError::VaultUnavailable)?;
+            s.record_account_diagnostic(&config.account_id, None);
+            Ok(())
+        })
+        .await
     }
 
     pub async fn list_folders(
@@ -645,6 +844,7 @@ impl DesktopService {
                 new_messages_count: 0,
                 triage_alerts: Vec::new(),
                 embedding_errors_count: 0,
+                diagnostic: None,
             });
         }
         Ok(())
@@ -668,6 +868,7 @@ impl DesktopService {
                     new_messages_count: 0,
                     triage_alerts: Vec::new(),
                     embedding_errors_count: 0,
+                    diagnostic: None,
                 });
             }
         }
@@ -805,4 +1006,18 @@ pub(crate) fn validate_config(
 
 fn valid_credential(value: &str) -> bool {
     !value.is_empty() && !value.chars().any(char::is_control)
+}
+
+pub(crate) struct StoredOAuthClient {
+    pub config: AccountConfigDto,
+    pub client_id: String,
+    pub client_secret: Option<String>,
+    pub token_endpoint: Option<String>,
+}
+
+impl Drop for StoredOAuthClient {
+    fn drop(&mut self) {
+        self.client_id.zeroize();
+        self.client_secret.zeroize();
+    }
 }

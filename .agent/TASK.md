@@ -7,27 +7,40 @@
 
 ## Active Task
 
-### Task [02.9]: Actionable Connection, Credential & OAuth Error Diagnostics
-
-- **Status:** READY FOR PLANNING
-- **Priority:** 3 (Email-Access Improvement Initiative — 2026-11-16)
-- **Systems Involved:** `crates/mail-engine`, `apps/desktop/src-tauri`, `apps/desktop/src/lib/onboarding`, `apps/desktop/src/lib/i18n`.
-- **Problem:** Authentication failures, IMAP-disabled accounts, OAuth consent errors (`access_denied`, missing Test User, `redirect_uri_mismatch`), and expired/revoked refresh tokens currently collapse into opaque `IpcError::RemoteUnavailable` or silent `SyncState::Retrying` loops without actionable user guidance or a one-click re-authorize action.
-- **Scope & Atomic Subtasks:**
-  1. `[02.9.1]` `[BATCH: B1]` **Secret-Free Diagnostic Codes, Pre-Save Login Test & OAuth Re-Auth IPC (`crates/mail-engine`, `apps/desktop/src-tauri`):**
-     - `Read:` `crates/mail-engine/src/lib.rs`, `crates/mail-engine/src/connector.rs`, `apps/desktop/src-tauri/src/onboarding.rs`, `apps/desktop/src-tauri/src/service.rs`, `apps/desktop/src-tauri/src/runtime.rs`
-     - `Paths:` `crates/mail-engine/src/lib.rs`, `crates/mail-engine/src/connector.rs`, `apps/desktop/src-tauri/src/dto.rs`, `apps/desktop/src-tauri/src/onboarding.rs`, `apps/desktop/src-tauri/src/service.rs`, `apps/desktop/src-tauri/src/runtime.rs`
-     - `Verify:` `cargo check --workspace && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings`
-     - Classify safe diagnostic codes (`TlsHandshakeFailed`, `AuthenticationRejected`, `ImapDisabledHint`, `OAuthAccessDenied`, `OAuthInvalidClient`, `OAuthCancelled`, `NetworkTimeout`) with zero PII/secret echoing; add additive `cmd_test_account_connection` (zeroized transient check) and `cmd_reauthorize_account` (updating vault tokens in place for an existing `account_id`).
-  2. `[02.9.2]` `[BATCH: B2]` **Actionable Remediation UI & Re-Authorize Button (`apps/desktop/src/lib/onboarding`):**
-     - `Read:` `apps/desktop/src-tauri/src/dto.rs`, `apps/desktop/src/lib/onboarding/controller.svelte.ts`, `apps/desktop/src/lib/onboarding/WdgAccountDiscoveryForm.svelte`, `apps/desktop/src/lib/onboarding/WdgConnectedAccountList.svelte`
-     - `Paths:` `apps/desktop/src/lib/onboarding/controller.svelte.ts`, `apps/desktop/src/lib/onboarding/transport.ts`, `apps/desktop/src/lib/onboarding/types.ts`, `apps/desktop/src/lib/onboarding/WdgAccountDiscoveryForm.svelte`, `apps/desktop/src/lib/onboarding/WdgConnectedAccountList.svelte`, `apps/desktop/src/lib/onboarding/onboarding.svelte.test.ts`, `apps/desktop/src/lib/i18n/types.ts`, `apps/desktop/src/lib/i18n/translations.ts`
-     - `Verify:` `pnpm --filter desktop check && pnpm --filter desktop test && pnpm --filter desktop build`
-     - Load `svelte-dev`. Surface localized EN/PT-BR recovery hints per diagnostic code, add optional pre-save **"Test login"** button, and expose **"Reauthorize"** on existing OAuth accounts without deleting indexed local mail.
+*No prioritized active task.* All three tasks from the Email-Access Improvement Initiative (`[02.8]`, `[04.20]`, `[02.9]`) are complete; awaiting user selection from `Other Future Backlog / Ideas` or new priorities.
 
 ---
 
 ## Latest Completed Task
+
+### Task [02.9]: Actionable Connection, Credential & OAuth Error Diagnostics
+
+- **Status:** DONE
+- **Priority:** 3 (Email-Access Improvement Initiative — 2026-11-16)
+- **Systems Involved:** `crates/mail-engine`, `apps/desktop/src-tauri`, `apps/desktop/src/lib/onboarding`, `apps/desktop/src/lib/inbox`, `apps/desktop/src/lib/i18n`.
+- **Problem:** Authentication failures, IMAP-disabled accounts, OAuth consent errors (`access_denied`, missing Test User, `redirect_uri_mismatch`), and expired/revoked refresh tokens currently collapsed into opaque `IpcError::RemoteUnavailable` or silent `SyncState::Retrying` loops without actionable user guidance or a one-click re-authorize action.
+- **Scope & Atomic Subtasks:**
+  1. `[02.9.1]` `[BATCH: B1]` **Secret-Free Diagnostic Codes, Pre-Save Login Test & OAuth Re-Auth IPC (`crates/mail-engine`, `apps/desktop/src-tauri`):** Added closed `ConnectionDiagnosticCode` enum (`TlsHandshakeFailed`, `AuthenticationRejected`, `ImapDisabledHint`, `OAuthAccessDenied`, `OAuthInvalidClient`, `OAuthCancelled`, `NetworkTimeout`), `EngineError::diagnostic_code()` / `classify_imap_auth_failure`, RFC 6749 `error` allowlist parsing in `HttpTokenRefreshTransport` & `LoopbackRedirectListener`, bounded `DefaultImapConnector::test_connection_as`, matching fixed unit `IpcError` variants, `cmd_test_account_connection` (zeroized transient check, zero persistence), `cmd_reauthorize_account` (in-place vault token update + `WorkerSupervisor::restart_account` preserving indexed mail), `SyncProgressEvent.diagnostic`, and `cmd_account_diagnostics`.
+  2. `[02.9.2]` `[BATCH: B2]` **Actionable Remediation UI & Re-Authorize Button (`apps/desktop/src/lib/onboarding`):** Added `ConnectionDiagnosticCode` & `SyncProgressEvent.diagnostic` TypeScript types, `AccountTransport` wire bindings (`testConnection`, `reauthorize`, `diagnostics`), bilingual EN/PT-BR recovery hints for all 7 diagnostic codes, pre-save **"Test login"** flow in `WdgAccountDiscoveryForm` with immediate unbound `[data-credential]` DOM clearing, per-account diagnostic banners, and inline **"Reauthorize"** OAuth flow on existing OAuth2 account cards in `WdgConnectedAccountList` / `WdgOnboardingPage`.
+
+#### Completion (2026-11-16)
+
+- **Delivered:** End-to-end secret-free connection, credential, and OAuth error classification across `crates/mail-engine` and `apps/desktop/src-tauri`, bounded pre-save **"Test login"** (`cmd_test_account_connection`), in-place OAuth2 **"Reauthorize"** (`cmd_reauthorize_account`) preserving all indexed local mail/folders/watermarks/tags/rules, per-account retry diagnostic propagation (`SyncProgressEvent.diagnostic` + `cmd_account_diagnostics`), and localized EN/PT-BR onboarding remediation UI.
+- **Validation:** `cargo fmt --all -- --check` passed (0); `cargo check --workspace` passed (0); `cargo clippy --workspace --all-targets -- -D warnings` passed (0 warnings); `cargo test --workspace` passed across all workspace crates (`mail-engine`, `storage`, `sync-runtime`, `triage-ai`, `triage-mail-cli`, `triage-mail-desktop` 46 unit + 33 `ipc_service` tests, `vault` 20 tests); `pnpm --filter desktop check` passed (0 errors/warnings); `pnpm --filter desktop test` passed (30 files, 185 tests); `pnpm --filter desktop build` succeeded; `! grep -rn "export let" apps/desktop/src/` exited 0; `node scripts/ci-guard.mjs` (`464 tracked text files, 0 findings`) & `node --test scripts/ci-guard.test.mjs` (`5 passed`); `git diff --check` clean.
+- **Contracts:** Documented in `.agent/NOTES.md` (`Actionable Connection, Credential & OAuth Diagnostics ([02.9])`).
+- **Next:** No prioritized active task. All three Email-Access Improvement Initiative tasks (`[02.8]`, `[04.20]`, `[02.9]`) are complete; awaiting user selection for the next milestone.
+
+#### Closing Checklist — [02.9]
+
+- [x] `[02.9.1]` Secret-free diagnostic codes, pre-save login test (`cmd_test_account_connection`), `cmd_reauthorize_account`, and `SyncProgressEvent.diagnostic` / `cmd_account_diagnostics` implemented and tested.
+- [x] `[02.9.2]` Localized EN/PT-BR remediation guidance, pre-save **"Test login"** UI, and in-place **"Reauthorize"** flow on OAuth2 accounts implemented and tested.
+- [x] Full workspace DoD passed: `cargo fmt`, `cargo check`, `cargo clippy -D warnings`, `cargo test`, `pnpm check/test/build`, Svelte 5 invariant, `ci-guard` PII/secret scan, `git diff --check`.
+- [x] Contracts recorded in `.agent/NOTES.md`; `.agent/TASK.md` updated cleanly.
+- [x] Atomic Conventional Commit recorded; closed without pushing.
+
+---
+
+## Previous Completed Tasks
 
 ### Task [04.20]: Streamlined First-Run Vault & Onboarding UX
 
@@ -62,8 +75,6 @@
 - [x] Atomic Conventional Commit recorded; closed without pushing.
 
 ---
-
-## Previous Completed Tasks
 
 ### Task [02.8]: Offline `.mbox` & `.eml` Local Archive Ingestion
 

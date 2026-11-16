@@ -63,6 +63,18 @@ pub use unsubscribe::{
     Rfc8058UnsubscribeClient, UnsubscribeOutcome, RFC8058_CONTENT_TYPE, RFC8058_POST_BODY,
 };
 
+/// Safe, secret-free diagnostic codes explaining connection, credential, or OAuth failures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConnectionDiagnosticCode {
+    TlsHandshakeFailed,
+    AuthenticationRejected,
+    ImapDisabledHint,
+    OAuthAccessDenied,
+    OAuthInvalidClient,
+    OAuthCancelled,
+    NetworkTimeout,
+}
+
 /// Errors returned by IMAP transport, authentication, and MIME extraction.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum EngineError {
@@ -80,6 +92,74 @@ pub enum EngineError {
     MimeParse(String),
     #[error("RFC 8058 One-Click Unsubscribe failed: {0}")]
     UnsubscribeFailed(String),
+}
+
+impl EngineError {
+    /// Classifies an engine error into a safe, secret-free diagnostic code when known.
+    pub fn diagnostic_code(&self) -> Option<ConnectionDiagnosticCode> {
+        match self {
+            Self::InsecureTlsRejected(_) => Some(ConnectionDiagnosticCode::TlsHandshakeFailed),
+            Self::AuthenticationFailed(reason) => Some(classify_imap_auth_failure(reason)),
+            Self::TokenRefresh(reason) => {
+                let lower = reason.to_ascii_lowercase();
+                if lower.contains("oauth_invalid_client")
+                    || lower.contains("invalid_client")
+                    || lower.contains("redirect_uri_mismatch")
+                    || lower.contains("unauthorized_client")
+                {
+                    Some(ConnectionDiagnosticCode::OAuthInvalidClient)
+                } else if lower.contains("oauth_access_denied")
+                    || lower.contains("oauth_invalid_grant")
+                    || lower.contains("access_denied")
+                    || lower.contains("invalid_grant")
+                    || lower.contains("http status 401")
+                {
+                    Some(ConnectionDiagnosticCode::OAuthAccessDenied)
+                } else if lower.contains("network timeout") || lower.contains("timed out") {
+                    Some(ConnectionDiagnosticCode::NetworkTimeout)
+                } else {
+                    None
+                }
+            }
+            Self::ImapProtocol(reason) => {
+                let lower = reason.to_ascii_lowercase();
+                if lower.contains("oauth_access_denied") {
+                    Some(ConnectionDiagnosticCode::OAuthAccessDenied)
+                } else if lower.contains("oauth_invalid_client") {
+                    Some(ConnectionDiagnosticCode::OAuthInvalidClient)
+                } else if lower.contains("tls handshake")
+                    || lower.contains("tls protocol")
+                    || lower.contains("certificate")
+                    || lower.contains("unknown issuer")
+                    || lower.contains("invalid dnsname")
+                {
+                    Some(ConnectionDiagnosticCode::TlsHandshakeFailed)
+                } else if lower.contains("network timeout") || lower.contains("timed out") {
+                    Some(ConnectionDiagnosticCode::NetworkTimeout)
+                } else {
+                    None
+                }
+            }
+            Self::Vault(_) | Self::MimeParse(_) | Self::UnsubscribeFailed(_) => None,
+        }
+    }
+}
+
+/// Classifies an IMAP authentication rejection without echoing server text or credentials.
+pub fn classify_imap_auth_failure(reason: &str) -> ConnectionDiagnosticCode {
+    let lower = reason.to_ascii_lowercase();
+    if lower.contains("not enabled for imap")
+        || lower.contains("imap access is disabled")
+        || lower.contains("imap access disabled")
+        || lower.contains("imap is disabled")
+        || lower.contains("imap disabled")
+        || lower.contains("imap is not enabled")
+        || lower.contains("enable imap")
+    {
+        ConnectionDiagnosticCode::ImapDisabledHint
+    } else {
+        ConnectionDiagnosticCode::AuthenticationRejected
+    }
 }
 
 /// Transparent authentication mode configured by the user for an email account.
@@ -243,6 +323,51 @@ mod tests {
             Err(EngineError::InsecureTlsRejected(
                 "imap.example.com".to_string()
             ))
+        );
+    }
+
+    #[test]
+    fn classifies_engine_errors_into_secret_free_diagnostic_codes() {
+        assert_eq!(
+            EngineError::InsecureTlsRejected("imap.example.com".into()).diagnostic_code(),
+            Some(ConnectionDiagnosticCode::TlsHandshakeFailed)
+        );
+        assert_eq!(
+            EngineError::ImapProtocol("TLS handshake failed: unknown issuer".into())
+                .diagnostic_code(),
+            Some(ConnectionDiagnosticCode::TlsHandshakeFailed)
+        );
+        assert_eq!(
+            EngineError::ImapProtocol("network timeout during TCP connect".into())
+                .diagnostic_code(),
+            Some(ConnectionDiagnosticCode::NetworkTimeout)
+        );
+        assert_eq!(
+            EngineError::AuthenticationFailed(
+                "LOGIN authentication failed: Invalid credentials".into()
+            )
+            .diagnostic_code(),
+            Some(ConnectionDiagnosticCode::AuthenticationRejected)
+        );
+        assert_eq!(
+            EngineError::AuthenticationFailed(
+                "LOGIN authentication failed: [ALERT] Your account is not enabled for IMAP use."
+                    .into()
+            )
+            .diagnostic_code(),
+            Some(ConnectionDiagnosticCode::ImapDisabledHint)
+        );
+        assert_eq!(
+            EngineError::TokenRefresh("oauth_access_denied".into()).diagnostic_code(),
+            Some(ConnectionDiagnosticCode::OAuthAccessDenied)
+        );
+        assert_eq!(
+            EngineError::TokenRefresh("oauth_invalid_client".into()).diagnostic_code(),
+            Some(ConnectionDiagnosticCode::OAuthInvalidClient)
+        );
+        assert_eq!(
+            EngineError::MimeParse("bad mime".into()).diagnostic_code(),
+            None
         );
     }
 }

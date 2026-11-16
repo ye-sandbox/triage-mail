@@ -173,12 +173,15 @@ impl LoopbackRedirectListener {
 
         let mut code = None;
         let mut state = None;
+        let mut oauth_error = None;
 
         for (k, v) in parsed_url.query_pairs() {
             if k == "code" {
                 code = Some(v.into_owned());
             } else if k == "state" {
                 state = Some(v.into_owned());
+            } else if k == "error" {
+                oauth_error = Some(v.into_owned());
             }
         }
 
@@ -188,6 +191,25 @@ impl LoopbackRedirectListener {
             return Err(EngineError::ImapProtocol(
                 "OAuth2 state parameter mismatch (potential CSRF)".to_string(),
             ));
+        }
+
+        if let Some(error_code) = oauth_error {
+            let failure_body = "<!DOCTYPE html><html><body style=\"font-family:sans-serif;text-align:center;padding:40px;\"><h2>Authorization Failed</h2><p>You may close this tab and return to Triage Mail.</p></body></html>";
+            let failure_response = format!(
+                "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                failure_body.len(),
+                failure_body
+            );
+            let _ = socket.write_all(failure_response.as_bytes()).await;
+            return Err(match classify_oauth_error_code(&error_code) {
+                Some(crate::ConnectionDiagnosticCode::OAuthInvalidClient) => {
+                    EngineError::TokenRefresh("oauth_invalid_client".into())
+                }
+                Some(crate::ConnectionDiagnosticCode::OAuthAccessDenied) => {
+                    EngineError::TokenRefresh("oauth_access_denied".into())
+                }
+                _ => EngineError::ImapProtocol("OAuth2 callback returned an error".to_string()),
+            });
         }
 
         let auth_code = code.ok_or_else(|| {
@@ -203,6 +225,21 @@ impl LoopbackRedirectListener {
         let _ = socket.write_all(success_response.as_bytes()).await;
 
         Ok(auth_code)
+    }
+}
+
+/// Classifies an RFC 6749 `error` code into a safe diagnostic without echoing raw values.
+pub fn classify_oauth_error_code(error_code: &str) -> Option<crate::ConnectionDiagnosticCode> {
+    match error_code.trim().to_ascii_lowercase().as_str() {
+        "invalid_client" | "redirect_uri_mismatch" | "unauthorized_client" => {
+            Some(crate::ConnectionDiagnosticCode::OAuthInvalidClient)
+        }
+        "access_denied"
+        | "invalid_grant"
+        | "org_internal"
+        | "consent_required"
+        | "interaction_required" => Some(crate::ConnectionDiagnosticCode::OAuthAccessDenied),
+        _ => None,
     }
 }
 
@@ -309,16 +346,24 @@ impl TokenRefreshTransport for HttpTokenRefreshTransport {
             .build()
             .map_err(|e| EngineError::TokenRefresh(format!("failed to build HTTP client: {e}")))?;
 
-        let mut response =
-            client.post(url).form(&form).send().await.map_err(|e| {
+        let mut response = client.post(url).form(&form).send().await.map_err(|e| {
+            if e.is_timeout() {
+                EngineError::TokenRefresh("network timeout".into())
+            } else {
                 EngineError::TokenRefresh(format!("token refresh request failed: {e}"))
-            })?;
+            }
+        })?;
 
         if !response.status().is_success() {
-            return Err(EngineError::TokenRefresh(format!(
-                "token endpoint returned HTTP status {}",
-                response.status().as_u16()
-            )));
+            let status_code = response.status().as_u16();
+            let mut error_bytes = Zeroizing::new(Vec::new());
+            while let Ok(Some(chunk)) = response.chunk().await {
+                if error_bytes.len() + chunk.len() > 16384 {
+                    break;
+                }
+                error_bytes.extend_from_slice(&chunk);
+            }
+            return Err(classify_token_error_response(status_code, &error_bytes));
         }
 
         let mut bytes = Zeroizing::new(Vec::new());
@@ -337,6 +382,33 @@ impl TokenRefreshTransport for HttpTokenRefreshTransport {
 
         parse_refresh_response(&bytes)
     }
+}
+
+#[derive(Deserialize)]
+struct OAuthErrorJson {
+    error: Option<String>,
+}
+
+/// Classifies an OAuth2 token endpoint error payload without echoing `error_description` or raw text.
+pub fn classify_token_error_response(status_code: u16, body: &[u8]) -> EngineError {
+    if let Ok(parsed) = serde_json::from_slice::<OAuthErrorJson>(body) {
+        if let Some(code) = parsed.error.as_deref() {
+            if let Some(diag) = classify_oauth_error_code(code) {
+                return match diag {
+                    crate::ConnectionDiagnosticCode::OAuthInvalidClient => {
+                        EngineError::TokenRefresh("oauth_invalid_client".into())
+                    }
+                    crate::ConnectionDiagnosticCode::OAuthAccessDenied => {
+                        EngineError::TokenRefresh("oauth_access_denied".into())
+                    }
+                    _ => EngineError::TokenRefresh(format!(
+                        "token endpoint returned HTTP status {status_code}"
+                    )),
+                };
+            }
+        }
+    }
+    EngineError::TokenRefresh(format!("token endpoint returned HTTP status {status_code}"))
 }
 
 pub fn validate_token_endpoint(value: &str) -> Result<Url, EngineError> {
@@ -671,5 +743,61 @@ mod tests {
         let stored_bytes = vault.get_secret(&key).unwrap();
         let stored_auth = AccountAuthMaterial::from_bytes(&stored_bytes).unwrap();
         assert_eq!(stored_auth, updated);
+    }
+
+    #[tokio::test]
+    async fn loopback_listener_classifies_oauth_callback_errors_without_echoing_pii() {
+        for (error_param, expected) in [
+            (
+                "access_denied",
+                crate::ConnectionDiagnosticCode::OAuthAccessDenied,
+            ),
+            (
+                "redirect_uri_mismatch",
+                crate::ConnectionDiagnosticCode::OAuthInvalidClient,
+            ),
+        ] {
+            let listener = LoopbackRedirectListener::bind().await.unwrap();
+            let port = listener.port();
+            let expected_state = "csrf-state-error-test";
+
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(30)).await;
+                let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port))
+                    .await
+                    .unwrap();
+                let request = format!(
+                    "GET /callback?error={error_param}&error_description=sensitive-reader@example.com&state={expected_state} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+                );
+                stream.write_all(request.as_bytes()).await.unwrap();
+            });
+
+            let err = listener
+                .wait_for_code(expected_state, Duration::from_secs(5))
+                .await
+                .unwrap_err();
+            assert_eq!(err.diagnostic_code(), Some(expected));
+            assert!(!err.to_string().contains("sensitive-reader@example.com"));
+        }
+    }
+
+    #[test]
+    fn classifies_token_endpoint_error_payload_without_echoing_description() {
+        let invalid_client = br#"{"error":"invalid_client","error_description":"secret-leaked"}"#;
+        let err = classify_token_error_response(401, invalid_client);
+        assert_eq!(
+            err.diagnostic_code(),
+            Some(crate::ConnectionDiagnosticCode::OAuthInvalidClient)
+        );
+        assert!(!err.to_string().contains("secret-leaked"));
+
+        let revoked =
+            br#"{"error":"invalid_grant","error_description":"user@example.com revoked"}"#;
+        let err = classify_token_error_response(400, revoked);
+        assert_eq!(
+            err.diagnostic_code(),
+            Some(crate::ConnectionDiagnosticCode::OAuthAccessDenied)
+        );
+        assert!(!err.to_string().contains("user@example.com"));
     }
 }

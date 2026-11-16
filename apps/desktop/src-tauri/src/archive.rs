@@ -88,6 +88,7 @@ fn import_sync(
         new_messages_count: 0,
         triage_alerts: Vec::new(),
         embedding_errors_count: 0,
+        diagnostic: None,
     };
     service.events.publish(done_event.clone());
     if let Some(ref callback) = on_progress {

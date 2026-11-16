@@ -24,6 +24,7 @@ struct FakeRemote {
     fail: bool,
     fail_message: Option<String>,
     sync_result: Mutex<Option<IncrementalSyncResult>>,
+    test_connection_error: Mutex<Option<IpcError>>,
 }
 
 #[async_trait]
@@ -107,6 +108,16 @@ impl RemoteMail for FakeRemote {
             role: Some(mail_engine::SpecialFolderRole::Inbox),
             is_selectable: true,
         }])
+    }
+    async fn test_connection(
+        &self,
+        _: &AccountConfigDto,
+        _: &IncomingCredentials,
+    ) -> Result<(), IpcError> {
+        match *self.test_connection_error.lock().unwrap() {
+            Some(err) => Err(err),
+            None => Ok(()),
+        }
     }
 }
 struct FakeEmbedding;
@@ -2239,4 +2250,158 @@ async fn local_archive_import_streams_mbox_and_eml_with_local_only_triage_and_wo
             .await,
         Err(IpcError::AccountExists)
     );
+}
+
+#[tokio::test]
+async fn test_account_connection_returns_diagnostics_without_persisting_anything() {
+    let remote = Arc::new(FakeRemote::default());
+    let (service, _store, vault) = setup(remote.clone());
+    let mut cfg = config("");
+
+    let ok = service
+        .test_account_connection(cfg.clone(), credentials())
+        .await
+        .unwrap();
+    assert_eq!(
+        ok,
+        ConnectionTestResultDto {
+            ok: true,
+            diagnostic: None
+        }
+    );
+
+    *remote.test_connection_error.lock().unwrap() = Some(IpcError::ImapDisabledHint);
+    let disabled = service
+        .test_account_connection(cfg.clone(), credentials())
+        .await
+        .unwrap();
+    assert_eq!(
+        disabled,
+        ConnectionTestResultDto {
+            ok: false,
+            diagnostic: Some(ConnectionDiagnosticCode::ImapDisabledHint),
+        }
+    );
+
+    *remote.test_connection_error.lock().unwrap() = Some(IpcError::AuthenticationRejected);
+    let rejected = service
+        .test_account_connection(cfg.clone(), credentials())
+        .await
+        .unwrap();
+    assert_eq!(
+        rejected,
+        ConnectionTestResultDto {
+            ok: false,
+            diagnostic: Some(ConnectionDiagnosticCode::AuthenticationRejected),
+        }
+    );
+
+    *remote.test_connection_error.lock().unwrap() = Some(IpcError::RemoteUnavailable);
+    assert_eq!(
+        service
+            .test_account_connection(cfg.clone(), credentials())
+            .await,
+        Err(IpcError::RemoteUnavailable)
+    );
+
+    cfg.auth_method = AuthMethod::LocalArchive;
+    cfg.imap_host.clear();
+    cfg.imap_port = 0;
+    assert_eq!(
+        service
+            .test_account_connection(cfg, IncomingCredentials(AccountAuthMaterial::LocalArchive),)
+            .await,
+        Err(IpcError::InvalidRequest)
+    );
+
+    assert!(service.list_accounts().await.unwrap().is_empty());
+    assert!(vault
+        .get_secret(&VaultKey::for_account("transient-test", "imap-auth").unwrap())
+        .is_err());
+}
+
+#[tokio::test]
+async fn worker_failure_emits_diagnostic_and_update_auth_clears_it_preserving_mail() {
+    let remote = Arc::new(FakeRemote::default());
+    let (service, store, vault) = setup(remote.clone());
+    let cfg = AccountConfigDto {
+        account_id: "acct-oauth".into(),
+        email_display: "reader@example.com".into(),
+        imap_host: "imap.example.com".into(),
+        imap_port: 993,
+        auth_method: AuthMethod::OAuth2PublicPkce,
+    };
+    service
+        .add_account(
+            cfg.clone(),
+            IncomingCredentials(AccountAuthMaterial::OAuth2PublicPkce {
+                client_id: "client-1".into(),
+                access_token: "access-1".into(),
+                refresh_token: Some("refresh-1".into()),
+                token_endpoint: Some("https://auth.example.com/token".into()),
+            }),
+        )
+        .await
+        .unwrap();
+
+    store
+        .insert_message(&MessageRecord {
+            id: "msg-keep".into(),
+            account_id: "acct-oauth".into(),
+            folder: "INBOX".into(),
+            uid: 1,
+            message_id_header: Some("<keep@example.org>".into()),
+            in_reply_to: None,
+            references_header: None,
+            subject: "Keep on reauth".into(),
+            sender: "sender@example.org".into(),
+            recipients: "reader@example.com".into(),
+            received_at_epoch_ms: 1_730_000_000_000,
+            is_read: false,
+            has_attachments: false,
+            category_badge: Some("Personal".into()),
+            triage_badges: Vec::new(),
+            raw_headers: "Subject: Keep\r\n\r\n".into(),
+            text_body: Some("Body".into()),
+            html_body: None,
+            list_unsubscribe: None,
+            list_unsubscribe_post: None,
+            one_click_unsubscribe_supported: false,
+            created_at_epoch_ms: 1_730_000_000_000,
+            attachments: Vec::new(),
+            tags: Vec::new(),
+            is_starred: false,
+            snooze_until_epoch_ms: None,
+            provider_message_id: None,
+        })
+        .unwrap();
+
+    // Unconfigured sync_result triggers FakeRemote::sync -> Err(Unsupported) -> unclassified,
+    // while update_account_auth rotates vault material in place and preserves messages.
+    service
+        .update_account_auth(
+            cfg,
+            IncomingCredentials(AccountAuthMaterial::OAuth2PublicPkce {
+                client_id: "client-1".into(),
+                access_token: "access-2".into(),
+                refresh_token: Some("refresh-2".into()),
+                token_endpoint: Some("https://auth.example.com/token".into()),
+            }),
+        )
+        .await
+        .unwrap();
+    let stored = AccountAuthMaterial::from_bytes(
+        &vault
+            .get_secret(&VaultKey::for_account("acct-oauth", "imap-auth").unwrap())
+            .unwrap(),
+    )
+    .unwrap();
+    match stored {
+        AccountAuthMaterial::OAuth2PublicPkce { access_token, .. } => {
+            assert_eq!(access_token, "access-2");
+        }
+        other => panic!("unexpected auth variant: {other:?}"),
+    }
+    assert!(store.get_message_by_id("msg-keep").unwrap().is_some());
+    assert!(service.account_diagnostics().await.unwrap().is_empty());
 }

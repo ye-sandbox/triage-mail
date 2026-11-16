@@ -40,6 +40,7 @@ impl BatchEvents {
             new_messages_count: 0,
             triage_alerts: Vec::new(),
             embedding_errors_count: 0,
+            diagnostic: None,
         };
         Self {
             account_id,
@@ -63,6 +64,7 @@ impl BatchEvents {
                 new_messages_count: 0,
                 triage_alerts: Vec::new(),
                 embedding_errors_count: 0,
+                diagnostic: None,
             }
         }
     }

@@ -40,6 +40,32 @@ impl<'de> Deserialize<'de> for IncomingAuthorization {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+struct ReauthorizationFields {
+    account_id: String,
+    authorization_endpoint: String,
+    token_endpoint: Option<String>,
+    scopes: String,
+    client_id: Option<String>,
+    client_secret: Option<String>,
+}
+impl Drop for ReauthorizationFields {
+    fn drop(&mut self) {
+        self.client_id.zeroize();
+        self.client_secret.zeroize();
+    }
+}
+
+/// Input-only wrapper prevents serde diagnostics from echoing reauthorization credentials.
+pub struct IncomingReauthorization(ReauthorizationFields);
+impl<'de> Deserialize<'de> for IncomingReauthorization {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        ReauthorizationFields::deserialize(deserializer)
+            .map(Self)
+            .map_err(|_| serde::de::Error::custom("invalid reauthorization material"))
+    }
+}
+
 #[derive(Default)]
 pub struct AuthorizationSessions(Mutex<HashMap<String, watch::Sender<bool>>>);
 
@@ -156,19 +182,15 @@ fn credentials(
     }))
 }
 
-/// All blocking keyring work runs through the service executor. Staging ends on every exit path.
-pub async fn authorize(
-    service: Arc<DesktopService>,
-    mut config: AccountConfigDto,
-    input: IncomingAuthorization,
+async fn run_pkce_flow(
+    service: &Arc<DesktopService>,
+    config: &AccountConfigDto,
+    fields: AuthorizationFields,
     mut cancel: watch::Receiver<bool>,
     open: impl FnOnce(&str) -> Result<(), IpcError>,
     exchange: &dyn TokenExchange,
-) -> Result<String, IpcError> {
-    if config.account_id.is_empty() {
-        config.account_id = opaque_id()?;
-    }
-    validate(&config, &input.0)?;
+) -> Result<IncomingCredentials, IpcError> {
+    validate(config, &fields)?;
     let listener = LoopbackRedirectListener::bind()
         .await
         .map_err(|_| IpcError::RemoteUnavailable)?;
@@ -176,12 +198,12 @@ pub async fn authorize(
     let state = Zeroizing::new(generate_oauth_state());
     let pkce = PkceChallenge::generate();
     let verifier = Zeroizing::new(pkce.verifier.expose_secret().to_owned());
-    let mut url = endpoint(&input.0.authorization_endpoint)?;
+    let mut url = endpoint(&fields.authorization_endpoint)?;
     url.query_pairs_mut().extend_pairs([
         ("response_type", "code"),
-        ("client_id", &input.0.client_id),
+        ("client_id", &fields.client_id),
         ("redirect_uri", &redirect),
-        ("scope", &input.0.scopes),
+        ("scope", &fields.scopes),
         ("state", &state),
         ("code_challenge", &pkce.challenge),
         ("code_challenge_method", "S256"),
@@ -196,27 +218,37 @@ pub async fn authorize(
     service
         .blocking(move |s| {
             let bytes =
-                Zeroizing::new(serde_json::to_vec(&input.0).map_err(|_| IpcError::Internal)?);
+                Zeroizing::new(serde_json::to_vec(&fields).map_err(|_| IpcError::Internal)?);
             s.vault
                 .set_secret(&staged_key, &bytes)
                 .map_err(|_| IpcError::VaultUnavailable)
         })
         .await?;
+    let auth_method = config.auth_method;
     // INVARIANT: Cancellation only races callback/exchange. Once persistence starts, it completes.
     let result = tokio::select! {
         biased;
-        _ = cancel.wait_for(|cancelled| *cancelled) => Err(IpcError::RemoteUnavailable),
+        _ = cancel.wait_for(|cancelled| *cancelled) => Err(IpcError::OAuthCancelled),
         result = tokio::time::timeout(Duration::from_secs(300), async {
             open(url.as_str())?;
-            let code = Zeroizing::new(listener.wait_for_code(&state, Duration::from_secs(300)).await.map_err(|_| IpcError::RemoteUnavailable)?);
+            let code = Zeroizing::new(
+                listener
+                    .wait_for_code(&state, Duration::from_secs(300))
+                    .await
+                    .map_err(|err| {
+                        err.diagnostic_code()
+                            .map(crate::service::diagnostic_to_ipc)
+                            .unwrap_or(IpcError::RemoteUnavailable)
+                    })?,
+            );
             let read_key = key.clone();
             let fields = service.blocking(move |s| {
                 let bytes = Zeroizing::new(s.vault.get_secret(&read_key).map_err(|_| IpcError::VaultUnavailable)?);
                 serde_json::from_slice::<AuthorizationFields>(&bytes).map_err(|_| IpcError::VaultUnavailable)
             }).await?;
             let tokens = exchange.exchange(TokenRequest { target: &fields.token_endpoint, client_id: &fields.client_id, client_secret: fields.client_secret.as_deref(), redirect: &redirect, code: &code, verifier: &verifier }).await?;
-            credentials(config.auth_method, &fields, tokens.access_token.clone(), tokens.refresh_token.clone())
-        }) => result.map_err(|_| IpcError::RemoteUnavailable).and_then(|r| r),
+            credentials(auth_method, &fields, tokens.access_token.clone(), tokens.refresh_token.clone())
+        }) => result.map_err(|_| IpcError::NetworkTimeout).and_then(|r| r),
     };
     service
         .blocking(move |s| {
@@ -225,7 +257,78 @@ pub async fn authorize(
                 .map_err(|_| IpcError::VaultUnavailable)
         })
         .await?;
-    service.add_account(config, result?).await
+    result
+}
+
+/// All blocking keyring work runs through the service executor. Staging ends on every exit path.
+pub async fn authorize(
+    service: Arc<DesktopService>,
+    mut config: AccountConfigDto,
+    input: IncomingAuthorization,
+    cancel: watch::Receiver<bool>,
+    open: impl FnOnce(&str) -> Result<(), IpcError>,
+    exchange: &dyn TokenExchange,
+) -> Result<String, IpcError> {
+    if config.account_id.is_empty() {
+        config.account_id = opaque_id()?;
+    }
+    let creds = run_pkce_flow(&service, &config, input.0, cancel, open, exchange).await?;
+    service.add_account(config, creds).await
+}
+
+/// Re-runs OAuth2 PKCE consent for an existing account and replaces vault tokens in place.
+pub async fn reauthorize(
+    service: Arc<DesktopService>,
+    mut input: IncomingReauthorization,
+    cancel: watch::Receiver<bool>,
+    open: impl FnOnce(&str) -> Result<(), IpcError>,
+    exchange: &dyn TokenExchange,
+) -> Result<String, IpcError> {
+    let account_id = input.0.account_id.clone();
+    if account_id.is_empty()
+        || account_id.len() > 128
+        || !account_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return Err(IpcError::InvalidRequest);
+    }
+    let mut stored = service
+        .load_oauth_client_material(account_id.clone())
+        .await?;
+    let config = stored.config.clone();
+    let override_client_id = input.0.client_id.take().filter(|v| !v.is_empty());
+    let override_client_secret = input.0.client_secret.take().filter(|v| !v.is_empty());
+    let override_token_endpoint = input.0.token_endpoint.take().filter(|v| !v.is_empty());
+    let client_secret = match config.auth_method {
+        AuthMethod::OAuth2PublicPkce => {
+            if let Some(mut secret) = override_client_secret {
+                secret.zeroize();
+                return Err(IpcError::InvalidRequest);
+            }
+            None
+        }
+        AuthMethod::OAuth2ByoCredentials => Some(
+            override_client_secret
+                .or_else(|| stored.client_secret.take())
+                .ok_or(IpcError::InvalidRequest)?,
+        ),
+        _ => return Err(IpcError::InvalidRequest),
+    };
+    let fields = AuthorizationFields {
+        authorization_endpoint: std::mem::take(&mut input.0.authorization_endpoint),
+        token_endpoint: override_token_endpoint
+            .or_else(|| stored.token_endpoint.take())
+            .ok_or(IpcError::InvalidRequest)?,
+        scopes: std::mem::take(&mut input.0.scopes),
+        client_id: override_client_id.unwrap_or_else(|| std::mem::take(&mut stored.client_id)),
+        client_secret,
+    };
+    drop(stored);
+    drop(input);
+    let creds = run_pkce_flow(&service, &config, fields, cancel, open, exchange).await?;
+    service.update_account_auth(config, creds).await?;
+    Ok(account_id)
 }
 
 #[derive(Deserialize)]
@@ -287,9 +390,28 @@ impl TokenExchange for NativeTokenExchange {
             .form(&form)
             .send()
             .await
-            .map_err(|_| IpcError::RemoteUnavailable)?;
+            .map_err(|err| {
+                if err.is_timeout() {
+                    IpcError::NetworkTimeout
+                } else {
+                    IpcError::RemoteUnavailable
+                }
+            })?;
         if !response.status().is_success() {
-            return Err(IpcError::RemoteUnavailable);
+            let status_code = response.status().as_u16();
+            let mut error_bytes = Zeroizing::new(Vec::new());
+            while let Ok(Some(chunk)) = response.chunk().await {
+                if error_bytes.len() + chunk.len() > 16384 {
+                    break;
+                }
+                error_bytes.extend_from_slice(&chunk);
+            }
+            let engine_err =
+                mail_engine::auth::classify_token_error_response(status_code, &error_bytes);
+            return Err(engine_err
+                .diagnostic_code()
+                .map(crate::service::diagnostic_to_ipc)
+                .unwrap_or(IpcError::RemoteUnavailable));
         }
         // INVARIANT: Provider responses are bounded, zeroized, and never included in diagnostics.
         let mut bytes = Zeroizing::new(Vec::new());

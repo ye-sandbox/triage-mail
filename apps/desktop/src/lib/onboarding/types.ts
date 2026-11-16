@@ -27,6 +27,22 @@ export type Authorization = {
 	client_id: string;
 	client_secret?: string;
 };
+import type { ConnectionDiagnosticCode } from '../inbox/types';
+
+export type { ConnectionDiagnosticCode };
+
+export type ConnectionTestResult = {
+	ok: boolean;
+	diagnostic?: ConnectionDiagnosticCode;
+};
+export type Reauthorization = {
+	account_id: string;
+	authorization_endpoint: string;
+	token_endpoint?: string;
+	scopes: string;
+	client_id?: string;
+	client_secret?: string;
+};
 export type VaultStatus = {
 	exists: boolean;
 	keyring_available: boolean;
@@ -43,6 +59,12 @@ export interface AccountTransport {
 		ready: () => void
 	): Promise<string>;
 	cancel(): Promise<void>;
+	testConnection?(
+		config: AccountConfig,
+		credentials: PasswordCredentials
+	): Promise<ConnectionTestResult>;
+	reauthorize?(reauthorization: Reauthorization, ready: () => void): Promise<string>;
+	diagnostics?(): Promise<Record<string, ConnectionDiagnosticCode>>;
 	chooseArchiveFile?(): Promise<string | null>;
 	importLocalArchive?(
 		path: string,

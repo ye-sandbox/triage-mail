@@ -123,6 +123,7 @@ impl DesktopService {
                     new_messages_count: 0,
                     triage_alerts: Vec::new(),
                     embedding_errors_count: failed,
+                    diagnostic: None,
                 });
                 return Err(IpcError::EmbeddingUnavailable);
             }

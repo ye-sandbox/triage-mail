@@ -259,6 +259,16 @@ pub enum SyncState {
     ResyncRequired,
 }
 
+pub use mail_engine::ConnectionDiagnosticCode;
+
+/// Result of a transient, zero-persistence pre-save connection and authentication check.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectionTestResultDto {
+    pub ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostic: Option<ConnectionDiagnosticCode>,
+}
+
 /// Desktop wire event, deliberately separate from mail_engine::SyncProgressEvent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SyncProgressEvent {
@@ -268,6 +278,8 @@ pub struct SyncProgressEvent {
     pub triage_alerts: Vec<TriageBadge>,
     #[serde(default)]
     pub embedding_errors_count: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostic: Option<ConnectionDiagnosticCode>,
 }
 
 /// Summary returned after streaming a local `.mbox` or `.eml` archive into storage.

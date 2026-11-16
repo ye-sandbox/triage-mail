@@ -62,6 +62,13 @@ pub trait RemoteMail: Send + Sync {
         &self,
         config: &AccountConfigDto,
     ) -> Result<Vec<mail_engine::DiscoveredFolder>, IpcError>;
+    async fn test_connection(
+        &self,
+        _config: &AccountConfigDto,
+        _credentials: &crate::service::IncomingCredentials,
+    ) -> Result<(), IpcError> {
+        Err(IpcError::RemoteUnavailable)
+    }
 }
 
 pub use mail_engine::NativeSession;
@@ -103,7 +110,7 @@ impl NativeRemoteMail {
         DefaultImapConnector::new(self.vault.clone())
             .connect_and_authenticate_as(&endpoint, &config.email_display, &auth.0)
             .await
-            .map_err(|_| IpcError::RemoteUnavailable)
+            .map_err(remote_error)
     }
 }
 
@@ -221,10 +228,30 @@ impl RemoteMail for NativeRemoteMail {
         let (mut session, _) = self.session(config).await?;
         session.discover_folders().await.map_err(remote_error)
     }
+
+    async fn test_connection(
+        &self,
+        config: &AccountConfigDto,
+        credentials: &crate::service::IncomingCredentials,
+    ) -> Result<(), IpcError> {
+        let endpoint: ImapEndpointConfig = config
+            .clone()
+            .into_endpoint_and_vault_key()
+            .map_err(|_| IpcError::InvalidRequest)?
+            .0;
+        DefaultImapConnector::new(self.vault.clone())
+            .test_connection_as(&endpoint, &config.email_display, &credentials.0)
+            .await
+            .map(|_| ())
+            .map_err(remote_error)
+    }
 }
 
-fn remote_error(_: EngineError) -> IpcError {
-    IpcError::RemoteUnavailable
+fn remote_error(error: EngineError) -> IpcError {
+    error
+        .diagnostic_code()
+        .map(crate::service::diagnostic_to_ipc)
+        .unwrap_or(IpcError::RemoteUnavailable)
 }
 
 fn mutation_error(error: MutationError) -> IpcError {
@@ -232,6 +259,6 @@ fn mutation_error(error: MutationError) -> IpcError {
         MutationError::StaleIdentity => IpcError::StaleMessage,
         MutationError::Unsupported => IpcError::Unsupported,
         MutationError::InvalidRequest => IpcError::InvalidRequest,
-        MutationError::Engine(_) => IpcError::RemoteUnavailable,
+        MutationError::Engine(err) => remote_error(err),
     }
 }
