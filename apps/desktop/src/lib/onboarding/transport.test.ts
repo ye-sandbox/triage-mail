@@ -190,4 +190,3 @@ it('queries vault existence and keyring availability via cmd_vault_status', asyn
 	});
 	expect(vi.mocked(invoke).mock.calls).toEqual([['cmd_vault_status']]);
 });
-

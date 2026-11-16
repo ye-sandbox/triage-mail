@@ -314,3 +314,109 @@ it('imports Google Cloud Desktop JSON directly into transient credential inputs'
 	);
 	await unmount(component);
 });
+
+it('debounces offline autodiscovery on valid @domain input, respects manual edits, and exposes regional + Other IMAP presets', async () => {
+	vi.useFakeTimers();
+	const api = transport();
+	const discovery = new DiscoveryController(api);
+
+	discovery.input('reader@');
+	discovery.input('reader@localhost');
+	await vi.advanceTimersByTimeAsync(300);
+	expect(api.discover).not.toHaveBeenCalled();
+
+	discovery.input('reader@example.com');
+	await vi.advanceTimersByTimeAsync(100);
+	discovery.input('reader@example.org');
+	await vi.advanceTimersByTimeAsync(250);
+	expect(api.discover.mock.calls).toEqual([['reader@example.org', false]]);
+
+	// INVARIANT: Blur does not fire a redundant offline lookup for an already resolved address.
+	discovery.blur('reader@example.org');
+	await vi.advanceTimersByTimeAsync(250);
+	expect(api.discover).toHaveBeenCalledTimes(1);
+
+	// Late resolution after manual edit is ignored.
+	const pending = deferred<DiscoveredProvider>();
+	api.discover.mockReturnValueOnce(pending.promise);
+	discovery.input('late@example.com');
+	await vi.advanceTimersByTimeAsync(250);
+	discovery.protectCredentials();
+	pending.resolve(result);
+	await Promise.resolve();
+	expect(discovery.provider).toBeNull();
+
+	const expectedPresets = [
+		['Zoho', 'imap.zoho.com', 993, 'AppPassword'],
+		['UOL', 'imap.uol.com.br', 993, 'AppPassword'],
+		['BOL', 'imap.bol.com.br', 993, 'AppPassword'],
+		['Terra', 'imap.terra.com.br', 993, 'AppPassword'],
+		['Other IMAP', '', 993, 'AppPassword']
+	] as const;
+	for (const [name, host, port, auth] of expectedPresets) {
+		const found = providerPresets.find((preset) => preset.name === name);
+		expect(found).toEqual(
+			expect.objectContaining({ name, host, port, method: auth })
+		);
+	}
+	discovery.dispose();
+});
+
+it('collapses advanced settings for resolved presets, guides provider options, and auto-expands for Other IMAP', async () => {
+	const target = document.createElement('div');
+	document.body.append(target);
+	const controller = new AccountController({
+		list: async () => [],
+		unlock: async () => {},
+		add: async () => 'a',
+		authorize: async () => 'a',
+		cancel: async () => {}
+	});
+	const component = mount(WdgAccountDiscoveryForm, {
+		target,
+		props: { controller, discoveryTransport: transport() }
+	});
+	flushSync();
+
+	const advToggle = target.querySelector<HTMLButtonElement>(
+		'button[aria-controls="advanced-connection-settings"]'
+	)!;
+	const advPanel = target.querySelector<HTMLElement>('#advanced-connection-settings')!;
+	expect(advToggle.getAttribute('aria-expanded')).toBe('false');
+	expect(advPanel.hidden).toBe(true);
+	expect(target.textContent).toContain('Google Cloud OAuth JSON');
+	expect(target.textContent).toContain('Offline .mbox / .eml Import');
+
+	// Switching to Google Cloud OAuth JSON keeps endpoints collapsed while exposing JSON import and credential fields.
+	[...target.querySelectorAll('button')]
+		.find((b) => b.textContent?.trim() === 'Google Cloud OAuth JSON')!
+		.click();
+	flushSync();
+	expect(advPanel.hidden).toBe(true);
+	expect(target.querySelector('input[name="client"]')).not.toBeNull();
+	expect(target.querySelector('input[name="secret"]')).not.toBeNull();
+	expect(target.textContent).toContain('Import Google Cloud JSON');
+
+	// Manual toggle expands advanced settings.
+	advToggle.click();
+	flushSync();
+	expect(advToggle.getAttribute('aria-expanded')).toBe('true');
+	expect(advPanel.hidden).toBe(false);
+
+	// Selecting a preset collapses advanced settings again; Other IMAP auto-expands it.
+	[...target.querySelectorAll('button')]
+		.find((b) => b.textContent?.trim() === 'UOL')!
+		.click();
+	flushSync();
+	expect(advPanel.hidden).toBe(true);
+	expect(target.querySelector<HTMLInputElement>('input[name="host"]')!.value).toBe('imap.uol.com.br');
+
+	[...target.querySelectorAll('button')]
+		.find((b) => b.textContent?.trim() === 'Other IMAP')!
+		.click();
+	flushSync();
+	expect(advToggle.getAttribute('aria-expanded')).toBe('true');
+	expect(advPanel.hidden).toBe(false);
+
+	await unmount(component);
+});

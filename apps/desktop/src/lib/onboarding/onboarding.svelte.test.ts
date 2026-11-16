@@ -4,7 +4,7 @@ import { i18n } from '../i18n/index.svelte';
 import type { FolderDto } from '../inbox/types';
 import { AccountController } from './controller.svelte';
 import { OnboardingSession } from './session.svelte';
-import type { AccountConfig, AccountTransport, RecoveryTransport } from './types';
+import type { AccountConfig, AccountTransport, RecoveryTransport, VaultStatus } from './types';
 import WdgAccountDiscoveryForm from './WdgAccountDiscoveryForm.svelte';
 import WdgBootGate from './WdgBootGate.svelte';
 import WdgConnectedAccountList from './WdgConnectedAccountList.svelte';
@@ -38,9 +38,16 @@ function deferred<T>() {
 	return { promise, resolve, reject };
 }
 
-function fixture(options?: { native?: boolean; recoveryAvailable?: boolean }) {
+function fixture(options?: {
+	native?: boolean;
+	recoveryAvailable?: boolean;
+	vaultStatus?: VaultStatus;
+}) {
 	const transport = {
 		list: vi.fn<AccountTransport['list']>().mockResolvedValue([]),
+		vaultStatus: vi
+			.fn<NonNullable<AccountTransport['vaultStatus']>>()
+			.mockResolvedValue(options?.vaultStatus ?? { exists: true, keyring_available: true }),
 		unlock: vi.fn<AccountTransport['unlock']>().mockResolvedValue(),
 		add: vi.fn<AccountTransport['add']>().mockResolvedValue('account-one'),
 		authorize: vi.fn<AccountTransport['authorize']>().mockResolvedValue('account-one'),
@@ -189,6 +196,64 @@ describe('account startup and boot gate', () => {
 		expect(session.accounts.phase).toBe('ready');
 		expect(target.querySelector('[role="listbox"][aria-label="Messages"]')).not.toBeNull();
 		await unmount(component);
+	});
+
+	it('presents Create local master passphrase with confirmation and keyring-unavailable copy on first run, and Unlock vault when vault exists', async () => {
+		const firstRun = fixture({
+			native: true,
+			vaultStatus: { exists: false, keyring_available: false }
+		});
+		firstRun.transport.list
+			.mockRejectedValueOnce('VaultUnavailable')
+			.mockResolvedValueOnce([]);
+		const firstComp = mount(WdgBootGate, {
+			target: firstRun.target,
+			props: { session: firstRun.session, onNavigate: vi.fn() }
+		});
+		await settle();
+
+		expect(firstRun.transport.vaultStatus).toHaveBeenCalledTimes(1);
+		expect(firstRun.target.textContent).toContain('Create local master passphrase');
+		expect(firstRun.target.textContent).toContain('New Local Vault');
+		expect(firstRun.target.textContent).toContain('No OS keyring (Secret Service)');
+		const passInput = firstRun.target.querySelector<HTMLInputElement>('input[name="passphrase"]')!;
+		const confirmInput = firstRun.target.querySelector<HTMLInputElement>('input[name="confirmation"]')!;
+		expect(confirmInput).not.toBeNull();
+
+		// Mismatched confirmation clears both DOM inputs and blocks unlock.
+		input(firstRun.target, 'passphrase', 'synthetic-first');
+		input(firstRun.target, 'confirmation', 'synthetic-other');
+		submit(firstRun.target);
+		expect(passInput.value).toBe('');
+		expect(confirmInput.value).toBe('');
+		expect(firstRun.transport.unlock).not.toHaveBeenCalled();
+		expect(firstRun.target.textContent).toContain('Passphrase and confirmation must match');
+
+		// Matching >= 8 chars calls unlock, clears inputs, and reaches ready state.
+		input(firstRun.target, 'passphrase', 'synthetic-master');
+		input(firstRun.target, 'confirmation', 'synthetic-master');
+		submit(firstRun.target);
+		expect(passInput.value).toBe('');
+		expect(confirmInput.value).toBe('');
+		expect(firstRun.transport.unlock).toHaveBeenCalledWith('synthetic-master');
+		await settle();
+		await unmount(firstComp);
+
+		// Existing vault shows Unlock vault without confirmation input.
+		const existing = fixture({
+			native: true,
+			vaultStatus: { exists: true, keyring_available: false }
+		});
+		existing.transport.list.mockRejectedValueOnce('VaultUnavailable');
+		const existingComp = mount(WdgBootGate, {
+			target: existing.target,
+			props: { session: existing.session, onNavigate: vi.fn() }
+		});
+		await settle();
+		expect(existing.target.textContent).toContain('Unlock your mail');
+		expect(existing.target.textContent).toContain('Unlock vault');
+		expect(existing.target.querySelector('input[name="confirmation"]')).toBeNull();
+		await unmount(existingComp);
 	});
 
 	it('gates startup recovery backups (.triagebak) with consent and allows skipping', async () => {

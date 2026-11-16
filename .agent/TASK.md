@@ -7,47 +7,10 @@
 
 ## Active Task
 
-### Task [04.20]: Streamlined First-Run Vault & Onboarding UX
-
-- **Status:** RUNNING
-- **Priority:** 2 (Email-Access Improvement Initiative — 2026-11-16)
-- **Systems Involved:** `apps/desktop/src-tauri`, `apps/desktop/src/lib/onboarding`, `apps/desktop/src/lib/i18n`.
-- **Problem:**
-  1. First-run fallback vault shows `"Unlock your mail / Vault passphrase"` without indicating the user is *creating* a new master passphrase when no `mail.db`/`vault.enc` exists yet (especially on Linux sessions without D-Bus Secret Service).
-  2. Offline provider discovery only runs on email `onblur`, and existing backend presets (`Zoho`, `UOL`, `BOL`, `Terra`) are missing from quick-fill UI presets.
-  3. Technical fields (`IMAP host`, `Port`, OAuth endpoints, `Scopes`) are always expanded even when resolved from a preset/ISPDB (unused `advancedSettings` i18n key), and raw protocol tabs confront non-technical users upfront.
-- **Scope & Atomic Subtasks:**
-  1. `[04.20.1]` `[PARALLEL: W1]` **First-Run Vault State IPC (`apps/desktop/src-tauri`):**
-     - `Read:` `apps/desktop/src-tauri/src/runtime.rs`, `apps/desktop/src-tauri/src/dto.rs`
-     - `Paths:` `apps/desktop/src-tauri/src/dto.rs`, `apps/desktop/src-tauri/src/runtime.rs`, `apps/desktop/src-tauri/src/onboarding/tests.rs`
-     - `Verify:` `cargo test -p triage-mail-desktop`
-     - Add additive read-only `cmd_vault_status` returning `{ exists: bool, keyring_available: bool }` (checking `data_dir/mail.db` and `data_dir/vault.enc` existence without initializing storage or exposing paths).
-  2. `[04.20.2]` `[PARALLEL: W1]` **Debounced Input Autodiscovery & Preset Parity (`apps/desktop/src/lib/onboarding`):**
-     - `Read:` `apps/desktop/src/lib/onboarding/discovery-controller.svelte.ts`, `apps/desktop/src/lib/onboarding/presets.ts`, `crates/mail-engine/src/discovery/presets.rs`
-     - `Paths:` `apps/desktop/src/lib/onboarding/discovery-controller.svelte.ts`, `apps/desktop/src/lib/onboarding/presets.ts`, `apps/desktop/src/lib/onboarding/discovery.svelte.test.ts`
-     - `Verify:` `pnpm --filter desktop check && pnpm --filter desktop test`
-     - Trigger debounced offline discovery on email `oninput` once a valid `@domain` is entered (respecting stale revision cancellation and `manual` override invariants); expose `Zoho`, `UOL`, `BOL`, `Terra`, and `Other IMAP` presets.
-  3. `[04.20.3]` `[BATCH: B2]` **Create-vs-Unlock Vault Card (`WdgVaultUnlockCard.svelte`):**
-     - `Read:` `apps/desktop/src/lib/onboarding/WdgVaultUnlockCard.svelte`, `apps/desktop/src/lib/onboarding/session.svelte.ts`, `apps/desktop/src/lib/onboarding/transport.ts`, `apps/desktop/src/lib/onboarding/types.ts`
-     - `Paths:` `apps/desktop/src/lib/onboarding/WdgVaultUnlockCard.svelte`, `apps/desktop/src/lib/onboarding/session.svelte.ts`, `apps/desktop/src/lib/onboarding/transport.ts`, `apps/desktop/src/lib/onboarding/types.ts`, `apps/desktop/src/lib/onboarding/onboarding.svelte.test.ts`, `apps/desktop/src/lib/i18n/types.ts`, `apps/desktop/src/lib/i18n/translations.ts`
-     - `Verify:` `pnpm --filter desktop check && pnpm --filter desktop test`
-     - Load `svelte-dev`. Consume `cmd_vault_status` to present **"Create local master passphrase"** (with passphrase confirmation input + keyring-unavailable explanation) on first run vs. **"Unlock vault"** when `vault.enc`/`mail.db` already exist.
-  4. `[04.20.4]` `[BATCH: B3]` **Provider-Guided Flow & Collapsible Advanced Settings (`WdgAccountDiscoveryForm.svelte`):**
-     - `Read:` `apps/desktop/src/lib/onboarding/WdgAccountDiscoveryForm.svelte`, `apps/desktop/src/lib/onboarding/WdgAccountHelpGuide.svelte`
-     - `Paths:` `apps/desktop/src/lib/onboarding/WdgAccountDiscoveryForm.svelte`, `apps/desktop/src/lib/onboarding/WdgAccountHelpGuide.svelte`, `apps/desktop/src/lib/onboarding/discovery.svelte.test.ts`, `apps/desktop/src/lib/i18n/types.ts`, `apps/desktop/src/lib/i18n/translations.ts`
-     - `Verify:` `pnpm --filter desktop check && pnpm --filter desktop test && pnpm --filter desktop build`
-     - Load `svelte-dev`. Wire `advancedSettings` toggle to collapse `host`, `port`, `authorize`, `token`, and `scopes` when resolved from a preset/ISPDB; present provider-tailored human-readable options (*App Password*, *Google Cloud OAuth JSON*, *Offline `.mbox`/`.eml` Import*, *Proton Bridge* / *Custom IMAP*). Retain unbound `[data-credential]` DOM-only input invariants.
-
----
-
-## Prioritized Email-Access Backlog (2026-11-16)
-
-> Atomic roadmap following `[04.20]` to remove connection-diagnostic friction. Each task requires approval (`proceed` or `proceed queue`) before implementation.
-
 ### Task [02.9]: Actionable Connection, Credential & OAuth Error Diagnostics
 
 - **Status:** READY FOR PLANNING
-- **Priority:** 3
+- **Priority:** 3 (Email-Access Improvement Initiative — 2026-11-16)
 - **Systems Involved:** `crates/mail-engine`, `apps/desktop/src-tauri`, `apps/desktop/src/lib/onboarding`, `apps/desktop/src/lib/i18n`.
 - **Problem:** Authentication failures, IMAP-disabled accounts, OAuth consent errors (`access_denied`, missing Test User, `redirect_uri_mismatch`), and expired/revoked refresh tokens currently collapse into opaque `IpcError::RemoteUnavailable` or silent `SyncState::Retrying` loops without actionable user guidance or a one-click re-authorize action.
 - **Scope & Atomic Subtasks:**
@@ -65,6 +28,42 @@
 ---
 
 ## Latest Completed Task
+
+### Task [04.20]: Streamlined First-Run Vault & Onboarding UX
+
+- **Status:** DONE
+- **Priority:** 2 (Email-Access Improvement Initiative — 2026-11-16)
+- **Systems Involved:** `apps/desktop/src-tauri`, `apps/desktop/src/lib/onboarding`, `apps/desktop/src/lib/i18n`.
+- **Problem:**
+  1. First-run fallback vault shows `"Unlock your mail / Vault passphrase"` without indicating the user is *creating* a new master passphrase when no `mail.db`/`vault.enc` exists yet (especially on Linux sessions without D-Bus Secret Service).
+  2. Offline provider discovery only runs on email `onblur`, and existing backend presets (`Zoho`, `UOL`, `BOL`, `Terra`) are missing from quick-fill UI presets.
+  3. Technical fields (`IMAP host`, `Port`, OAuth endpoints, `Scopes`) are always expanded even when resolved from a preset/ISPDB (unused `advancedSettings` i18n key), and raw protocol tabs confront non-technical users upfront.
+- **Scope & Atomic Subtasks:**
+  1. `[04.20.1]` `[PARALLEL: W1]` **First-Run Vault State IPC (`apps/desktop/src-tauri`):** Implemented read-only `cmd_vault_status` returning `{ exists: bool, keyring_available: bool }` in `dto.rs`/`runtime.rs` checking `mail.db`/`vault.enc` via `symlink_metadata` without creating directories, acquiring locks, or exposing paths.
+  2. `[04.20.2]` `[PARALLEL: W1]` **Debounced Input Autodiscovery & Preset Parity (`apps/desktop/src/lib/onboarding`):** Added `hasValidEmailDomain` + 250ms debounced offline autodiscovery in `DiscoveryController.input(email?)` (preserving stale revision cancellation and `manual` overrides) and exposed `Zoho`, `UOL`, `BOL`, `Terra`, and `Other IMAP` presets with EN/PT-BR setup playbooks.
+  3. `[04.20.3]` `[BATCH: B2]` **Create-vs-Unlock Vault Card (`WdgVaultUnlockCard.svelte`):** Wired `OnboardingSession` to `cmd_vault_status` and updated `WdgVaultUnlockCard` to present **"Create local master passphrase"** (confirmation `>= 8` chars + keyring-unavailable Argon2id notice) on first run vs. **"Unlock vault"** when `vault.enc`/`mail.db` already exist, retaining unbound DOM credential clearing.
+  4. `[04.20.4]` `[BATCH: B3]` **Provider-Guided Flow & Collapsible Advanced Settings (`WdgAccountDiscoveryForm.svelte`):** Wired provider-tailored human-readable options (*App Password*, *Google Cloud OAuth JSON*, *Offline `.mbox`/`.eml` Import*, *Proton Mail Bridge*, *Custom IMAP*) and collapsible `advancedSettings` for `host`, `port`, `authorize`, `token`, and `scopes` with auto-expansion on `Other IMAP` / `unresolved` while retaining unbound `[data-credential]` DOM inputs.
+
+#### Completion (2026-11-16)
+
+- **Delivered:** End-to-end streamlined first-run vault creation UX (`cmd_vault_status` + `WdgVaultUnlockCard` confirmation/keyring-unavailable copy), debounced email `oninput` offline autodiscovery with regional/custom presets (`Zoho`, `UOL`, `BOL`, `Terra`, `Other IMAP`), and provider-guided collapsible `advancedSettings` onboarding form (`WdgAccountDiscoveryForm`) with EN/PT-BR translations.
+- **Validation:** `cargo fmt --all -- --check` passed (0); `cargo check --workspace` passed (0); `cargo clippy --workspace --all-targets -- -D warnings` passed (0 warnings); `cargo test --workspace` passed across all crates (including 44 unit + 31 integration tests in `triage-mail-desktop`); `pnpm --filter desktop check` passed (0 errors/warnings); `pnpm --filter desktop test` passed (30 files, 181 tests); `pnpm --filter desktop build` succeeded; `! grep -rn "export let" apps/desktop/src/` exited 0; PII/secret scan clean; `git diff --check` clean.
+- **Contracts:** Documented in `.agent/NOTES.md` (`Streamlined First-Run Vault & Onboarding UX ([04.20])`).
+- **Next:** Promoted `[02.9]` (**Actionable Connection, Credential & OAuth Error Diagnostics**) to Active Task (`READY FOR PLANNING`), awaiting user approval before starting `[02.9.1]` & `[02.9.2]`.
+
+#### Closing Checklist — [04.20]
+
+- [x] `[04.20.1]` First-run vault state IPC (`cmd_vault_status`) implemented and tested.
+- [x] `[04.20.2]` Debounced `oninput` offline autodiscovery and `Zoho`/`UOL`/`BOL`/`Terra`/`Other IMAP` presets implemented and tested.
+- [x] `[04.20.3]` Create-vs-Unlock `WdgVaultUnlockCard` UI with confirmation & keyring-unavailable notice implemented and tested.
+- [x] `[04.20.4]` Provider-guided flow & collapsible `advancedSettings` implemented and tested.
+- [x] Full workspace DoD passed: `cargo fmt`, `cargo check`, `cargo clippy -D warnings`, `cargo test`, `pnpm check/test/build`, Svelte 5 invariant, PII/secret scan, `git diff --check`.
+- [x] Contracts recorded in `.agent/NOTES.md`; `[02.9]` promoted to Active Task (`READY FOR PLANNING`).
+- [x] Atomic Conventional Commit recorded; closed without pushing.
+
+---
+
+## Previous Completed Tasks
 
 ### Task [02.8]: Offline `.mbox` & `.eml` Local Archive Ingestion
 
@@ -94,8 +93,6 @@
 - [x] Atomic Conventional Commit recorded; closed without pushing.
 
 ---
-
-## Previous Completed Task
 
 ### Task [00.13]: Fix Release Workflow releaseName and sync-runtime Windows Stable Compatibility
 
