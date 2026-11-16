@@ -15,6 +15,12 @@ pub struct AccountConnectionConfig {
 }
 
 impl AccountConnectionConfig {
+    /// Returns `true` when this account represents an offline local `.mbox`/`.eml` archive.
+    #[must_use]
+    pub fn is_local_archive(&self) -> bool {
+        self.auth_method == AuthMethod::LocalArchive
+    }
+
     /// Converts the configuration into an engine endpoint and its corresponding `VaultKey`.
     pub fn into_endpoint_and_vault_key(
         self,

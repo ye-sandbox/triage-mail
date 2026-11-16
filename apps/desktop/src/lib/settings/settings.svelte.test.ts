@@ -10,8 +10,10 @@ import {
 	getEmbeddingProgressPct,
 	getEmbeddingStatusTone
 } from './settings.helpers';
+import type { AccountTransport } from '../onboarding/types';
 import type { EmbeddingState, Settings, SettingsTransport } from './types';
 import WdgAiModelsPanel from './WdgAiModelsPanel.svelte';
+import WdgBackupDefinitionsPanel from './WdgBackupDefinitionsPanel.svelte';
 import WdgPrivacyPanel from './WdgPrivacyPanel.svelte';
 import WdgSearchIndexPanel from './WdgSearchIndexPanel.svelte';
 import WdgSettingsPage from './WdgSettingsPage.svelte';
@@ -493,6 +495,92 @@ describe('WdgAiModelsPanel', () => {
 			'AI settings could not be saved.'
 		);
 		expect(target.textContent).not.toContain('raw-vault-failure-detail');
+
+		await unmount(component);
+	});
+});
+
+describe('WdgBackupDefinitionsPanel local archive import', () => {
+	it('picks archive file, infers format, streams progress, and maps AccountExists errors', async () => {
+		const target = document.createElement('div');
+		document.body.append(target);
+		const onArchiveImported = vi.fn();
+		const archiveTransport = {
+			chooseArchiveFile: vi
+				.fn<NonNullable<AccountTransport['chooseArchiveFile']>>()
+				.mockResolvedValueOnce('/tmp/sample.eml')
+				.mockResolvedValueOnce('/tmp/export.mbox'),
+			importLocalArchive: vi
+				.fn<NonNullable<AccountTransport['importLocalArchive']>>()
+				.mockImplementationOnce(async (_path, _email, _fmt, onProgress) => {
+					onProgress?.({
+						account_id: 'arch-1',
+						state: 'Syncing',
+						new_messages_count: 1,
+						triage_alerts: [],
+						embedding_errors_count: 0
+					});
+					return { account_id: 'arch-1', imported_count: 1, batches_committed: 1, last_uid: 1 };
+				})
+				.mockRejectedValueOnce('AccountExists')
+		};
+
+		const component = mount(WdgBackupDefinitionsPanel, {
+			target,
+			props: { archiveTransport, onArchiveImported }
+		});
+		flushSync();
+
+		const archiveForm = target.querySelector<HTMLFormElement>(
+			'form[aria-label="Local Archive Import (.mbox / .eml)"]'
+		)!;
+		expect(archiveForm).not.toBeNull();
+
+		const chooseBtn = [...archiveForm.querySelectorAll('button')].find((b) =>
+			b.textContent?.includes('No archive file selected')
+		)!;
+		chooseBtn.click();
+		await settle();
+
+		const radios = [...archiveForm.querySelectorAll<HTMLButtonElement>('button[role="radio"]')];
+		expect(radios).toHaveLength(2);
+		expect(radios[1].getAttribute('aria-checked')).toBe('true');
+
+		const emailEl = archiveForm.querySelector<HTMLInputElement>('input[name="archiveEmail"]')!;
+		emailEl.value = 'archive@example.com';
+		emailEl.dispatchEvent(new Event('input', { bubbles: true }));
+		flushSync();
+
+		submit(archiveForm);
+		await settle();
+
+		expect(archiveTransport.importLocalArchive).toHaveBeenCalledWith(
+			'/tmp/sample.eml',
+			'archive@example.com',
+			'Eml',
+			expect.any(Function)
+		);
+		expect(onArchiveImported).toHaveBeenCalledOnce();
+		expect(archiveForm.querySelector('[role="status"]')?.textContent).toContain(
+			'Imported archive messages: 1'
+		);
+
+		const chooseBtnAfter = [...archiveForm.querySelectorAll('button')].find((b) =>
+			b.textContent?.includes('No archive file selected')
+		)!;
+		chooseBtnAfter.click();
+		await settle();
+		expect(radios[0].getAttribute('aria-checked')).toBe('true');
+
+		emailEl.value = 'existing@example.com';
+		emailEl.dispatchEvent(new Event('input', { bubbles: true }));
+		flushSync();
+		submit(archiveForm);
+		await settle();
+
+		expect(archiveForm.querySelector('[role="alert"]')?.textContent).toContain(
+			'Email belongs to an existing IMAP or recovered account.'
+		);
 
 		await unmount(component);
 	});

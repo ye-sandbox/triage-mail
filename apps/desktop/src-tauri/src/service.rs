@@ -88,6 +88,7 @@ impl Drop for IncomingCredentials {
                 access_token.zeroize();
                 refresh_token.zeroize();
             }
+            AccountAuthMaterial::LocalArchive => {}
         }
     }
 }
@@ -257,44 +258,93 @@ impl DesktopService {
             {
                 return Err(IpcError::AccountExists);
             }
-            let (_, key) = config
-                .clone()
-                .into_endpoint_and_vault_key()
-                .map_err(|_| IpcError::InvalidRequest)?;
-            let previous = match s.vault.get_secret(&key) {
-                Ok(bytes) => Some(Zeroizing::new(bytes)),
-                Err(vault::VaultError::NotFound(_)) => None,
-                Err(_) => return Err(IpcError::VaultUnavailable),
-            };
-            let bytes = Zeroizing::new(
-                credentials
-                    .0
-                    .to_bytes()
-                    .map_err(|_| IpcError::InvalidRequest)?,
-            );
-            s.vault
-                .set_secret(&key, &bytes)
-                .map_err(|_| IpcError::VaultUnavailable)?;
-            let record = AccountRecord {
-                id: config.account_id.clone(),
-                email: config.email_display.clone(),
-                auth_type: format!("{:?}", config.auth_method),
-                created_at_epoch_ms: now_ms(),
-                updated_at_epoch_ms: now_ms(),
-            };
-            let json = serde_json::to_string(&config).map_err(|_| IpcError::Internal)?;
-            if s.store.insert_account_connection(&record, &json).is_err() {
-                // INVARIANT: Compensate a failed metadata commit without losing an older vault entry.
-                let restored = match previous {
-                    Some(bytes) => s.vault.set_secret(&key, &bytes),
-                    None => s.vault.delete_secret(&key),
-                };
-                restored.map_err(|_| IpcError::VaultUnavailable)?;
-                return Err(IpcError::StorageUnavailable);
-            }
+            s.insert_account_with_vault(&config, &credentials.0)?;
             Ok(config.account_id)
         })
         .await
+    }
+
+    pub(crate) fn insert_account_with_vault(
+        &self,
+        config: &AccountConfigDto,
+        material: &AccountAuthMaterial,
+    ) -> Result<(), IpcError> {
+        let (_, key) = config
+            .clone()
+            .into_endpoint_and_vault_key()
+            .map_err(|_| IpcError::InvalidRequest)?;
+        let previous = match self.vault.get_secret(&key) {
+            Ok(bytes) => Some(Zeroizing::new(bytes)),
+            Err(vault::VaultError::NotFound(_)) => None,
+            Err(_) => return Err(IpcError::VaultUnavailable),
+        };
+        let bytes = Zeroizing::new(material.to_bytes().map_err(|_| IpcError::InvalidRequest)?);
+        self.vault
+            .set_secret(&key, &bytes)
+            .map_err(|_| IpcError::VaultUnavailable)?;
+        let record = AccountRecord {
+            id: config.account_id.clone(),
+            email: config.email_display.clone(),
+            auth_type: format!("{:?}", config.auth_method),
+            created_at_epoch_ms: now_ms(),
+            updated_at_epoch_ms: now_ms(),
+        };
+        let json = serde_json::to_string(config).map_err(|_| IpcError::Internal)?;
+        if self
+            .store
+            .insert_account_connection(&record, &json)
+            .is_err()
+        {
+            // INVARIANT: Compensate a failed metadata commit without losing an older vault entry.
+            let restored = match previous {
+                Some(bytes) => self.vault.set_secret(&key, &bytes),
+                None => self.vault.delete_secret(&key),
+            };
+            restored.map_err(|_| IpcError::VaultUnavailable)?;
+            return Err(IpcError::StorageUnavailable);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn ensure_local_archive_account(
+        &self,
+        email_display: &str,
+    ) -> Result<String, IpcError> {
+        let _guard = self.account_gate.lock().map_err(|_| IpcError::Internal)?;
+        for json in self
+            .store
+            .list_account_connections()
+            .map_err(storage_error)?
+        {
+            let existing: AccountConfigDto =
+                serde_json::from_str(&json).map_err(|_| IpcError::StorageUnavailable)?;
+            if existing.email_display == email_display {
+                return if existing.auth_method == AuthMethod::LocalArchive {
+                    Ok(existing.account_id)
+                } else {
+                    Err(IpcError::AccountExists)
+                };
+            }
+        }
+        if self
+            .store
+            .disconnected_accounts()
+            .map_err(storage_error)?
+            .into_iter()
+            .any(|(_, email)| email == email_display)
+        {
+            return Err(IpcError::AccountExists);
+        }
+        let config = AccountConfigDto {
+            account_id: opaque_id()?,
+            email_display: email_display.to_string(),
+            imap_host: String::new(),
+            imap_port: 0,
+            auth_method: AuthMethod::LocalArchive,
+        };
+        validate_config(&config, &AccountAuthMaterial::LocalArchive)?;
+        self.insert_account_with_vault(&config, &AccountAuthMaterial::LocalArchive)?;
+        Ok(config.account_id)
     }
 
     pub async fn list_folders(
@@ -455,6 +505,9 @@ impl DesktopService {
             })
             .await?;
         let config = self.account(request.account_id).await?;
+        if config.auth_method == AuthMethod::LocalArchive {
+            return Err(IpcError::Unsupported);
+        }
         let bytes = tokio::time::timeout(
             std::time::Duration::from_secs(120),
             self.remote.fetch_attachment(
@@ -509,6 +562,7 @@ impl DesktopService {
         snapshot: Option<(&str, &str)>,
     ) -> Result<(), IpcError> {
         let mut accounts = HashSet::new();
+        let mut has_remote_outbox = false;
         let mut changes = Vec::new();
         for id in &mutation.message_ids {
             let message = self
@@ -516,6 +570,10 @@ impl DesktopService {
                 .get_message_by_id(id)
                 .map_err(storage_error)?
                 .ok_or(IpcError::NotFound)?;
+            let is_local_only = self
+                .store
+                .is_local_archive_account(&message.account_id)
+                .map_err(storage_error)?;
             accounts.insert(message.account_id.clone());
             let local = match &mutation.action {
                 TriageActionDto::MarkRead => LocalMutation::Read(true),
@@ -531,12 +589,13 @@ impl DesktopService {
                 TriageActionDto::Unsnooze => LocalMutation::Snooze(None),
                 _ => return Err(IpcError::InvalidRequest),
             };
-            let remote = if matches!(
-                mutation.action,
-                TriageActionDto::Tag(_)
-                    | TriageActionDto::Snooze { .. }
-                    | TriageActionDto::Unsnooze
-            ) {
+            let remote = if is_local_only
+                || matches!(
+                    mutation.action,
+                    TriageActionDto::Tag(_)
+                        | TriageActionDto::Snooze { .. }
+                        | TriageActionDto::Unsnooze
+                ) {
                 None
             } else {
                 let checkpoint = self
@@ -547,6 +606,7 @@ impl DesktopService {
                 if checkpoint.uidvalidity == 0 {
                     return Err(IpcError::StaleMessage);
                 }
+                has_remote_outbox = true;
                 Some(
                     serde_json::to_string(&RemoteMutation {
                         message_id: id.clone(),
@@ -571,12 +631,13 @@ impl DesktopService {
         for account in accounts {
             self.events.publish(SyncProgressEvent {
                 account_id: account,
-                state: if matches!(
-                    mutation.action,
-                    TriageActionDto::Tag(_)
-                        | TriageActionDto::Snooze { .. }
-                        | TriageActionDto::Unsnooze
-                ) {
+                state: if !has_remote_outbox
+                    || matches!(
+                        mutation.action,
+                        TriageActionDto::Tag(_)
+                            | TriageActionDto::Snooze { .. }
+                            | TriageActionDto::Unsnooze
+                    ) {
                     SyncState::ResyncRequired
                 } else {
                     SyncState::MutationPending
@@ -684,7 +745,14 @@ pub(crate) fn validate_config(
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
         || config.email_display.is_empty()
         || config.email_display.chars().any(char::is_control)
-        || config.imap_host.is_empty()
+    {
+        return Err(IpcError::InvalidRequest);
+    }
+    if config.auth_method == AuthMethod::LocalArchive {
+        if !config.imap_host.is_empty() || config.imap_port != 0 {
+            return Err(IpcError::InvalidRequest);
+        }
+    } else if config.imap_host.is_empty()
         || config
             .imap_host
             .chars()
@@ -726,6 +794,7 @@ pub(crate) fn validate_config(
                 && valid_credential(client_secret)
                 && valid_credential(access_token)
         }
+        (AuthMethod::LocalArchive, AccountAuthMaterial::LocalArchive) => true,
         _ => false,
     };
     if !valid {

@@ -2035,3 +2035,208 @@ async fn shared_sync_adapter_preserves_encrypted_frontiers_hooks_and_duplicate_i
     assert_eq!(reopened.pending_mutations().unwrap().len(), 1);
     assert_ne!(&std::fs::read(&path).unwrap()[..16], b"SQLite format 3\0");
 }
+
+#[tokio::test]
+async fn local_archive_import_streams_mbox_and_eml_with_local_only_triage_and_worker_skip() {
+    let remote = Arc::new(FakeRemote::default());
+    let (service, store, _) = setup(remote.clone());
+    let mut events_rx = service.events.subscribe();
+
+    let dir = tempfile::tempdir().unwrap();
+    let mbox_path = dir.path().join("takeout.mbox");
+    let eml_path = dir.path().join("single.eml");
+    let bad_path = dir.path().join("not_an_mbox.mbox");
+
+    let mbox_data = concat!(
+        "From sender1@example.org Mon Jan 01 10:00:00 2024\r\n",
+        "From: \"Billing\" <billing@example.org>\r\n",
+        "To: reader@example.com\r\n",
+        "Subject: Monthly Receipt\r\n",
+        "Date: Mon, 01 Jan 2024 10:00:00 +0000\r\n",
+        "Message-ID: <mbox-1@example.org>\r\n",
+        "X-Gmail-Labels: Inbox,Unread\r\n",
+        "MIME-Version: 1.0\r\n",
+        "Content-Type: multipart/mixed; boundary=\"B1\"\r\n",
+        "\r\n",
+        "--B1\r\n",
+        "Content-Type: text/plain; charset=utf-8\r\n",
+        "\r\n",
+        "Receipt body.\r\n",
+        "--B1\r\n",
+        "Content-Type: application/pdf; name=\"receipt.pdf\"\r\n",
+        "Content-Disposition: attachment; filename=\"receipt.pdf\"\r\n",
+        "\r\n",
+        "%PDF-1.4\r\n",
+        "--B1--\r\n",
+        "From sender2@example.org Tue Jan 02 10:00:00 2024\r\n",
+        "From: news@example.org\r\n",
+        "To: reader@example.com\r\n",
+        "Subject: Starred Digest\r\n",
+        "Date: Tue, 02 Jan 2024 10:00:00 +0000\r\n",
+        "Message-ID: <mbox-2@example.org>\r\n",
+        "X-Gmail-Labels: Inbox,Starred\r\n",
+        "\r\n",
+        "Digest body.\r\n",
+    );
+    std::fs::write(&mbox_path, mbox_data).unwrap();
+    std::fs::write(
+        &eml_path,
+        concat!(
+            "From: solo@example.org\r\n",
+            "To: reader@example.com\r\n",
+            "Subject: Standalone Note\r\n",
+            "Date: Wed, 03 Jan 2024 10:00:00 +0000\r\n",
+            "Message-ID: <eml-3@example.org>\r\n",
+            "\r\n",
+            "Standalone body.\r\n",
+        ),
+    )
+    .unwrap();
+    std::fs::write(&bad_path, b"Subject: Missing separator\r\n\r\nBody\r\n").unwrap();
+
+    // Malformed archive fails before creating an account.
+    assert_eq!(
+        service
+            .import_local_archive(
+                bad_path,
+                "archive@example.com".into(),
+                mail_engine::LocalArchiveFormat::Mbox,
+                None,
+            )
+            .await,
+        Err(IpcError::InvalidRequest)
+    );
+    assert!(service.list_accounts().await.unwrap().is_empty());
+
+    // Stream .mbox into a new LocalArchive account.
+    let progress = Arc::new(Mutex::new(Vec::new()));
+    let progress_cb = progress.clone();
+    let mbox_summary = service
+        .import_local_archive(
+            mbox_path,
+            "archive@example.com".into(),
+            mail_engine::LocalArchiveFormat::Mbox,
+            Some(Arc::new(move |ev| {
+                progress_cb.lock().unwrap().push(ev);
+            })),
+        )
+        .await
+        .unwrap();
+    assert_eq!(mbox_summary.imported_count, 2);
+    assert_eq!(mbox_summary.batches_committed, 1);
+    assert_eq!(mbox_summary.last_uid, 2);
+
+    // WorkerSupervisor skips LocalArchive accounts without opening any network connection.
+    let accounts = service.list_accounts().await.unwrap();
+    assert_eq!(accounts.len(), 1);
+    assert_eq!(accounts[0].auth_method, AuthMethod::LocalArchive);
+    assert_eq!(accounts[0].imap_host, "");
+    assert_eq!(accounts[0].imap_port, 0);
+    let supervisor = worker::WorkerSupervisor::new(service.clone());
+    supervisor.start_account(accounts[0].clone()).unwrap();
+    supervisor.shutdown();
+
+    // Second import to the same email_display reuses account_id and assigns monotonic UID 3.
+    let eml_summary = service
+        .import_local_archive(
+            eml_path,
+            "archive@example.com".into(),
+            mail_engine::LocalArchiveFormat::Eml,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(eml_summary.account_id, mbox_summary.account_id);
+    assert_eq!(eml_summary.imported_count, 1);
+    assert_eq!(eml_summary.last_uid, 3);
+    assert_eq!(service.list_accounts().await.unwrap().len(), 1);
+
+    // Search returns all 3 imported messages across both imports.
+    let rows = service
+        .search_messages(SearchQueryDto {
+            query: String::new(),
+            mode: SearchMode::Lexical,
+            limit: 50,
+            offset: 0,
+            scope: Some(MailboxScopeDto::AccountView {
+                account_id: mbox_summary.account_id.clone(),
+                view: MailboxViewDto::Inbox,
+            }),
+        })
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 3);
+
+    // Offline attachment fetch fails deterministically with Unsupported without touching remote.
+    let m1_id = store
+        .find_message_id(&mbox_summary.account_id, "INBOX", 1)
+        .unwrap()
+        .unwrap();
+    let detail = service.get_message_body(m1_id.clone()).await.unwrap();
+    assert_eq!(detail.attachments_meta.len(), 1);
+    assert_eq!(
+        service
+            .fetch_attachment(AttachmentRequestDto {
+                account_id: mbox_summary.account_id.clone(),
+                folder: "INBOX".into(),
+                uid: 1,
+                part_id: detail.attachments_meta[0].part_id.clone(),
+            })
+            .await,
+        Err(IpcError::Unsupported)
+    );
+    assert_eq!(remote.attachments.load(Ordering::SeqCst), 0);
+
+    // Local triage succeeds locally without queuing IMAP pending_mutations.
+    service
+        .triage_action(TriageMutationDto {
+            message_ids: vec![m1_id.clone()],
+            action: TriageActionDto::Archive,
+        })
+        .await
+        .unwrap();
+    assert!(store.pending_mutations().unwrap().is_empty());
+    let summary = store
+        .search(&storage::HybridQuery {
+            query_text: String::new(),
+            query_embedding_int8: None,
+            account_filter: Some(mbox_summary.account_id.clone()),
+            mode: storage::SearchMode::Lexical,
+            limit: 50,
+            offset: 0,
+        })
+        .unwrap();
+    let m1_summary = summary.iter().find(|row| row.id == m1_id).unwrap();
+    assert_eq!(m1_summary.folder_override.as_deref(), Some("Archive"));
+
+    // Event bus & callback observed progress.
+    assert!(progress
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|e| e.state == SyncState::Syncing && e.new_messages_count == 2));
+    assert_eq!(
+        progress.lock().unwrap().last().unwrap().state,
+        SyncState::Idle
+    );
+    assert!(events_rx.try_recv().is_ok());
+
+    // Cannot import an archive using an email address owned by a live IMAP account.
+    service
+        .add_account(config("acct-imap"), credentials())
+        .await
+        .unwrap();
+    let valid_eml = dir.path().join("conflict.eml");
+    std::fs::copy(dir.path().join("single.eml"), &valid_eml).unwrap();
+    assert_eq!(
+        service
+            .import_local_archive(
+                valid_eml,
+                "reader@example.com".into(),
+                mail_engine::LocalArchiveFormat::Eml,
+                None,
+            )
+            .await,
+        Err(IpcError::AccountExists)
+    );
+}

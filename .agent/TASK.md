@@ -7,11 +7,95 @@
 
 ## Active Task
 
-No active task — release v0.2.0 prepared (UI v2 Redesign `[04.14]`–`[04.19]` archived to `.agent/ARCHIVE.md`). Multi-folder sync and outbound SMTP composer remain unprioritized.
+### Task [04.20]: Streamlined First-Run Vault & Onboarding UX
+
+- **Status:** PLANNING
+- **Priority:** 2 (Email-Access Improvement Initiative — 2026-11-16)
+- **Systems Involved:** `apps/desktop/src-tauri`, `apps/desktop/src/lib/onboarding`, `apps/desktop/src/lib/i18n`.
+- **Problem:**
+  1. First-run fallback vault shows `"Unlock your mail / Vault passphrase"` without indicating the user is *creating* a new master passphrase when no `mail.db`/`vault.enc` exists yet (especially on Linux sessions without D-Bus Secret Service).
+  2. Offline provider discovery only runs on email `onblur`, and existing backend presets (`Zoho`, `UOL`, `BOL`, `Terra`) are missing from quick-fill UI presets.
+  3. Technical fields (`IMAP host`, `Port`, OAuth endpoints, `Scopes`) are always expanded even when resolved from a preset/ISPDB (unused `advancedSettings` i18n key), and raw protocol tabs confront non-technical users upfront.
+- **Scope & Atomic Subtasks:**
+  1. `[04.20.1]` `[PARALLEL: W1]` **First-Run Vault State IPC (`apps/desktop/src-tauri`):**
+     - `Read:` `apps/desktop/src-tauri/src/runtime.rs`, `apps/desktop/src-tauri/src/dto.rs`
+     - `Paths:` `apps/desktop/src-tauri/src/dto.rs`, `apps/desktop/src-tauri/src/runtime.rs`, `apps/desktop/src-tauri/src/onboarding/tests.rs`
+     - `Verify:` `cargo test -p triage-mail-desktop`
+     - Add additive read-only `cmd_vault_status` returning `{ exists: bool, keyring_available: bool }` (checking `data_dir/mail.db` and `data_dir/vault.enc` existence without initializing storage or exposing paths).
+  2. `[04.20.2]` `[PARALLEL: W1]` **Debounced Input Autodiscovery & Preset Parity (`apps/desktop/src/lib/onboarding`):**
+     - `Read:` `apps/desktop/src/lib/onboarding/discovery-controller.svelte.ts`, `apps/desktop/src/lib/onboarding/presets.ts`, `crates/mail-engine/src/discovery/presets.rs`
+     - `Paths:` `apps/desktop/src/lib/onboarding/discovery-controller.svelte.ts`, `apps/desktop/src/lib/onboarding/presets.ts`, `apps/desktop/src/lib/onboarding/discovery.svelte.test.ts`
+     - `Verify:` `pnpm --filter desktop check && pnpm --filter desktop test`
+     - Trigger debounced offline discovery on email `oninput` once a valid `@domain` is entered (respecting stale revision cancellation and `manual` override invariants); expose `Zoho`, `UOL`, `BOL`, `Terra`, and `Other IMAP` presets.
+  3. `[04.20.3]` `[BATCH: B2]` **Create-vs-Unlock Vault Card (`WdgVaultUnlockCard.svelte`):**
+     - `Read:` `apps/desktop/src/lib/onboarding/WdgVaultUnlockCard.svelte`, `apps/desktop/src/lib/onboarding/session.svelte.ts`, `apps/desktop/src/lib/onboarding/transport.ts`, `apps/desktop/src/lib/onboarding/types.ts`
+     - `Paths:` `apps/desktop/src/lib/onboarding/WdgVaultUnlockCard.svelte`, `apps/desktop/src/lib/onboarding/session.svelte.ts`, `apps/desktop/src/lib/onboarding/transport.ts`, `apps/desktop/src/lib/onboarding/types.ts`, `apps/desktop/src/lib/onboarding/onboarding.svelte.test.ts`, `apps/desktop/src/lib/i18n/types.ts`, `apps/desktop/src/lib/i18n/translations.ts`
+     - `Verify:` `pnpm --filter desktop check && pnpm --filter desktop test`
+     - Load `svelte-dev`. Consume `cmd_vault_status` to present **"Create local master passphrase"** (with passphrase confirmation input + keyring-unavailable explanation) on first run vs. **"Unlock vault"** when `vault.enc`/`mail.db` already exist.
+  4. `[04.20.4]` `[BATCH: B3]` **Provider-Guided Flow & Collapsible Advanced Settings (`WdgAccountDiscoveryForm.svelte`):**
+     - `Read:` `apps/desktop/src/lib/onboarding/WdgAccountDiscoveryForm.svelte`, `apps/desktop/src/lib/onboarding/WdgAccountHelpGuide.svelte`
+     - `Paths:` `apps/desktop/src/lib/onboarding/WdgAccountDiscoveryForm.svelte`, `apps/desktop/src/lib/onboarding/WdgAccountHelpGuide.svelte`, `apps/desktop/src/lib/onboarding/discovery.svelte.test.ts`, `apps/desktop/src/lib/i18n/types.ts`, `apps/desktop/src/lib/i18n/translations.ts`
+     - `Verify:` `pnpm --filter desktop check && pnpm --filter desktop test && pnpm --filter desktop build`
+     - Load `svelte-dev`. Wire `advancedSettings` toggle to collapse `host`, `port`, `authorize`, `token`, and `scopes` when resolved from a preset/ISPDB; present provider-tailored human-readable options (*App Password*, *Google Cloud OAuth JSON*, *Offline `.mbox`/`.eml` Import*, *Proton Bridge* / *Custom IMAP*). Retain unbound `[data-credential]` DOM-only input invariants.
+
+---
+
+## Prioritized Email-Access Backlog (2026-11-16)
+
+> Atomic roadmap following `[04.20]` to remove connection-diagnostic friction. Each task requires approval (`proceed` or `proceed queue`) before implementation.
+
+### Task [02.9]: Actionable Connection, Credential & OAuth Error Diagnostics
+
+- **Status:** READY FOR PLANNING
+- **Priority:** 3
+- **Systems Involved:** `crates/mail-engine`, `apps/desktop/src-tauri`, `apps/desktop/src/lib/onboarding`, `apps/desktop/src/lib/i18n`.
+- **Problem:** Authentication failures, IMAP-disabled accounts, OAuth consent errors (`access_denied`, missing Test User, `redirect_uri_mismatch`), and expired/revoked refresh tokens currently collapse into opaque `IpcError::RemoteUnavailable` or silent `SyncState::Retrying` loops without actionable user guidance or a one-click re-authorize action.
+- **Scope & Atomic Subtasks:**
+  1. `[02.9.1]` `[BATCH: B1]` **Secret-Free Diagnostic Codes, Pre-Save Login Test & OAuth Re-Auth IPC (`crates/mail-engine`, `apps/desktop/src-tauri`):**
+     - `Read:` `crates/mail-engine/src/lib.rs`, `crates/mail-engine/src/connector.rs`, `apps/desktop/src-tauri/src/onboarding.rs`, `apps/desktop/src-tauri/src/service.rs`, `apps/desktop/src-tauri/src/runtime.rs`
+     - `Paths:` `crates/mail-engine/src/lib.rs`, `crates/mail-engine/src/connector.rs`, `apps/desktop/src-tauri/src/dto.rs`, `apps/desktop/src-tauri/src/onboarding.rs`, `apps/desktop/src-tauri/src/service.rs`, `apps/desktop/src-tauri/src/runtime.rs`
+     - `Verify:` `cargo check --workspace && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings`
+     - Classify safe diagnostic codes (`TlsHandshakeFailed`, `AuthenticationRejected`, `ImapDisabledHint`, `OAuthAccessDenied`, `OAuthInvalidClient`, `OAuthCancelled`, `NetworkTimeout`) with zero PII/secret echoing; add additive `cmd_test_account_connection` (zeroized transient check) and `cmd_reauthorize_account` (updating vault tokens in place for an existing `account_id`).
+  2. `[02.9.2]` `[BATCH: B2]` **Actionable Remediation UI & Re-Authorize Button (`apps/desktop/src/lib/onboarding`):**
+     - `Read:` `apps/desktop/src-tauri/src/dto.rs`, `apps/desktop/src/lib/onboarding/controller.svelte.ts`, `apps/desktop/src/lib/onboarding/WdgAccountDiscoveryForm.svelte`, `apps/desktop/src/lib/onboarding/WdgConnectedAccountList.svelte`
+     - `Paths:` `apps/desktop/src/lib/onboarding/controller.svelte.ts`, `apps/desktop/src/lib/onboarding/transport.ts`, `apps/desktop/src/lib/onboarding/types.ts`, `apps/desktop/src/lib/onboarding/WdgAccountDiscoveryForm.svelte`, `apps/desktop/src/lib/onboarding/WdgConnectedAccountList.svelte`, `apps/desktop/src/lib/onboarding/onboarding.svelte.test.ts`, `apps/desktop/src/lib/i18n/types.ts`, `apps/desktop/src/lib/i18n/translations.ts`
+     - `Verify:` `pnpm --filter desktop check && pnpm --filter desktop test && pnpm --filter desktop build`
+     - Load `svelte-dev`. Surface localized EN/PT-BR recovery hints per diagnostic code, add optional pre-save **"Test login"** button, and expose **"Reauthorize"** on existing OAuth accounts without deleting indexed local mail.
 
 ---
 
 ## Latest Completed Task
+
+### Task [02.8]: Offline `.mbox` & `.eml` Local Archive Ingestion
+
+- **Status:** DONE
+- **Priority:** 1 (Email-Access Improvement Initiative — 2026-11-16)
+- **Systems Involved:** `crates/mail-engine`, `crates/vault`, `crates/storage`, `crates/sync-runtime`, `apps/desktop/src-tauri`, `apps/desktop/src`.
+- **Problem:** Users who cannot or prefer not to configure 2FA App Passwords or Google Cloud BYO OAuth (e.g., due to CASA verification limits or corporate restrictions) had no offline zero-auth way to import Google Takeout `.mbox` exports, Thunderbird mbox files, or standalone `.eml` archives into `triage-mail`.
+- **Scope & Atomic Subtasks:**
+  1. `[02.8.1]` `[BATCH: B1]` **Streaming `.mbox` & `.eml` Parser (`crates/mail-engine`):** Implemented bounded streaming `MboxReader` (`From ` delimiter splitting, `>From ` `mboxo`/`mboxrd` unescaping, CRLF/LF normalization, 32 MiB per-message cap, `X-Gmail-Labels` extraction) and `parse_eml_reader` / `parse_eml_bytes` delegating to `StalwartMimeParser` in `#![forbid(unsafe_code)]` Rust with RFC 2606 `@example.com`/`@example.org` test coverage.
+  2. `[02.8.2]` `[BATCH: B2]` **Local Archive Account Mode & Offline Ingestion Contract (`crates/vault`, `crates/mail-engine`, `crates/storage`, `crates/sync-runtime`):** Added `AuthMethod::LocalArchive` and `AccountAuthMaterial::LocalArchive` (`imap_host = ""`, `imap_port = 0`), fail-closed guards in `DefaultImapConnector` / `mutations`, `sync_runtime::ingestion::ingest_archive_stream` with monotonic UIDs and `server_uidnext = 0`, outbox skip in `storage::desktop::apply_local_triage_mutation`, and `IpcError::Unsupported` on `fetch_attachment`.
+  3. `[02.8.3]` `[BATCH: B3]` **Desktop IPC & Import UI (`apps/desktop/src-tauri`, `apps/desktop/src`):** Added `cmd_import_local_archive` via `apps/desktop/src-tauri/src/archive.rs` with native file picker integration, conflict guard (`AccountExists`), `WorkerSupervisor` skip, streaming `SyncProgressEvent`s, and bilingual EN/PT-BR Svelte 5 UI controls in Onboarding (`WdgAccountDiscoveryForm`, `WdgAccountHelpGuide`, `WdgConnectedAccountList`), Settings (`WdgBackupDefinitionsPanel`), and Reader (`WdgMessageReader`).
+
+#### Completion (2026-11-16)
+
+- **Delivered:** End-to-end offline `.mbox` and `.eml` archive ingestion from `crates/mail-engine` through `crates/sync-runtime`, `crates/storage`, `apps/desktop/src-tauri`, and Svelte 5 onboarding/settings/reader UI while preserving all existing Gmail BYO-OAuth onboarding flows.
+- **Validation:** `cargo fmt --all -- --check` passed (0); `cargo check --workspace` passed (0); `cargo clippy --workspace --all-targets -- -D warnings` passed (0 warnings); `cargo test --workspace` passed across all workspace crates (`mail-engine`, `storage`, `sync-runtime`, `triage-ai`, `triage-mail-cli`, `triage-mail-desktop`, `vault`); `pnpm --filter desktop check` passed (0 errors/warnings); `pnpm --filter desktop test` passed (30 files, 177 tests); `pnpm --filter desktop build` succeeded; `! grep -rn "export let" apps/desktop/src/` exited 0; PII/secret domain scan clean; `git diff --check` clean.
+- **Contracts:** Documented in `.agent/NOTES.md` (`Offline Local Archive Ingestion ([02.8])`).
+- **Next:** Promoted `[04.20]` (**Streamlined First-Run Vault & Onboarding UX**) to Active Task (`PLANNING`), awaiting user approval before starting `[04.20.1]` & `[04.20.2]`.
+
+#### Closing Checklist — [02.8]
+
+- [x] `[02.8.1]` Streaming `.mbox` & `.eml` parser (`crates/mail-engine`) implemented and tested.
+- [x] `[02.8.2]` `LocalArchive` account mode & offline ingestion contract (`vault`, `mail-engine`, `storage`, `sync-runtime`) implemented and tested.
+- [x] `[02.8.3]` Desktop IPC (`cmd_import_local_archive`) & Svelte 5 UI (Onboarding, Settings, Reader, EN/PT-BR) implemented and tested.
+- [x] Full workspace DoD passed: `cargo fmt`, `cargo check`, `cargo clippy -D warnings`, `cargo test`, `pnpm check/test/build`, Svelte 5 invariant, PII/secret check, `git diff --check`.
+- [x] Contracts recorded in `.agent/NOTES.md`; `[04.20]` promoted to Active Task (`PLANNING`).
+- [x] Atomic Conventional Commit recorded; closed without pushing.
+
+---
+
+## Previous Completed Task
 
 ### Task [00.13]: Fix Release Workflow releaseName and sync-runtime Windows Stable Compatibility
 

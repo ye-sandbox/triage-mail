@@ -1,6 +1,17 @@
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
-	import { CheckCircle2, FileUp, GlobeLock, KeyRound, MailPlus, Search, ShieldCheck, Timer, X } from 'lucide-svelte';
+	import {
+		CheckCircle2,
+		FileArchive,
+		FileUp,
+		GlobeLock,
+		KeyRound,
+		MailPlus,
+		Search,
+		ShieldCheck,
+		Timer,
+		X
+	} from 'lucide-svelte';
 	import { toast } from 'svelte-sonner';
 	import { i18n } from '../i18n/index.svelte';
 	import type { AccountController } from './controller.svelte';
@@ -20,7 +31,7 @@
 		type TlsProbeResult
 	} from './onboarding.fixtures';
 	import { oauthDefaultsForHost, providerPresets, type ProviderPreset } from './presets';
-	import type { AccountConfig, AccountSubmission, AuthMethod } from './types';
+	import type { AccountConfig, AccountSubmission, AuthMethod, LocalArchiveFormat } from './types';
 	import WdgAccountHelpGuide from './WdgAccountHelpGuide.svelte';
 
 	interface Props {
@@ -42,6 +53,9 @@
 	let form = $state<HTMLFormElement>();
 	let emailInput = $state<HTMLInputElement>();
 	let googleJsonInput = $state<HTMLInputElement>();
+	let demoArchiveInput = $state<HTMLInputElement>();
+	let archivePath = $state('');
+	let archiveFormat = $state<LocalArchiveFormat>('Mbox');
 
 	const discovery = new DiscoveryController(
 		untrack(() => discoveryTransport),
@@ -62,12 +76,14 @@
 	const method = $derived(discovery.settings.method);
 	const oauth = $derived(method === 'OAuth2PublicPkce' || method === 'OAuth2ByoCredentials');
 	const isBridge = $derived(method === 'ProtonBridgeLocal');
+	const isArchive = $derived(method === 'LocalArchive');
 
 	const authTabs = $derived<{ id: AuthMethod; label: string }[]>([
 		{ id: 'AppPassword', label: t.methodAppPassword },
 		{ id: 'OAuth2PublicPkce', label: t.methodOAuthPublic },
 		{ id: 'OAuth2ByoCredentials', label: t.methodOAuthByo },
-		{ id: 'ProtonBridgeLocal', label: t.methodProton }
+		{ id: 'ProtonBridgeLocal', label: t.methodProton },
+		{ id: 'LocalArchive', label: t.methodLocalArchive }
 	]);
 
 	const INPUT_CLS =
@@ -98,6 +114,7 @@
 		return () => {
 			stopDemoTimers();
 			discovery.dispose();
+			archivePath = '';
 			clearCredentialInputs(form);
 			if (controller.authorizing) void controller.cancel();
 		};
@@ -105,13 +122,39 @@
 
 	function applyPreset(preset: ProviderPreset) {
 		clearCredentialInputs(form);
+		archivePath = '';
 		discovery.preset(preset);
 		demoTls = null;
+	}
+
+	function inferArchiveFormat(pathOrName: string): LocalArchiveFormat {
+		return pathOrName.trim().toLowerCase().endsWith('.eml') ? 'Eml' : 'Mbox';
+	}
+
+	async function chooseNativeArchiveFile() {
+		if (!controller.transport.chooseArchiveFile) return;
+		const selected = await controller.transport.chooseArchiveFile();
+		if (selected) {
+			archivePath = selected;
+			archiveFormat = inferArchiveFormat(selected);
+		}
+	}
+
+	function handleDemoArchiveChange(event: Event) {
+		const inputEl = event.currentTarget as HTMLInputElement;
+		const file = inputEl.files?.[0];
+		inputEl.value = '';
+		if (!file) return;
+		archivePath = file.name;
+		archiveFormat = inferArchiveFormat(file.name);
 	}
 
 	function switchMethod(next: AuthMethod) {
 		if (next === method) return;
 		clearCredentialInputs(form);
+		if (next !== 'LocalArchive') {
+			archivePath = '';
+		}
 		discovery.edit();
 		discovery.settings.method = next;
 		if (next === 'ProtonBridgeLocal') {
@@ -263,6 +306,29 @@
 		const data = new FormData(form);
 		const value = (key: string) => String(data.get(key) ?? '').trim();
 
+		if (isArchive) {
+			const cleanEmail = value('email');
+			clearCredentialInputs(form);
+			if (!cleanEmail || !archivePath) {
+				toast.error(t.localArchiveImportError);
+				return;
+			}
+			if (demoMode) {
+				onAccountAdded?.(createDemoAccountDto(cleanEmail, '', 0, 'LocalArchive'));
+				if (emailInput) emailInput.value = '';
+				archivePath = '';
+				return;
+			}
+			const imported = await controller.importArchive(archivePath, cleanEmail, archiveFormat);
+			if (imported) {
+				toast.success(`${t.localArchiveSuccess} ${imported.imported_count}`);
+				archivePath = '';
+				if (emailInput) emailInput.value = '';
+				onSuccess?.();
+			}
+			return;
+		}
+
 		if (demoMode) {
 			const cleanEmail = value('email');
 			const finalHost = isBridge ? '127.0.0.1' : value('host');
@@ -354,7 +420,7 @@
 		<fieldset disabled={controller.busy} class="flex flex-col gap-5">
 			<div class="flex flex-col gap-2">
 				<label for="discovery-email" class="text-xs font-medium text-foreground">
-					{isBridge ? t.emailLabelBridge : t.emailLabel}
+					{isArchive ? t.localArchiveEmailLabel : isBridge ? t.emailLabelBridge : t.emailLabel}
 				</label>
 				<div class="flex flex-col gap-2 sm:flex-row">
 					<input
@@ -368,84 +434,88 @@
 						placeholder="alex.work@example.com"
 						oninput={() => {
 							clearCredentialInputs(form);
-							discovery.input();
+							if (!isArchive) discovery.input();
 						}}
 						onblur={(event) => {
-							if (!demoMode) discovery.blur(event.currentTarget.value);
+							if (!demoMode && !isArchive) discovery.blur(event.currentTarget.value);
 						}}
 						class="{INPUT_CLS} flex-1"
 					/>
-					<button
-						type="button"
-						disabled={discovery.busy}
-						onclick={handleLookupClick}
-						class="flex min-h-[40px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-separator bg-surface px-3.5 py-2 text-xs font-medium text-foreground whitespace-nowrap hover:bg-field disabled:opacity-50"
-					>
-						<Search class="h-3.5 w-3.5 shrink-0 text-secondary" />
-						<span>{t.onlineLookup}</span>
-					</button>
-					{#if demoMode || (discovery.settings.host && discovery.settings.port === 993 && !isBridge)}
+					{#if !isArchive}
 						<button
 							type="button"
 							disabled={discovery.busy}
-							onclick={handleProbeClick}
+							onclick={handleLookupClick}
 							class="flex min-h-[40px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-separator bg-surface px-3.5 py-2 text-xs font-medium text-foreground whitespace-nowrap hover:bg-field disabled:opacity-50"
 						>
-							<ShieldCheck class="h-3.5 w-3.5 shrink-0 text-secondary" />
-							<span>{t.confirmProbe} {discovery.settings.host || '993'}:993</span>
+							<Search class="h-3.5 w-3.5 shrink-0 text-secondary" />
+							<span>{t.onlineLookup}</span>
 						</button>
+						{#if demoMode || (discovery.settings.host && discovery.settings.port === 993 && !isBridge)}
+							<button
+								type="button"
+								disabled={discovery.busy}
+								onclick={handleProbeClick}
+								class="flex min-h-[40px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-separator bg-surface px-3.5 py-2 text-xs font-medium text-foreground whitespace-nowrap hover:bg-field disabled:opacity-50"
+							>
+								<ShieldCheck class="h-3.5 w-3.5 shrink-0 text-secondary" />
+								<span>{t.confirmProbe} {discovery.settings.host || '993'}:993</span>
+							</button>
+						{/if}
 					{/if}
 				</div>
 
-				<div class="flex flex-wrap items-center gap-1.5 pt-1">
-					<span class="mr-1 text-[11px] font-medium text-secondary">{t.quickFillLabel}</span>
-					{#each providerPresets as preset (preset.name)}
-						<button
-							type="button"
-							aria-pressed={discovery.selectedPreset === preset.name}
-							onclick={() => applyPreset(preset)}
-							class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {discovery.selectedPreset ===
-							preset.name
-								? 'border-accent bg-selection-soft text-accent'
-								: 'border-separator bg-field text-secondary hover:text-foreground'}"
-						>
-							{preset.name}
-						</button>
-					{/each}
-				</div>
-
-				<p role="status" class="min-h-4 text-xs text-secondary">
-					{#if discovery.busy}
-						{t.discovering}
-					{:else if discovery.status === 'found'}
-						{t.providerFound} {discovery.provider?.provider_name} · {discovery.settings.host}:{discovery
-							.settings.port}
-					{:else if discovery.status === 'unresolved'}
-						{t.discoveryUnresolved}
-					{:else if discovery.status === 'invalid'}
-						{t.discoveryInvalid}
-					{:else if discovery.status === 'unavailable'}
-						{t.discoveryUnavailable}
-					{:else if discovery.status === 'probeSuccess'}
-						{t.probeSuccess}
-					{:else if discovery.status === 'probeFailed'}
-						{t.probeFailed}
-					{:else if demoIspdb}
-						{demoIspdb.note}
-					{/if}
-				</p>
-
-				{#if demoTls}
-					<div
-						class="flex flex-wrap items-center gap-2 rounded-md border border-separator bg-field px-3 py-2 font-mono text-[11px] text-foreground"
-					>
-						<CheckCircle2 class="h-3.5 w-3.5 shrink-0 text-status-healthy" />
-						<span>{demoTls.host}:{demoTls.port}</span>
-						<span aria-hidden="true">·</span>
-						<span>{demoTls.protocol}</span>
-						<span aria-hidden="true">·</span>
-						<span class="truncate text-secondary">{demoTls.spki_sha256}</span>
+				{#if !isArchive}
+					<div class="flex flex-wrap items-center gap-1.5 pt-1">
+						<span class="mr-1 text-[11px] font-medium text-secondary">{t.quickFillLabel}</span>
+						{#each providerPresets as preset (preset.name)}
+							<button
+								type="button"
+								aria-pressed={discovery.selectedPreset === preset.name}
+								onclick={() => applyPreset(preset)}
+								class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {discovery.selectedPreset ===
+								preset.name
+									? 'border-accent bg-selection-soft text-accent'
+									: 'border-separator bg-field text-secondary hover:text-foreground'}"
+							>
+								{preset.name}
+							</button>
+						{/each}
 					</div>
+
+					<p role="status" class="min-h-4 text-xs text-secondary">
+						{#if discovery.busy}
+							{t.discovering}
+						{:else if discovery.status === 'found'}
+							{t.providerFound} {discovery.provider?.provider_name} · {discovery.settings.host}:{discovery
+								.settings.port}
+						{:else if discovery.status === 'unresolved'}
+							{t.discoveryUnresolved}
+						{:else if discovery.status === 'invalid'}
+							{t.discoveryInvalid}
+						{:else if discovery.status === 'unavailable'}
+							{t.discoveryUnavailable}
+						{:else if discovery.status === 'probeSuccess'}
+							{t.probeSuccess}
+						{:else if discovery.status === 'probeFailed'}
+							{t.probeFailed}
+						{:else if demoIspdb}
+							{demoIspdb.note}
+						{/if}
+					</p>
+
+					{#if demoTls}
+						<div
+							class="flex flex-wrap items-center gap-2 rounded-md border border-separator bg-field px-3 py-2 font-mono text-[11px] text-foreground"
+						>
+							<CheckCircle2 class="h-3.5 w-3.5 shrink-0 text-status-healthy" />
+							<span>{demoTls.host}:{demoTls.port}</span>
+							<span aria-hidden="true">·</span>
+							<span>{demoTls.protocol}</span>
+							<span aria-hidden="true">·</span>
+							<span class="truncate text-secondary">{demoTls.spki_sha256}</span>
+						</div>
+					{/if}
 				{/if}
 			</div>
 
@@ -453,7 +523,7 @@
 				<div
 					role="tablist"
 					aria-label={t.methodLabel}
-					class="grid grid-cols-2 gap-1 rounded-md border border-separator bg-field p-1 sm:grid-cols-4"
+					class="grid grid-cols-2 gap-1 rounded-md border border-separator bg-field p-1 sm:grid-cols-5"
 				>
 					{#each authTabs as tab (tab.id)}
 						<button
@@ -471,221 +541,295 @@
 					{/each}
 				</div>
 
-				{#if isBridge}
+				{#if isArchive}
 					<div
 						class="flex items-start gap-2.5 rounded-md border border-separator bg-field px-3.5 py-2.5 text-xs text-secondary"
 					>
-						<GlobeLock class="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-						<p class="leading-relaxed">{t.protonNotice}</p>
+						<FileArchive class="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+						<p class="leading-relaxed">{t.localArchiveNotice}</p>
 					</div>
-				{/if}
 
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-6">
-					<label class="flex flex-col gap-1 sm:col-span-4">
-						<span class="text-xs font-medium text-secondary">{t.hostLabel}</span>
-						<input
-							name="host"
-							type="text"
-							required
-							maxlength="253"
-							readonly={isBridge}
-							bind:value={discovery.settings.host}
-							oninput={() => discovery.edit()}
-							placeholder={isBridge ? '127.0.0.1' : 'imap.example.com'}
-							class="{INPUT_CLS} font-mono"
-						/>
-					</label>
-					<label class="flex flex-col gap-1 sm:col-span-2">
-						<span class="text-xs font-medium text-secondary">{t.portLabel}</span>
-						<input
-							name="port"
-							type="number"
-							required
-							min="1"
-							max="65535"
-							readonly={isBridge}
-							bind:value={discovery.settings.port}
-							oninput={() => discovery.edit()}
-							class="{INPUT_CLS} font-mono tabular-nums"
-						/>
-					</label>
-				</div>
+					<div class="flex flex-col gap-3 rounded-md border border-separator bg-field p-3.5">
+						<div class="flex flex-col gap-1.5">
+							<span class="text-xs font-medium text-secondary">{t.localArchiveFormatLabel}</span>
+							<div role="radiogroup" aria-label={t.localArchiveFormatLabel} class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+								<button
+									type="button"
+									role="radio"
+									aria-checked={archiveFormat === 'Mbox'}
+									onclick={() => (archiveFormat = 'Mbox')}
+									class="flex min-h-[38px] items-center justify-center rounded-md border px-3 py-1.5 text-xs font-medium transition-colors {archiveFormat === 'Mbox'
+										? 'border-accent bg-selection-soft text-accent'
+										: 'border-separator bg-surface text-secondary hover:text-foreground'}"
+								>
+									{t.localArchiveFormatMbox}
+								</button>
+								<button
+									type="button"
+									role="radio"
+									aria-checked={archiveFormat === 'Eml'}
+									onclick={() => (archiveFormat = 'Eml')}
+									class="flex min-h-[38px] items-center justify-center rounded-md border px-3 py-1.5 text-xs font-medium transition-colors {archiveFormat === 'Eml'
+										? 'border-accent bg-selection-soft text-accent'
+										: 'border-separator bg-surface text-secondary hover:text-foreground'}"
+								>
+									{t.localArchiveFormatEml}
+								</button>
+							</div>
+						</div>
 
-				{#if oauth}
-					<p class="text-xs text-secondary">{t.oauthHelp}</p>
-					{#if method === 'OAuth2ByoCredentials'}
-						<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-separator bg-field px-3.5 py-2.5">
-							<span class="text-xs text-secondary">{t.importGoogleJsonHelp}</span>
-							<input
-								bind:this={googleJsonInput}
-								type="file"
-								accept=".json,application/json"
-								aria-label={t.importGoogleJson}
-								onchange={handleGoogleJsonChange}
-								class="sr-only"
-							/>
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<span class="min-w-0 flex-1 truncate font-mono text-xs text-foreground">
+								{archivePath || t.localArchiveNoFile}
+							</span>
+							{#if demoMode}
+								<input
+									bind:this={demoArchiveInput}
+									type="file"
+									accept=".mbox,.eml,message/rfc822"
+									onchange={handleDemoArchiveChange}
+									class="sr-only"
+									aria-label={t.localArchiveChooseFile}
+								/>
+							{/if}
 							<button
 								type="button"
-								onclick={() => googleJsonInput?.click()}
-								class="flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-foreground whitespace-nowrap hover:bg-selection-soft"
+								onclick={() => (demoMode ? demoArchiveInput?.click() : void chooseNativeArchiveFile())}
+								class="flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-foreground whitespace-nowrap hover:bg-selection-soft"
 							>
 								<FileUp class="h-3.5 w-3.5 shrink-0 text-accent" />
-								<span>{t.importGoogleJson}</span>
+								<span>{t.localArchiveChooseFile}</span>
 							</button>
 						</div>
+
+						{#if controller.importProgress.active}
+							<p role="status" class="font-mono text-xs tabular-nums text-status-info">
+								{t.localArchiveProgress} {controller.importProgress.importedCount}
+							</p>
+						{/if}
+					</div>
+				{:else}
+					{#if isBridge}
+						<div
+							class="flex items-start gap-2.5 rounded-md border border-separator bg-field px-3.5 py-2.5 text-xs text-secondary"
+						>
+							<GlobeLock class="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+							<p class="leading-relaxed">{t.protonNotice}</p>
+						</div>
 					{/if}
-					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-						<label class="flex flex-col gap-1">
-							<span class="text-xs font-medium text-secondary">{t.authEndpointLabel}</span>
+
+					<div class="grid grid-cols-1 gap-3 sm:grid-cols-6">
+						<label class="flex flex-col gap-1 sm:col-span-4">
+							<span class="text-xs font-medium text-secondary">{t.hostLabel}</span>
 							<input
-								name="authorize"
-								type="url"
+								name="host"
+								type="text"
 								required
-								pattern="https://.*"
-								maxlength="2048"
-								bind:value={discovery.settings.authorize}
+								maxlength="253"
+								readonly={isBridge}
+								bind:value={discovery.settings.host}
 								oninput={() => discovery.edit()}
-								class="{INPUT_CLS} font-mono"
-							/>
-						</label>
-						<label class="flex flex-col gap-1">
-							<span class="text-xs font-medium text-secondary">{t.tokenEndpointLabel}</span>
-							<input
-								name="token"
-								type="url"
-								required
-								pattern="https://.*"
-								maxlength="2048"
-								bind:value={discovery.settings.token}
-								oninput={() => discovery.edit()}
+								placeholder={isBridge ? '127.0.0.1' : 'imap.example.com'}
 								class="{INPUT_CLS} font-mono"
 							/>
 						</label>
 						<label class="flex flex-col gap-1 sm:col-span-2">
-							<span class="text-xs font-medium text-secondary">{t.scopesLabel}</span>
+							<span class="text-xs font-medium text-secondary">{t.portLabel}</span>
 							<input
-								name="scopes"
-								type="text"
+								name="port"
+								type="number"
 								required
-								maxlength="4096"
-								bind:value={discovery.settings.scopes}
+								min="1"
+								max="65535"
+								readonly={isBridge}
+								bind:value={discovery.settings.port}
 								oninput={() => discovery.edit()}
-								class="{INPUT_CLS} font-mono"
+								class="{INPUT_CLS} font-mono tabular-nums"
 							/>
-							<span class="text-[11px] text-secondary">{t.scopesHelp}</span>
 						</label>
 					</div>
-				{/if}
 
-				{#key method}
-					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-						{#if oauth}
-							<label
-								class="flex flex-col gap-1 {method === 'OAuth2PublicPkce' ? 'sm:col-span-2' : ''}"
-							>
-								<span class="text-xs font-medium text-secondary">{t.clientIdLabel}</span>
+					{#if oauth}
+						<p class="text-xs text-secondary">{t.oauthHelp}</p>
+						{#if method === 'OAuth2ByoCredentials'}
+							<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-separator bg-field px-3.5 py-2.5">
+								<span class="text-xs text-secondary">{t.importGoogleJsonHelp}</span>
 								<input
-									name="client"
-									type="text"
-									data-credential
-									required
-									maxlength="4096"
-									autocomplete="off"
-									oninput={() => discovery.protectCredentials()}
-									class="{INPUT_CLS} font-mono"
+									bind:this={googleJsonInput}
+									type="file"
+									accept=".json,application/json"
+									aria-label={t.importGoogleJson}
+									onchange={handleGoogleJsonChange}
+									class="sr-only"
 								/>
-							</label>
-						{/if}
-						{#if method !== 'OAuth2PublicPkce'}
-							<label class="flex flex-col gap-1 {!oauth ? 'sm:col-span-2' : ''}">
-								<span class="text-xs font-medium text-secondary">
-									{method === 'OAuth2ByoCredentials'
-										? t.clientSecretLabel
-										: isBridge
-											? t.bridgePasswordLabel
-											: t.appPasswordLabel}
-								</span>
-								<input
-									name="secret"
-									type="password"
-									data-credential
-									required
-									maxlength="8192"
-									autocomplete="off"
-									oninput={() => discovery.protectCredentials()}
-									class="{INPUT_CLS} font-mono"
-								/>
-							</label>
-						{/if}
-					</div>
-				{/key}
-
-				{#if demoMode && method === 'OAuth2PublicPkce'}
-					<div class="flex flex-wrap items-center gap-2 rounded-md border border-separator bg-field p-3">
-						<button
-							type="button"
-							onclick={startDemoPkce}
-							disabled={demoPkceState === 'binding' || demoPkceState === 'waiting'}
-							class="flex min-h-[38px] items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground disabled:opacity-60"
-						>
-							<KeyRound class="h-3.5 w-3.5" />
-							<span>{t.authorizeAndConnect} (127.0.0.1 PKCE)</span>
-						</button>
-						<button
-							type="button"
-							onclick={cancelDemoPkce}
-							disabled={!demoPkceReady}
-							class="flex min-h-[38px] items-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-foreground disabled:opacity-40"
-						>
-							<X class="h-3.5 w-3.5" />
-							<span>{t.cancelAuth}</span>
-						</button>
-						{#if demoPkceState === 'binding' || demoPkceState === 'waiting'}
-							<span class="flex items-center gap-1.5 font-mono text-xs tabular-nums text-status-info">
-								<Timer class="h-3.5 w-3.5" />
-								<span>{formatPkceTimer(demoPkceSeconds)}</span>
-							</span>
-							{#if demoPkceReady}
 								<button
 									type="button"
-									onclick={completeDemoPkce}
-									class="ml-auto rounded border border-separator bg-surface px-2.5 py-1 text-xs font-medium text-foreground hover:bg-selection-soft"
+									onclick={() => googleJsonInput?.click()}
+									class="flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-foreground whitespace-nowrap hover:bg-selection-soft"
 								>
-									Simulate Loopback Callback
+									<FileUp class="h-3.5 w-3.5 shrink-0 text-accent" />
+									<span>{t.importGoogleJson}</span>
 								</button>
-							{/if}
-						{:else if demoPkceState === 'authorized'}
-							<span class="flex items-center gap-1.5 text-xs font-medium text-status-healthy">
-								<CheckCircle2 class="h-3.5 w-3.5" />
-								<span>127.0.0.1 PKCE OK</span>
-							</span>
+							</div>
 						{/if}
-					</div>
-				{/if}
+						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+							<label class="flex flex-col gap-1">
+								<span class="text-xs font-medium text-secondary">{t.authEndpointLabel}</span>
+								<input
+									name="authorize"
+									type="url"
+									required
+									pattern="https://.*"
+									maxlength="2048"
+									bind:value={discovery.settings.authorize}
+									oninput={() => discovery.edit()}
+									class="{INPUT_CLS} font-mono"
+								/>
+							</label>
+							<label class="flex flex-col gap-1">
+								<span class="text-xs font-medium text-secondary">{t.tokenEndpointLabel}</span>
+								<input
+									name="token"
+									type="url"
+									required
+									pattern="https://.*"
+									maxlength="2048"
+									bind:value={discovery.settings.token}
+									oninput={() => discovery.edit()}
+									class="{INPUT_CLS} font-mono"
+								/>
+							</label>
+							<label class="flex flex-col gap-1 sm:col-span-2">
+								<span class="text-xs font-medium text-secondary">{t.scopesLabel}</span>
+								<input
+									name="scopes"
+									type="text"
+									required
+									maxlength="4096"
+									bind:value={discovery.settings.scopes}
+									oninput={() => discovery.edit()}
+									class="{INPUT_CLS} font-mono"
+								/>
+								<span class="text-[11px] text-secondary">{t.scopesHelp}</span>
+							</label>
+						</div>
+					{/if}
 
-				{#if discovery.selectedPreset === 'Gmail' && method === 'AppPassword'}
-					<a
-						class="text-xs text-accent underline"
-						href="https://myaccount.google.com/apppasswords"
-						target="_blank"
-						rel="noopener noreferrer"
-					>
-						{t.gmailAppPasswordHelp}
-					</a>
+					{#key method}
+						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+							{#if oauth}
+								<label
+									class="flex flex-col gap-1 {method === 'OAuth2PublicPkce' ? 'sm:col-span-2' : ''}"
+								>
+									<span class="text-xs font-medium text-secondary">{t.clientIdLabel}</span>
+									<input
+										name="client"
+										type="text"
+										data-credential
+										required
+										maxlength="4096"
+										autocomplete="off"
+										oninput={() => discovery.protectCredentials()}
+										class="{INPUT_CLS} font-mono"
+									/>
+								</label>
+							{/if}
+							{#if method !== 'OAuth2PublicPkce'}
+								<label class="flex flex-col gap-1 {!oauth ? 'sm:col-span-2' : ''}">
+									<span class="text-xs font-medium text-secondary">
+										{method === 'OAuth2ByoCredentials'
+											? t.clientSecretLabel
+											: isBridge
+												? t.bridgePasswordLabel
+												: t.appPasswordLabel}
+									</span>
+									<input
+										name="secret"
+										type="password"
+										data-credential
+										required
+										maxlength="8192"
+										autocomplete="off"
+										oninput={() => discovery.protectCredentials()}
+										class="{INPUT_CLS} font-mono"
+									/>
+								</label>
+							{/if}
+						</div>
+					{/key}
+
+					{#if demoMode && method === 'OAuth2PublicPkce'}
+						<div class="flex flex-wrap items-center gap-2 rounded-md border border-separator bg-field p-3">
+							<button
+								type="button"
+								onclick={startDemoPkce}
+								disabled={demoPkceState === 'binding' || demoPkceState === 'waiting'}
+								class="flex min-h-[38px] items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground disabled:opacity-60"
+							>
+								<KeyRound class="h-3.5 w-3.5" />
+								<span>{t.authorizeAndConnect} (127.0.0.1 PKCE)</span>
+							</button>
+							<button
+								type="button"
+								onclick={cancelDemoPkce}
+								disabled={!demoPkceReady}
+								class="flex min-h-[38px] items-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-foreground disabled:opacity-40"
+							>
+								<X class="h-3.5 w-3.5" />
+								<span>{t.cancelAuth}</span>
+							</button>
+							{#if demoPkceState === 'binding' || demoPkceState === 'waiting'}
+								<span class="flex items-center gap-1.5 font-mono text-xs tabular-nums text-status-info">
+									<Timer class="h-3.5 w-3.5" />
+									<span>{formatPkceTimer(demoPkceSeconds)}</span>
+								</span>
+								{#if demoPkceReady}
+									<button
+										type="button"
+										onclick={completeDemoPkce}
+										class="ml-auto rounded border border-separator bg-surface px-2.5 py-1 text-xs font-medium text-foreground hover:bg-selection-soft"
+									>
+										Simulate Loopback Callback
+									</button>
+								{/if}
+							{:else if demoPkceState === 'authorized'}
+								<span class="flex items-center gap-1.5 text-xs font-medium text-status-healthy">
+									<CheckCircle2 class="h-3.5 w-3.5" />
+									<span>127.0.0.1 PKCE OK</span>
+								</span>
+							{/if}
+						</div>
+					{/if}
+
+					{#if discovery.selectedPreset === 'Gmail' && method === 'AppPassword'}
+						<a
+							class="text-xs text-accent underline"
+							href="https://myaccount.google.com/apppasswords"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							{t.gmailAppPasswordHelp}
+						</a>
+					{/if}
 				{/if}
 			</div>
 
 			<div class="flex flex-wrap items-center justify-between gap-3 border-t border-separator pt-4">
 				<p class="text-xs text-secondary">
-					{oauth ? t.oauthVaultNotice : t.connectVaultNotice}
+					{isArchive ? t.localArchiveNoticeFooter : oauth ? t.oauthVaultNotice : t.connectVaultNotice}
 				</p>
 				<button
 					type="submit"
-					disabled={discovery.busy || controller.busy}
+					disabled={discovery.busy || controller.busy || (isArchive && !archivePath)}
 					class="flex min-h-[42px] shrink-0 items-center gap-2 rounded-md bg-accent px-5 py-2 text-xs font-medium text-accent-foreground whitespace-nowrap hover:opacity-95 active:scale-[0.98] disabled:opacity-60 md:min-h-[38px]"
 				>
-					<MailPlus class="h-3.5 w-3.5" />
-					<span>{controller.busy ? t.connecting : oauth ? t.authorizeAndConnect : t.connectAccount}</span>
+					{#if isArchive}
+						<FileArchive class="h-3.5 w-3.5" />
+						<span>{controller.busy ? t.localArchiveImporting : t.localArchiveSubmit}</span>
+					{:else}
+						<MailPlus class="h-3.5 w-3.5" />
+						<span>{controller.busy ? t.connecting : oauth ? t.authorizeAndConnect : t.connectAccount}</span>
+					{/if}
 				</button>
 			</div>
 		</fieldset>

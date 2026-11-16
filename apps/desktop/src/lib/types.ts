@@ -35,7 +35,7 @@ export interface MailAccount {
 	imap_host: string;
 	imap_port: number;
 	tls_mode: 'IMAPS' | 'STARTTLS';
-	auth_method: 'OAuth2-PKCE' | 'AppPassword-Vault';
+	auth_method: 'OAuth2-PKCE' | 'AppPassword-Vault' | 'LocalArchive';
 	vault_locked: boolean;
 	folders: AccountFolder[];
 }

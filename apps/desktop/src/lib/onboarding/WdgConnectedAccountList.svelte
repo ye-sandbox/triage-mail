@@ -133,6 +133,7 @@
 		if (method === 'AppPassword') return formT.methodAppPassword;
 		if (method === 'ProtonBridgeLocal') return formT.methodProton;
 		if (method === 'OAuth2PublicPkce') return formT.methodOAuthPublic;
+		if (method === 'LocalArchive') return formT.methodLocalArchive;
 		return formT.methodOAuthByo;
 	}
 
@@ -244,9 +245,13 @@
 								<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-secondary">
 									<span class="font-mono text-foreground">{account.account_id}</span>
 									<span aria-hidden="true">·</span>
-									<span class="font-mono">{account.imap_host}:{account.imap_port}</span>
-									<span aria-hidden="true">·</span>
-									<span>{account.tls_mode}</span>
+									{#if account.auth_method === 'LocalArchive'}
+										<span>{formT.localArchiveBadge}</span>
+									{:else}
+										<span class="font-mono">{account.imap_host}:{account.imap_port}</span>
+										<span aria-hidden="true">·</span>
+										<span>{account.tls_mode}</span>
+									{/if}
 								</div>
 							</div>
 						</div>
@@ -385,7 +390,9 @@
 								<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-secondary">
 									<span class="font-mono text-foreground">{account.account_id}</span>
 									<span aria-hidden="true">·</span>
-									{#if !account.imap_host}
+									{#if account.auth_method === 'LocalArchive'}
+										<span>{formT.localArchiveBadge}</span>
+									{:else if !account.imap_host}
 										<span>{bLabels.disconnected}</span>
 									{:else}
 										<span class="font-mono tabular-nums"

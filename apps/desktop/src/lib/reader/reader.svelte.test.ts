@@ -317,6 +317,25 @@ describe('UI v2 message reader (WdgMessageReader)', () => {
 		target.remove();
 	});
 
+	it('shows clear offline archive message when attachment download returns Unsupported', async () => {
+		const { inbox, target, render, body, attachment } = setup();
+		body.mockResolvedValue(detail('first'));
+		attachment.mockRejectedValueOnce('Unsupported');
+		const component = render();
+		await vi.waitFor(() =>
+			expect(target.querySelector('[aria-label="Download invoice.pdf"]')).not.toBeNull()
+		);
+		target.querySelector<HTMLButtonElement>('[aria-label="Download invoice.pdf"]')!.click();
+		await vi.waitFor(() =>
+			expect(target.textContent).toContain(
+				'Offline archive — attachment binary is not stored for on-demand fetch.'
+			)
+		);
+		await unmount(component);
+		inbox.dispose();
+		target.remove();
+	});
+
 	it('requires explicit user consent before invoking AI summarization', async () => {
 		const { inbox, target, render, body, summarize, settingsTransport } = setup({}, true);
 		body.mockResolvedValue(detail('first'));

@@ -7,6 +7,7 @@ import { OnboardingSession } from './session.svelte';
 import type { AccountConfig, AccountTransport, RecoveryTransport } from './types';
 import WdgAccountDiscoveryForm from './WdgAccountDiscoveryForm.svelte';
 import WdgBootGate from './WdgBootGate.svelte';
+import WdgConnectedAccountList from './WdgConnectedAccountList.svelte';
 import WdgOnboardingPage from './WdgOnboardingPage.svelte';
 
 vi.mock('../inbox/transport', () => ({
@@ -43,7 +44,13 @@ function fixture(options?: { native?: boolean; recoveryAvailable?: boolean }) {
 		unlock: vi.fn<AccountTransport['unlock']>().mockResolvedValue(),
 		add: vi.fn<AccountTransport['add']>().mockResolvedValue('account-one'),
 		authorize: vi.fn<AccountTransport['authorize']>().mockResolvedValue('account-one'),
-		cancel: vi.fn<AccountTransport['cancel']>().mockResolvedValue()
+		cancel: vi.fn<AccountTransport['cancel']>().mockResolvedValue(),
+		chooseArchiveFile: vi
+			.fn<NonNullable<AccountTransport['chooseArchiveFile']>>()
+			.mockResolvedValue('/tmp/takeout.mbox'),
+		importLocalArchive: vi
+			.fn<NonNullable<AccountTransport['importLocalArchive']>>()
+			.mockResolvedValue({ account_id: 'archive-one', imported_count: 2, batches_committed: 1, last_uid: 2 })
 	};
 	const recoveryTransport: RecoveryTransport = {
 		available: vi.fn<RecoveryTransport['available']>().mockResolvedValue(
@@ -595,7 +602,7 @@ describe('onboarding help guide and language selection', () => {
 		const tabs = [
 			...target.querySelectorAll<HTMLButtonElement>('#account-help-content button[role="tab"]')
 		];
-		expect(tabs).toHaveLength(4);
+		expect(tabs).toHaveLength(5);
 
 		tabs[1].click();
 		flushSync();
@@ -610,6 +617,11 @@ describe('onboarding help guide and language selection', () => {
 		tabs[3].click();
 		flushSync();
 		expect(target.textContent).toContain('Mailbox details / Configuration');
+
+		tabs[4].click();
+		flushSync();
+		expect(target.textContent).toContain('takeout.google.com');
+		expect(target.textContent).toContain('Mozilla Thunderbird');
 
 		await unmount(component);
 	});
@@ -672,5 +684,97 @@ describe('onboarding help guide and language selection', () => {
 		expect(target.querySelector<HTMLInputElement>('input[name="port"]')!.value).toBe('1143');
 
 		await unmount(component);
+	});
+
+	it('imports Offline Archive in WdgAccountDiscoveryForm without IMAP fields and shows Offline Archive badge', async () => {
+		const { controller, transport, target } = fixture();
+		controller.phase = 'ready';
+		const pending = deferred<{
+			account_id: string;
+			imported_count: number;
+			batches_committed: number;
+			last_uid: number;
+		}>();
+		transport.chooseArchiveFile
+			.mockResolvedValueOnce('/tmp/single.eml')
+			.mockResolvedValueOnce('/tmp/takeout.mbox');
+		transport.importLocalArchive.mockImplementationOnce((_path, _email, _fmt, onProgress) => {
+			onProgress?.({
+				account_id: 'arch-1',
+				state: 'Syncing',
+				new_messages_count: 5,
+				triage_alerts: [],
+				embedding_errors_count: 0
+			});
+			return pending.promise;
+		});
+
+		const onSuccess = vi.fn();
+		const formComponent = mount(WdgAccountDiscoveryForm, {
+			target,
+			props: { controller, onSuccess }
+		});
+		flushSync();
+
+		const archiveTab = [...target.querySelectorAll<HTMLButtonElement>('button[role="tab"]')].find(
+			(b) => b.textContent?.trim() === 'Offline Archive'
+		)!;
+		archiveTab.click();
+		flushSync();
+
+		expect(target.querySelector('input[name="host"]')).toBeNull();
+		expect(target.querySelector('input[name="port"]')).toBeNull();
+		expect(target.querySelector('[data-credential]')).toBeNull();
+
+		const chooseBtn = [...target.querySelectorAll('button')].find((b) =>
+			b.textContent?.includes('Choose .mbox or .eml file')
+		)!;
+		chooseBtn.click();
+		await settle();
+		const radios = [...target.querySelectorAll<HTMLButtonElement>('button[role="radio"]')];
+		expect(radios[1].getAttribute('aria-checked')).toBe('true');
+
+		chooseBtn.click();
+		await settle();
+		expect(radios[0].getAttribute('aria-checked')).toBe('true');
+
+		input(target, 'email', 'archive@example.com');
+		submit(target);
+		await settle();
+
+		expect(transport.importLocalArchive).toHaveBeenCalledWith(
+			'/tmp/takeout.mbox',
+			'archive@example.com',
+			'Mbox',
+			expect.any(Function)
+		);
+		expect(target.textContent).toContain('Messages imported so far: 5');
+
+		pending.resolve({ account_id: 'arch-1', imported_count: 5, batches_committed: 1, last_uid: 5 });
+		await settle();
+		expect(onSuccess).toHaveBeenCalledOnce();
+		await unmount(formComponent);
+
+		const listTarget = document.createElement('div');
+		document.body.append(listTarget);
+		const listComponent = mount(WdgConnectedAccountList, {
+			target: listTarget,
+			props: {
+				accounts: [
+					{
+						account_id: 'arch-1',
+						email_display: 'archive@example.com',
+						imap_host: '',
+						imap_port: 0,
+						auth_method: 'LocalArchive'
+					}
+				],
+				onAddAccount: vi.fn()
+			}
+		});
+		flushSync();
+		expect(listTarget.textContent).toContain('Offline Archive (Local Only)');
+		expect(listTarget.textContent).not.toContain('Disconnected');
+		await unmount(listComponent);
 	});
 });

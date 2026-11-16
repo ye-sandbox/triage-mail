@@ -45,7 +45,12 @@ export function toShellAccounts(accounts: AccountConfig[]): MailAccount[] {
 		imap_host: acct.imap_host,
 		imap_port: acct.imap_port,
 		tls_mode: acct.imap_port === 143 ? 'STARTTLS' : 'IMAPS',
-		auth_method: acct.auth_method === 'AppPassword' ? 'AppPassword-Vault' : 'OAuth2-PKCE',
+		auth_method:
+			acct.auth_method === 'AppPassword'
+				? 'AppPassword-Vault'
+				: acct.auth_method === 'LocalArchive'
+					? 'LocalArchive'
+					: 'OAuth2-PKCE',
 		vault_locked: false,
 		folders: [
 			{ id: 'INBOX', label: 'INBOX' },

@@ -157,6 +157,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 			methodOAuthPublic: 'OAuth · Public PKCE',
 			methodOAuthByo: 'OAuth · Your client credentials',
 			methodProton: 'Proton Mail Bridge',
+			methodLocalArchive: 'Offline Archive',
 			emailLabel: 'Email address or IMAP username',
 			emailLabelBridge: 'Bridge username',
 			hostLabel: 'IMAP host',
@@ -193,7 +194,26 @@ export const translations: Record<SupportedLocale, Translations> = {
 			importGoogleJsonWebError:
 				'This JSON is for a Web application. Create a "Desktop app" OAuth client ID in Google Cloud Console.',
 			importGoogleJsonInvalidError:
-				'Invalid Google Cloud OAuth JSON file. Select the client_secret_*.json downloaded from Credentials.'
+				'Invalid Google Cloud OAuth JSON file. Select the client_secret_*.json downloaded from Credentials.',
+			localArchiveNotice:
+				'Import messages from a local .mbox archive (Google Takeout, Thunderbird) or a single .eml file completely offline. No password or IMAP server is required.',
+			localArchiveEmailLabel: 'Archive label or email address',
+			localArchiveFormatLabel: 'Archive format',
+			localArchiveFormatMbox: '.mbox (multi-message mailbox)',
+			localArchiveFormatEml: '.eml (single RFC 5322 message)',
+			localArchiveChooseFile: 'Choose .mbox or .eml file',
+			localArchiveNoFile: 'No file selected yet',
+			localArchiveSubmit: 'Import local archive',
+			localArchiveImporting: 'Importing archive…',
+			localArchiveProgress: 'Messages imported so far:',
+			localArchiveSuccess: 'Imported messages into local archive:',
+			localArchiveNoticeFooter:
+				'Imported messages are indexed locally in SQLCipher storage. Repeated imports using the same email append monotonically.',
+			localArchiveConflictError:
+				'This email belongs to an active or recovered IMAP account. Choose a distinct email address for local archives.',
+			localArchiveImportError:
+				'Archive could not be imported. Verify the file format (.mbox or .eml) and permissions.',
+			localArchiveBadge: 'Offline Archive (Local Only)'
 		},
 		guide: {
 			title: 'How sign-in methods work & step-by-step setup',
@@ -341,6 +361,37 @@ export const translations: Record<SupportedLocale, Translations> = {
 						]
 					}
 				]
+			},
+			localArchive: {
+				title: 'Offline Archive (.mbox / .eml)',
+				summary:
+					'Import local email exports without connecting to an IMAP server or creating app passwords.',
+				requirements: 'An exported .mbox mailbox archive or individual .eml message file on disk.',
+				services: 'Google Takeout, Mozilla Thunderbird, Apple Mail exports, and standard RFC 5322 archives.',
+				note: 'Full offline triage, search, and artifact extraction work locally; on-demand remote attachment fetches are unavailable.',
+				fields: [
+					'Archive label or email address: Identifies this archive account in your unified inbox (reusing an existing offline archive address appends messages).',
+					'Archive format & file: Choose .mbox for multi-message exports or .eml for single messages, then select the file on disk.'
+				],
+				playbooks: [
+					{
+						id: 'Google Takeout',
+						provider: 'Google Takeout & Gmail Export (.mbox)',
+						steps: [
+							'Open takeout.google.com, deselect all products except "Mail", and start an export.',
+							'Download and extract the archive to locate the .mbox file (e.g. All mail Including Spam and Trash.mbox).',
+							'Choose "Offline Archive", select the .mbox file, enter an archive email label, and click Import local archive.'
+						]
+					},
+					{
+						id: 'Thunderbird',
+						provider: 'Mozilla Thunderbird & Local .eml Files',
+						steps: [
+							'Export a folder from Thunderbird as an .mbox file (or save individual messages as .eml files).',
+							'Select the matching format (.mbox or .eml), choose the file, and run the streaming import.'
+						]
+					}
+				]
 			}
 		},
 		shell: {
@@ -427,7 +478,9 @@ export const translations: Record<SupportedLocale, Translations> = {
 			loadMessageError: 'Message could not be loaded. Please try again.',
 			tryAgain: 'Try again',
 			resetCategory: 'Reset to automatic',
-			noDisplayableContent: 'This message has no displayable content.'
+			noDisplayableContent: 'This message has no displayable content.',
+			attachmentUnavailableOffline:
+				'Offline archive — attachment binary is not stored for on-demand fetch.'
 		}
 	},
 	'pt-BR': {
@@ -589,6 +642,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 			methodOAuthPublic: 'OAuth · PKCE Público',
 			methodOAuthByo: 'OAuth · Suas credenciais de cliente',
 			methodProton: 'Proton Mail Bridge',
+			methodLocalArchive: 'Arquivo Offline',
 			emailLabel: 'Endereço de e-mail ou usuário IMAP',
 			emailLabelBridge: 'Nome de usuário no Bridge',
 			hostLabel: 'Host IMAP',
@@ -625,7 +679,26 @@ export const translations: Record<SupportedLocale, Translations> = {
 			importGoogleJsonWebError:
 				'Este JSON é de aplicativo Web. Crie um ID do cliente OAuth do tipo "App para computador" no Google Cloud Console.',
 			importGoogleJsonInvalidError:
-				'Arquivo JSON OAuth inválido. Selecione o client_secret_*.json baixado em Credenciais no Google Cloud.'
+				'Arquivo JSON OAuth inválido. Selecione o client_secret_*.json baixado em Credenciais no Google Cloud.',
+			localArchiveNotice:
+				'Importe mensagens de um arquivo .mbox local (Google Takeout, Thunderbird) ou .eml único totalmente offline. Não requer senha nem servidor IMAP.',
+			localArchiveEmailLabel: 'Rótulo ou endereço de e-mail do arquivo',
+			localArchiveFormatLabel: 'Formato do arquivo',
+			localArchiveFormatMbox: '.mbox (caixa com várias mensagens)',
+			localArchiveFormatEml: '.eml (mensagem RFC 5322 única)',
+			localArchiveChooseFile: 'Escolher arquivo .mbox ou .eml',
+			localArchiveNoFile: 'Nenhum arquivo selecionado',
+			localArchiveSubmit: 'Importar arquivo local',
+			localArchiveImporting: 'Importando arquivo…',
+			localArchiveProgress: 'Mensagens importadas até agora:',
+			localArchiveSuccess: 'Mensagens importadas para o arquivo local:',
+			localArchiveNoticeFooter:
+				'As mensagens importadas ficam indexadas localmente no banco SQLCipher. Novas importações no mesmo e-mail adicionam mensagens em sequência.',
+			localArchiveConflictError:
+				'Este endereço pertence a uma conta IMAP ativa ou recuperada. Escolha outro e-mail para arquivos locais.',
+			localArchiveImportError:
+				'Não foi possível importar o arquivo. Verifique o formato (.mbox ou .eml) e as permissões.',
+			localArchiveBadge: 'Arquivo Offline (Somente Local)'
 		},
 		guide: {
 			title: 'Como funcionam os métodos de login e passo a passo',
@@ -773,6 +846,37 @@ export const translations: Record<SupportedLocale, Translations> = {
 						]
 					}
 				]
+			},
+			localArchive: {
+				title: 'Arquivo Offline (.mbox / .eml)',
+				summary:
+					'Importe exportações locais de e-mail sem conectar a um servidor IMAP ou criar senhas de app.',
+				requirements: 'Um arquivo de caixa .mbox exportado ou um arquivo de mensagem .eml no disco.',
+				services: 'Google Takeout, Mozilla Thunderbird, Apple Mail e arquivos padrão RFC 5322.',
+				note: 'Triagem offline, busca e extração de artefatos funcionam localmente; busca sob demanda de anexos remotos fica indisponível.',
+				fields: [
+					'Rótulo ou e-mail do arquivo: Identifica este arquivo na sua caixa unificada (reutilizar o mesmo e-mail de arquivo offline anexa mensagens em sequência).',
+					'Formato e arquivo: Escolha .mbox para caixas exportadas ou .eml para mensagens únicas e selecione o arquivo no disco.'
+				],
+				playbooks: [
+					{
+						id: 'Google Takeout',
+						provider: 'Google Takeout e Exportação do Gmail (.mbox)',
+						steps: [
+							'Acesse takeout.google.com, desmarque todos os produtos exceto "E-mail" e inicie a exportação.',
+							'Baixe e extraia o pacote para localizar o arquivo .mbox (ex.: Todos os e-mails.mbox).',
+							'Escolha "Arquivo Offline", selecione o arquivo .mbox, informe um rótulo/e-mail e clique em Importar arquivo local.'
+						]
+					},
+					{
+						id: 'Thunderbird',
+						provider: 'Mozilla Thunderbird e Arquivos .eml Locais',
+						steps: [
+							'Exporte uma pasta do Thunderbird em formato .mbox (ou salve mensagens individuais em .eml).',
+							'Selecione o formato correspondente (.mbox ou .eml), escolha o arquivo e execute a importação em fluxo.'
+						]
+					}
+				]
 			}
 		},
 		shell: {
@@ -858,7 +962,9 @@ export const translations: Record<SupportedLocale, Translations> = {
 			loadMessageError: 'Não foi possível carregar a mensagem. Tente novamente.',
 			tryAgain: 'Tentar novamente',
 			resetCategory: 'Restaurar automático',
-			noDisplayableContent: 'Esta mensagem não possui conteúdo exibível.'
+			noDisplayableContent: 'Esta mensagem não possui conteúdo exibível.',
+			attachmentUnavailableOffline:
+				'Arquivo offline — o binário do anexo não está disponível para busca sob demanda.'
 		}
 	}
 };

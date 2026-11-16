@@ -54,8 +54,10 @@ impl WorkerSupervisor {
     }
 
     pub fn start_account(&self, config: AccountConfigDto) -> Result<(), IpcError> {
-        // INVARIANT: Recovered cached-only accounts have no endpoint or credentials.
-        if config.imap_host.is_empty() {
+        // INVARIANT: Recovered cached-only and local-archive accounts have no remote endpoint.
+        if config.imap_host.is_empty()
+            || config.auth_method == mail_engine::AuthMethod::LocalArchive
+        {
             return Ok(());
         }
         let mut accounts = self.accounts.lock().map_err(|_| IpcError::Internal)?;
@@ -319,7 +321,7 @@ async fn embedding_loop(service: Arc<DesktopService>) {
     }
 }
 
-fn index_injected_provider(
+pub(crate) fn index_injected_provider(
     service: &DesktopService,
     records: &[MessageRecord],
     events: &BatchEvents,

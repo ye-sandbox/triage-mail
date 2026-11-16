@@ -101,6 +101,9 @@ impl DefaultImapConnector {
             AccountAuthMaterial::ProtonBridgeLocal { bridge_password } => {
                 session.login(username, bridge_password).await
             }
+            AccountAuthMaterial::LocalArchive => Err(EngineError::ImapProtocol(
+                "local archive accounts do not support IMAP authentication".into(),
+            )),
         }
     }
 
@@ -112,6 +115,13 @@ impl DefaultImapConnector {
         username: &str,
         auth: &AccountAuthMaterial,
     ) -> Result<(ImapSession<TlsStream<TcpStream>>, ServerCapabilities), EngineError> {
+        if endpoint.auth_method == crate::AuthMethod::LocalArchive
+            || matches!(auth, AccountAuthMaterial::LocalArchive)
+        {
+            return Err(EngineError::ImapProtocol(
+                "local archive accounts have no remote IMAP endpoint".into(),
+            ));
+        }
         // INVARIANT: Account IDs select vault entries; only the explicit username is sent as login.
         if username.is_empty() || username.chars().any(char::is_control) {
             return Err(EngineError::ImapProtocol("invalid IMAP username".into()));
@@ -161,6 +171,11 @@ impl ImapConnector for DefaultImapConnector {
         last_modseq: Option<u64>,
         sink: &dyn SyncEventSink,
     ) -> Result<Vec<ParsedInboundMessage>, EngineError> {
+        if endpoint.auth_method == crate::AuthMethod::LocalArchive {
+            return Err(EngineError::ImapProtocol(
+                "local archive accounts do not support IMAP sync".into(),
+            ));
+        }
         let auth = self.load_auth_material(&endpoint.account_id)?;
         let (mut session, caps) = self.connect_and_authenticate(endpoint, &auth).await?;
 
@@ -201,6 +216,11 @@ impl ImapConnector for DefaultImapConnector {
         uid: u32,
         part_id: &str,
     ) -> Result<Vec<u8>, EngineError> {
+        if endpoint.auth_method == crate::AuthMethod::LocalArchive {
+            return Err(EngineError::ImapProtocol(
+                "local archive accounts do not support remote attachment fetch".into(),
+            ));
+        }
         let auth = self.load_auth_material(&endpoint.account_id)?;
         let (mut session, _caps) = self.connect_and_authenticate(endpoint, &auth).await?;
 

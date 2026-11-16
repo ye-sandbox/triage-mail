@@ -64,6 +64,9 @@ fn input(path: &Path) -> Result<File, IpcError> {
     }
     Ok(file)
 }
+pub(crate) fn open_local_input(path: &Path) -> Result<File, IpcError> {
+    input(path)
+}
 pub fn preview(path: &Path) -> Result<PortableDefinitions, IpcError> {
     let mut bytes = Vec::new();
     input(path)?

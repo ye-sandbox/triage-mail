@@ -150,31 +150,70 @@ impl SqliteMailStore {
                 crate::conversations::actions::consume_preview(tx,token,generation,changes)?;
             }
             for (id, action, remote_payload) in changes {
-                let exists: bool = tx
+                let account_id: Option<String> = tx
                     .query_row(
-                        "SELECT EXISTS(SELECT 1 FROM messages WHERE id=?1)",
+                        "SELECT account_id FROM messages WHERE id=?1",
                         [id],
                         |r| r.get(0),
                     )
+                    .optional()
                     .map_err(query_error)?;
-                if !exists {
+                let Some(account_id) = account_id else {
                     return Err(StorageError::Query("message not found".into()));
-                }
+                };
                 Self::apply_mutation_in_transaction(tx, id, action)?;
                 if matches!(action, LocalMutation::Read(true)) {
                     tx.execute("UPDATE reminder_jobs SET status='Canceled' WHERE message_id=?1 AND trigger_type='UnreadInterval' AND status='Pending'", [id]).map_err(query_error)?;
                 }
                 if let Some(payload) = remote_payload {
-                    tx.execute("DELETE FROM conversation_attempts WHERE message_id=?1",[id]).map_err(query_error)?;
-                    tx.execute(
-                        "INSERT INTO pending_mutations(message_id,payload_json) VALUES (?1,?2)",
-                        params![id, payload],
-                    )
-                    .map_err(query_error)?;
+                    if !Self::is_local_archive_account_tx(tx, &account_id)? {
+                        tx.execute("DELETE FROM conversation_attempts WHERE message_id=?1", [id])
+                            .map_err(query_error)?;
+                        tx.execute(
+                            "INSERT INTO pending_mutations(message_id,payload_json) VALUES (?1,?2)",
+                            params![id, payload],
+                        )
+                        .map_err(query_error)?;
+                    }
                 }
             }
             Ok(())
         })
+    }
+
+    pub(crate) fn is_local_archive_account_tx(
+        tx: &Transaction<'_>,
+        account_id: &str,
+    ) -> Result<bool, StorageError> {
+        tx.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM accounts WHERE id=?1 AND auth_type='LocalArchive'
+            ) OR EXISTS(
+                SELECT 1 FROM account_connections
+                WHERE account_id=?1 AND json_extract(config_json, '$.auth_method') = 'LocalArchive'
+            )",
+            [account_id],
+            |r| r.get(0),
+        )
+        .map_err(query_error)
+    }
+
+    pub fn is_local_archive_account(&self, account_id: &str) -> Result<bool, StorageError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StorageError::Query("storage lock unavailable".into()))?;
+        conn.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM accounts WHERE id=?1 AND auth_type='LocalArchive'
+            ) OR EXISTS(
+                SELECT 1 FROM account_connections
+                WHERE account_id=?1 AND json_extract(config_json, '$.auth_method') = 'LocalArchive'
+            )",
+            [account_id],
+            |r| r.get(0),
+        )
+        .map_err(query_error)
     }
 
     pub(crate) fn apply_mutation_in_transaction(

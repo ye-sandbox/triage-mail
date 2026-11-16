@@ -27,6 +27,8 @@ pub enum AccountAuthMaterial {
     },
     /// Local Proton Mail Bridge loopback password (`127.0.0.1`).
     ProtonBridgeLocal { bridge_password: String },
+    /// Offline local archive account (`.mbox` / `.eml` import, no IMAP credentials).
+    LocalArchive,
 }
 
 impl AccountAuthMaterial {
@@ -155,6 +157,7 @@ impl fmt::Debug for AccountAuthMaterial {
                 .debug_struct("ProtonBridgeLocal")
                 .field("bridge_password", &"[REDACTED]")
                 .finish(),
+            Self::LocalArchive => f.write_str("LocalArchive"),
         }
     }
 }
@@ -185,6 +188,7 @@ mod tests {
             AccountAuthMaterial::ProtonBridgeLocal {
                 bridge_password: "bridge-local-pass-123".into(),
             },
+            AccountAuthMaterial::LocalArchive,
         ];
 
         for item in fixtures {

@@ -150,6 +150,7 @@ export interface Translations {
 		methodOAuthPublic: string;
 		methodOAuthByo: string;
 		methodProton: string;
+		methodLocalArchive: string;
 		emailLabel: string;
 		emailLabelBridge: string;
 		hostLabel: string;
@@ -177,6 +178,21 @@ export interface Translations {
 		importGoogleJsonSuccess: string;
 		importGoogleJsonWebError: string;
 		importGoogleJsonInvalidError: string;
+		localArchiveNotice: string;
+		localArchiveEmailLabel: string;
+		localArchiveFormatLabel: string;
+		localArchiveFormatMbox: string;
+		localArchiveFormatEml: string;
+		localArchiveChooseFile: string;
+		localArchiveNoFile: string;
+		localArchiveSubmit: string;
+		localArchiveImporting: string;
+		localArchiveProgress: string;
+		localArchiveSuccess: string;
+		localArchiveNoticeFooter: string;
+		localArchiveConflictError: string;
+		localArchiveImportError: string;
+		localArchiveBadge: string;
 	};
 	guide: {
 		title: string;
@@ -219,6 +235,15 @@ export interface Translations {
 			requirements: string;
 			services: string;
 			warning: string;
+			fields: string[];
+			playbooks: GuidePlaybook[];
+		};
+		localArchive: {
+			title: string;
+			summary: string;
+			requirements: string;
+			services: string;
+			note: string;
 			fields: string[];
 			playbooks: GuidePlaybook[];
 		};
@@ -305,5 +330,6 @@ export interface Translations {
 		tryAgain: string;
 		resetCategory: string;
 		noDisplayableContent: string;
+		attachmentUnavailableOffline: string;
 	};
 }

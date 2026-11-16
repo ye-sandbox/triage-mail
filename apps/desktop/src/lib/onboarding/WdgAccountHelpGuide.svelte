@@ -25,7 +25,8 @@
 		{ id: 'AppPassword' as const, label: t.appPassword.title },
 		{ id: 'OAuth2PublicPkce' as const, label: t.oauthPublic.title },
 		{ id: 'OAuth2ByoCredentials' as const, label: t.oauthByo.title },
-		{ id: 'ProtonBridgeLocal' as const, label: t.proton.title }
+		{ id: 'ProtonBridgeLocal' as const, label: t.proton.title },
+		{ id: 'LocalArchive' as const, label: t.localArchive.title }
 	]);
 
 	const activeContent = $derived.by(() => {
@@ -59,6 +60,16 @@
 					isWarning: true,
 					fields: t.proton.fields,
 					playbooks: t.proton.playbooks
+				};
+			case 'LocalArchive':
+				return {
+					summary: t.localArchive.summary,
+					requirements: t.localArchive.requirements,
+					services: t.localArchive.services,
+					note: t.localArchive.note,
+					isWarning: false,
+					fields: t.localArchive.fields,
+					playbooks: t.localArchive.playbooks
 				};
 			default:
 				return {

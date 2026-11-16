@@ -1016,3 +1016,17 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - Hosts retain ownership/serialization through running blocking work and execute
   their own post-commit hooks. No active CLI/daemon, transport extraction, scheduling
   policy, inference load or writable container is added. See k-041 and ADR-027.
+
+## Offline Local Archive Ingestion ([02.8])
+
+- **Streaming Archive Parser (`crates/mail-engine::mbox`, `#![forbid(unsafe_code)]`):**
+  - `MboxReader<R: BufRead>` splits `.mbox` streams on RFC 4155 `From ` lines without loading whole archives into memory, normalizes CRLF/LF, unescapes `>From ` lines (`MboxFlavor::Mboxrd` / `Mboxo`), enforces `DEFAULT_MAX_MBOX_MESSAGE_BYTES` (32 MiB per message), extracts `X-Gmail-Labels` (`Unread`, `Starred`), and delegates RFC 5322/MIME parsing to `StalwartMimeParser::parse_with_uid_and_modseq`.
+  - `parse_eml_reader` / `parse_eml_bytes` parse standalone `.eml` files with the same bounded size cap and `ParsedArchiveMessage` output.
+- **Local-Only Account Mode & Ingestion (`crates/vault`, `crates/mail-engine`, `crates/storage`, `crates/sync-runtime`):**
+  - Additive `AuthMethod::LocalArchive` and `AccountAuthMaterial::LocalArchive` (`imap_host = ""`, `imap_port = 0`). `DefaultImapConnector` and `mutations` fail closed on any remote IMAP operation for `LocalArchive` accounts.
+  - `sync_runtime::ingestion::ingest_archive_stream` batches parsed archive messages through `ingest_batch` in `DEFAULT_SYNC_UID_BATCH_SIZE` (300) chunks with deterministic monotonic UIDs starting at `existing_state.uidnext.max(1)`, sets `server_uidnext = 0` (preventing historical backlog rule/review noise), and maps `X-Gmail-Labels` to `\Seen` / `\Flagged`.
+  - `storage::desktop::apply_local_triage_mutation` detects `LocalArchive` accounts (`accounts.auth_type='LocalArchive'` or `account_connections.config_json`) and commits local triage (`MarkRead`, `Archive`, `Trash`, `Tag`, `Star`, `Snooze`) without enqueuing `pending_mutations` outbox rows.
+- **Desktop IPC, Lazy Attachment Behavior & UI (`apps/desktop/src-tauri`, `apps/desktop/src`):**
+  - Additive `cmd_import_local_archive(path, email_display, format: LocalArchiveFormat, on_progress: Channel<SyncProgressEvent>) -> LocalArchiveImportDto { account_id, imported_count, batches_committed, last_uid }`. Re-importing into the same `email_display` appends to an existing `LocalArchive` account, while colliding with a live remote account fails closed with `IpcError::AccountExists`.
+  - `WorkerSupervisor::start_account` skips spawning IMAP sync loops for `LocalArchive` accounts. `DesktopService::fetch_attachment` returns `IpcError::Unsupported` for `LocalArchive` accounts (UI surfaces a localized offline-archive hint).
+  - Onboarding (`WdgAccountDiscoveryForm` + `WdgAccountHelpGuide`) and Settings (`WdgBackupDefinitionsPanel`) expose EN/PT-BR `.mbox`/`.eml` import controls via `cmd_choose_transfer_file(false)` and `WdgConnectedAccountList` renders `Offline Archive (Local Only)` instead of `Disconnected`.

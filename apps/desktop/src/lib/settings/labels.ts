@@ -160,6 +160,17 @@ export interface SettingsLabels {
 		mappingHeading: string;
 		chooseTarget: string;
 		approveImport: string;
+		archiveTitle: string;
+		archiveDesc: string;
+		archiveEmailLabel: string;
+		archiveFormatMbox: string;
+		archiveFormatEml: string;
+		archiveChooseBtn: string;
+		archiveNoFile: string;
+		archiveImportBtn: string;
+		archiveSuccess: string;
+		archiveConflict: string;
+		archiveError: string;
 	};
 	importDialog: {
 		title: string;
@@ -377,7 +388,20 @@ export const settingsLabels: Record<SupportedLocale, SettingsLabels> = {
 			mappingHeading: 'Map references',
 			chooseTarget: 'Select a target',
 			approveImport:
-				'I reviewed these definitions, mappings and all-account scopes. Import without running rules.'
+				'I reviewed these definitions, mappings and all-account scopes. Import without running rules.',
+			archiveTitle: 'Local Archive Import (.mbox / .eml)',
+			archiveDesc:
+				'Stream local .mbox exports (Google Takeout, Thunderbird) or single .eml files directly into encrypted SQLCipher storage without IMAP credentials.',
+			archiveEmailLabel: 'Archive label or email address',
+			archiveFormatMbox: '.mbox archive',
+			archiveFormatEml: '.eml message',
+			archiveChooseBtn: 'Choose .mbox / .eml file',
+			archiveNoFile: 'No archive file selected',
+			archiveImportBtn: 'Import local archive',
+			archiveSuccess: 'Imported archive messages:',
+			archiveConflict:
+				'Email belongs to an existing IMAP or recovered account. Use a distinct address.',
+			archiveError: 'Archive import failed. Verify the file format and permissions.'
 		},
 		importDialog: {
 			title: 'Portable Definitions Import Preview',
@@ -596,7 +620,20 @@ export const settingsLabels: Record<SupportedLocale, SettingsLabels> = {
 			mappingHeading: 'Mapear referências',
 			chooseTarget: 'Selecione um destino',
 			approveImport:
-				'Revisei as definições, os mapeamentos e os escopos de todas as contas. Importar sem executar regras.'
+				'Revisei as definições, os mapeamentos e os escopos de todas as contas. Importar sem executar regras.',
+			archiveTitle: 'Importação de Arquivo Local (.mbox / .eml)',
+			archiveDesc:
+				'Importe arquivos .mbox locais (Google Takeout, Thunderbird) ou mensagens .eml diretamente para o SQLCipher criptografado sem credenciais IMAP.',
+			archiveEmailLabel: 'Rótulo ou e-mail do arquivo',
+			archiveFormatMbox: 'Arquivo .mbox',
+			archiveFormatEml: 'Mensagem .eml',
+			archiveChooseBtn: 'Escolher arquivo .mbox / .eml',
+			archiveNoFile: 'Nenhum arquivo selecionado',
+			archiveImportBtn: 'Importar arquivo local',
+			archiveSuccess: 'Mensagens importadas do arquivo:',
+			archiveConflict:
+				'E-mail pertence a uma conta IMAP ou recuperada. Use outro endereço.',
+			archiveError: 'Falha na importação do arquivo. Verifique o formato e as permissões.'
 		},
 		importDialog: {
 			title: 'Pré-visualização de Importação Portátil',

@@ -1,10 +1,21 @@
-import type { AccountConfig, AccountTransport, AccountSubmission } from './types';
+import { i18n } from '../i18n/index.svelte';
+import type {
+	AccountConfig,
+	AccountTransport,
+	AccountSubmission,
+	LocalArchiveFormat,
+	LocalArchiveImportResult
+} from './types';
 
 export class AccountController {
 	phase = $state<'loading' | 'locked' | 'ready' | 'error' | 'browser'>('loading');
 	accounts = $state<AccountConfig[]>([]);
 	busy = $state(false);
 	authorizing = $state(false);
+	importProgress = $state<{ importedCount: number; active: boolean }>({
+		importedCount: 0,
+		active: false
+	});
 	error = $state('');
 	private active = true;
 	private revision = 0;
@@ -81,6 +92,45 @@ export class AccountController {
 			}
 		}
 		return success;
+	}
+	async importArchive(
+		path: string,
+		emailDisplay: string,
+		format: LocalArchiveFormat
+	): Promise<LocalArchiveImportResult | null> {
+		if (this.busy || !this.active || !this.transport.importLocalArchive) return null;
+		this.busy = true;
+		this.error = '';
+		this.importProgress = { importedCount: 0, active: true };
+		let result: LocalArchiveImportResult | null = null;
+		try {
+			result = await this.transport.importLocalArchive(path, emailDisplay, format, (event) => {
+				if (this.active && event.new_messages_count > 0) {
+					this.importProgress = {
+						importedCount: this.importProgress.importedCount + event.new_messages_count,
+						active: true
+					};
+				}
+			});
+		} catch (err: unknown) {
+			if (this.active) {
+				this.error =
+					err === 'AccountExists'
+						? i18n.t.accountForm.localArchiveConflictError
+						: i18n.t.accountForm.localArchiveImportError;
+			}
+		} finally {
+			if (this.active) {
+				const error = this.error;
+				await this.load();
+				if (this.active) {
+					if (this.phase === 'ready') this.error = error;
+					this.importProgress = { importedCount: 0, active: false };
+					this.busy = false;
+				}
+			}
+		}
+		return result;
 	}
 	async cancel() {
 		if (!this.authorizing) return;

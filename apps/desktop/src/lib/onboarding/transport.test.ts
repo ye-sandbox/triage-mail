@@ -107,3 +107,77 @@ it('keeps discovery offline by default and probing a separate explicit command',
 		['cmd_probe_email_provider', { host: 'imap.example.com' }]
 	]);
 });
+
+it('dispatches archive picker and streaming local archive import and stops forwarding after settlement', async () => {
+	let resolveImport!: (result: {
+		account_id: string;
+		imported_count: number;
+		batches_committed: number;
+		last_uid: number;
+	}) => void;
+	const pending = new Promise<{
+		account_id: string;
+		imported_count: number;
+		batches_committed: number;
+		last_uid: number;
+	}>((done) => {
+		resolveImport = done;
+	});
+	vi.mocked(invoke)
+		.mockResolvedValueOnce('/tmp/export.mbox')
+		.mockReturnValueOnce(pending);
+
+	const picked = await nativeAccountTransport.chooseArchiveFile!();
+	expect(picked).toBe('/tmp/export.mbox');
+
+	const onProgress = vi.fn();
+	const run = nativeAccountTransport.importLocalArchive!(
+		'/tmp/export.mbox',
+		'archive@example.com',
+		'Mbox',
+		onProgress
+	);
+
+	expect(vi.mocked(invoke).mock.calls).toEqual([
+		['cmd_choose_transfer_file', { save: false }],
+		[
+			'cmd_import_local_archive',
+			{
+				path: '/tmp/export.mbox',
+				emailDisplay: 'archive@example.com',
+				format: 'Mbox',
+				onProgress: expect.anything()
+			}
+		]
+	]);
+
+	const { onProgress: channel } = vi.mocked(invoke).mock.calls[1][1] as {
+		onProgress: Channel<{
+			account_id: string;
+			state: string;
+			new_messages_count: number;
+			triage_alerts: unknown[];
+			embedding_errors_count: number;
+		}>;
+	};
+	const evt = {
+		account_id: 'arch-1',
+		state: 'Syncing',
+		new_messages_count: 3,
+		triage_alerts: [],
+		embedding_errors_count: 0
+	};
+	channel.onmessage(evt);
+	expect(onProgress).toHaveBeenCalledTimes(1);
+
+	resolveImport({ account_id: 'arch-1', imported_count: 3, batches_committed: 1, last_uid: 3 });
+	await expect(run).resolves.toEqual({
+		account_id: 'arch-1',
+		imported_count: 3,
+		batches_committed: 1,
+		last_uid: 3
+	});
+
+	channel.onmessage(evt);
+	expect(onProgress).toHaveBeenCalledTimes(1);
+});

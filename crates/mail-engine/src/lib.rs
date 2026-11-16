@@ -19,6 +19,7 @@ pub mod bodystructure;
 pub mod connector;
 pub mod discovery;
 pub mod idle;
+pub mod mbox;
 pub mod mime_parser;
 pub mod mutations;
 pub mod protocol;
@@ -28,6 +29,11 @@ pub mod tls;
 pub mod unsubscribe;
 
 pub const DEFAULT_SYNC_UID_BATCH_SIZE: u32 = 300;
+
+pub use mbox::{
+    extract_gmail_labels, parse_eml_bytes, parse_eml_reader, LocalArchiveFormat, MboxFlavor,
+    MboxReadConfig, MboxReader, ParsedArchiveMessage, DEFAULT_MAX_MBOX_MESSAGE_BYTES,
+};
 
 pub use auth::{
     validate_token_endpoint, HttpTokenRefreshTransport, RefreshTokenRequest, RefreshedTokens,
@@ -87,6 +93,8 @@ pub enum AuthMethod {
     OAuth2ByoCredentials,
     /// Local Proton Mail Bridge on loopback (`127.0.0.1:1143`).
     ProtonBridgeLocal,
+    /// Offline local archive account (`.mbox` / `.eml` import, zero IMAP transport).
+    LocalArchive,
 }
 
 /// Connection endpoint configuration for an IMAP account.

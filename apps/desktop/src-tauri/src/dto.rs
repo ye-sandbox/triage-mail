@@ -263,6 +263,15 @@ pub struct SyncProgressEvent {
     pub embedding_errors_count: usize,
 }
 
+/// Summary returned after streaming a local `.mbox` or `.eml` archive into storage.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LocalArchiveImportDto {
+    pub account_id: String,
+    pub imported_count: usize,
+    pub batches_committed: usize,
+    pub last_uid: u32,
+}
+
 pub use triage_ai::{
     DueDateItem as DueDateItemDto, DueDateStatus as DueDateStatusDto,
     ReminderTrigger as ReminderTriggerDto, ScheduledReminderConfig as ScheduledReminderConfigDto,

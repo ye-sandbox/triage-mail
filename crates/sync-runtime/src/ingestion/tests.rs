@@ -345,3 +345,119 @@ fn checkpoint_failure_rolls_back_messages_flags_jobs_and_reset_deletions() {
         Some(next)
     );
 }
+
+#[test]
+fn archive_stream_assigns_monotonic_uids_maps_labels_and_skips_rule_review_storms() {
+    use mail_engine::ParsedArchiveMessage;
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = store(&dir.path().join("mail.db"));
+    sql(
+        &store,
+        "INSERT OR REPLACE INTO accounts VALUES ('fixture','user@example.com','LocalArchive',0,0);",
+    );
+    enable_arrival_features(&store);
+
+    let first_msg = ParsedArchiveMessage {
+        message: message(999), // ignored; monotonic UID 1 assigned
+        gmail_labels: vec!["Inbox".into(), "Starred".into()],
+        raw_size_bytes: 128,
+    };
+    let mut second_inner = message(998);
+    second_inner.message_id_header = Some("second@example.org".into());
+    let second_msg = ParsedArchiveMessage {
+        message: second_inner,
+        gmail_labels: vec!["Inbox".into(), "Unread".into()],
+        raw_size_bytes: 128,
+    };
+
+    let mut committed_ids = Vec::new();
+    let summary = ingest_archive_stream(
+        &store,
+        "fixture",
+        "INBOX",
+        vec![Ok(first_msg), Ok(second_msg)],
+        || 1_730_000_000_000,
+        |batch| {
+            committed_ids.extend(batch.iter().map(|m| m.id.clone()));
+            Ok(())
+        },
+    )
+    .unwrap();
+
+    assert_eq!(summary.parsed_count, 2);
+    assert_eq!(summary.batches_committed, 1);
+    assert_eq!(summary.last_uid, 2);
+    assert_eq!(committed_ids.len(), 2);
+
+    // Historical archive imports never enqueue rule jobs or pending sender review.
+    assert_eq!(count(&store, "rule_jobs"), 0);
+    assert_eq!(count(&store, "pending_mutations"), 0);
+    assert_eq!(
+        store
+            .review_metadata(&committed_ids[0])
+            .unwrap()
+            .unwrap()
+            .state,
+        storage::sender_review::ReviewState::Known
+    );
+
+    let m1 = store.get_message_by_id(&committed_ids[0]).unwrap().unwrap();
+    assert_eq!(m1.uid, 1);
+    assert!(m1.is_read);
+    assert!(m1.is_starred);
+
+    let m2 = store.get_message_by_id(&committed_ids[1]).unwrap().unwrap();
+    assert_eq!(m2.uid, 2);
+    assert!(!m2.is_read);
+    assert!(!m2.is_starred);
+
+    // Subsequent import into the same archive account continues monotonically from uidnext = 3.
+    let mut third_inner = message(1);
+    third_inner.message_id_header = Some("third@example.org".into());
+    let third_msg = ParsedArchiveMessage {
+        message: third_inner,
+        gmail_labels: Vec::new(),
+        raw_size_bytes: 64,
+    };
+    let summary2 = ingest_archive_stream(
+        &store,
+        "fixture",
+        "INBOX",
+        vec![Ok(third_msg)],
+        || 1_730_000_000_001,
+        |_| Ok(()),
+    )
+    .unwrap();
+    assert_eq!(summary2.last_uid, 3);
+    assert_eq!(count(&store, "messages"), 3);
+
+    // Local mutations on LocalArchive account succeed without queuing pending_mutations.
+    store
+        .apply_local_mutations(&[
+            (
+                committed_ids[1].clone(),
+                storage::desktop::LocalMutation::Read(true),
+                Some("{\"action\":\"MarkRead\"}".into()),
+            ),
+            (
+                committed_ids[1].clone(),
+                storage::desktop::LocalMutation::Folder("Archive"),
+                Some("{\"action\":\"Archive\"}".into()),
+            ),
+            (
+                committed_ids[1].clone(),
+                storage::desktop::LocalMutation::Star(true),
+                Some("{\"action\":\"Star\"}".into()),
+            ),
+        ])
+        .unwrap();
+    assert_eq!(count(&store, "pending_mutations"), 0);
+    let m2_updated = store.get_message_by_id(&committed_ids[1]).unwrap().unwrap();
+    assert!(m2_updated.is_read);
+    assert!(m2_updated.is_starred);
+    assert_eq!(
+        store.folder_override(&committed_ids[1]).unwrap().as_deref(),
+        Some("Archive")
+    );
+}

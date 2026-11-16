@@ -1,5 +1,16 @@
 export type AuthMethod =
-	'AppPassword' | 'ProtonBridgeLocal' | 'OAuth2PublicPkce' | 'OAuth2ByoCredentials';
+	| 'AppPassword'
+	| 'ProtonBridgeLocal'
+	| 'OAuth2PublicPkce'
+	| 'OAuth2ByoCredentials'
+	| 'LocalArchive';
+export type LocalArchiveFormat = 'Mbox' | 'Eml';
+export type LocalArchiveImportResult = {
+	account_id: string;
+	imported_count: number;
+	batches_committed: number;
+	last_uid: number;
+};
 export type AccountConfig = {
 	account_id: string;
 	email_display: string;
@@ -26,6 +37,13 @@ export interface AccountTransport {
 		ready: () => void
 	): Promise<string>;
 	cancel(): Promise<void>;
+	chooseArchiveFile?(): Promise<string | null>;
+	importLocalArchive?(
+		path: string,
+		emailDisplay: string,
+		format: LocalArchiveFormat,
+		onProgress?: (event: import('../inbox/types').SyncProgressEvent) => void
+	): Promise<LocalArchiveImportResult>;
 }
 
 export type AccountSubmission =

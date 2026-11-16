@@ -193,11 +193,14 @@
 				...attachmentStatus,
 				[att.part_id]: t(appStore.locale, 'downloaded')
 			};
-		} catch {
+		} catch (err: unknown) {
 			if (active && identity === targetIdentity) {
 				attachmentStatus = {
 					...attachmentStatus,
-					[att.part_id]: 'Download failed. Please try again.'
+					[att.part_id]:
+						err === 'Unsupported'
+							? t(appStore.locale, 'attachmentUnavailableOffline')
+							: 'Download failed. Please try again.'
 				};
 			}
 		} finally {

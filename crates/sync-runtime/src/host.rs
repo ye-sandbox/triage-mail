@@ -292,6 +292,14 @@ pub async fn sync_accounts<T: SyncTransport>(
     let mut total_messages = 0;
 
     for config in &configs {
+        if config.is_local_archive() || config.imap_host.is_empty() {
+            outcomes.push(AccountSyncOutcome {
+                account_id: config.account_id.clone(),
+                synced_messages: 0,
+                error: None,
+            });
+            continue;
+        }
         let host = HeadlessSyncHost::new(store, config, transport);
         match crate::sync_account_once(&host).await {
             Ok(count) => {

@@ -352,7 +352,9 @@ export function validateDemoDiscoveryInput(opts: {
 	pkceAuthorized: boolean;
 	clientLen: number;
 }): string | null {
-	if (!opts.email || !opts.host) return 'Email address and IMAP host are required.';
+	if (!opts.email || (opts.authMethod !== 'LocalArchive' && !opts.host))
+		return 'Email address and IMAP host are required.';
+	if (opts.authMethod === 'LocalArchive') return null;
 	if (opts.authMethod === 'AppPassword' && opts.appSecretLen === 0) return 'Enter an App Password.';
 	if (opts.authMethod === 'ProtonBridgeLocal' && opts.bridgeSecretLen === 0)
 		return 'Enter the Bridge IMAP password.';

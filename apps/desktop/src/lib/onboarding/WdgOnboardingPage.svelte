@@ -96,7 +96,12 @@
 			imap_host: account.imap_host,
 			imap_port: account.imap_port,
 			tls_mode: account.tls_mode === 'STARTTLS' ? 'STARTTLS' : 'IMAPS',
-			auth_method: account.auth_method === 'AppPassword' ? 'AppPassword-Vault' : 'OAuth2-PKCE',
+			auth_method:
+				account.auth_method === 'LocalArchive'
+					? 'LocalArchive'
+					: account.auth_method === 'AppPassword'
+						? 'AppPassword-Vault'
+						: 'OAuth2-PKCE',
 			vault_locked: false,
 			folders: [
 				{ id: 'INBOX', label: 'INBOX' },

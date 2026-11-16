@@ -51,6 +51,22 @@ impl BatchEvents {
         self.committed_with_state(SyncState::Idle);
     }
 
+    pub fn snapshot_with_state(&self, state: SyncState) -> SyncProgressEvent {
+        if let Ok(event) = self.event.lock() {
+            let mut event = event.clone();
+            event.state = state;
+            event
+        } else {
+            SyncProgressEvent {
+                account_id: self.account_id.clone(),
+                state,
+                new_messages_count: 0,
+                triage_alerts: Vec::new(),
+                embedding_errors_count: 0,
+            }
+        }
+    }
+
     pub fn committed_with_state(&self, state: SyncState) {
         if let Ok(event) = self.event.lock() {
             let mut event = event.clone();

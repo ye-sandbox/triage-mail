@@ -632,6 +632,27 @@ pub async fn cmd_add_account(
 }
 
 #[tauri::command]
+pub async fn cmd_import_local_archive(
+    state: State<'_, RuntimeState>,
+    path: PathBuf,
+    email_display: String,
+    format: mail_engine::LocalArchiveFormat,
+    on_progress: Channel<SyncProgressEvent>,
+) -> Result<LocalArchiveImportDto, IpcError> {
+    let service = state.initialize(None).await?;
+    let progress = Arc::new(move |event: SyncProgressEvent| {
+        let _ = on_progress.send(event);
+    });
+    let result = service
+        .import_local_archive(path, email_display, format, Some(progress))
+        .await?;
+    if let Some(workers) = state.workers.get() {
+        workers.start_account(service.account(result.account_id.clone()).await?)?;
+    }
+    Ok(result)
+}
+
+#[tauri::command]
 pub async fn cmd_authorize_account(
     state: State<'_, RuntimeState>,
     window: tauri::WebviewWindow,
@@ -953,6 +974,7 @@ pub fn run() {
             cmd_set_account_avatar,
             cmd_remove_account_avatar,
             cmd_add_account,
+            cmd_import_local_archive,
             cmd_authorize_account,
             cmd_cancel_authorization,
             cmd_search_messages,
@@ -1125,6 +1147,7 @@ mod tests {
                 cmd_set_account_avatar,
                 cmd_remove_account_avatar,
                 cmd_add_account,
+                cmd_import_local_archive,
                 cmd_search_messages,
                 cmd_get_message_body,
                 cmd_triage_action,
