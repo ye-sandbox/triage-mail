@@ -30,6 +30,7 @@
 - **Delivered:** RFC 2087 `GETQUOTAROOT` parsing and Google tier inference (`crates/mail-engine::quota`), additive quota/override persistence in `config_json` (`storage::desktop::AccountConnectionExtra`), throttled best-effort quota refresh during folder discovery, `cmd_account_subscriptions` / `cmd_set_account_badge`, sidebar and account-list subscription pills, quota bar and Plan / Badge selector (EN/PT-BR).
 - **Validation:** `cargo fmt --check`, `cargo check`, `cargo clippy -D warnings`, `cargo test --workspace` all exit 0; `pnpm --filter desktop check` 0 errors/warnings; `pnpm --filter desktop test` 31 files / 191 tests; `pnpm --filter desktop build` succeeded; `export let` invariant, `ci-guard` (464 files, 0 findings) and `git diff --check` clean. Prettier is not installed locally, so it was not run.
 - **Contracts:** `.agent/NOTES.md` (`Account Subscription Badges & IMAP Quota Detection ([04.21])`).
+- **Commit:** `9fb2c41`.
 - **Next:** No prioritized active task; awaiting user selection.
 
 ---
