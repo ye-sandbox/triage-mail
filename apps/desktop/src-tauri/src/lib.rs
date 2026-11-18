@@ -24,6 +24,8 @@ pub mod sender_review;
 pub mod service;
 pub mod settings;
 pub mod subscriptions;
+#[cfg(feature = "native-runtime")]
+pub mod tray;
 pub mod worker;
 pub use dto::*;
 pub use service::{DesktopService, IpcError};

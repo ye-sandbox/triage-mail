@@ -193,7 +193,7 @@
 
 			<div class="min-w-0">
 				{#if activeSection === 'general'}
-					<WdgPrivacyPanel section="general" />
+					<WdgPrivacyPanel section="general" {transport} />
 				{:else if activeSection === 'privacy'}
 					<WdgPrivacyPanel section="privacy" />
 				{:else if activeSection === 'backup'}

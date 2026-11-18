@@ -24,6 +24,12 @@ it('uses native settings wire names and explicit consent envelopes', async () =>
 		consent: true,
 	});
 	await nativeSettingsTransport.summarize('message-one', true, ai);
+	await nativeSettingsTransport.shellPreferences!();
+	await nativeSettingsTransport.saveShellPreferences!({
+		close_to_tray: false,
+		minimize_to_tray: true,
+	});
+	await nativeSettingsTransport.quitApp!();
 	expect(vi.mocked(invoke).mock.calls).toEqual([
 		['cmd_embedding_state'],
 		['cmd_rebuild_embeddings', { consent: true }],
@@ -45,5 +51,16 @@ it('uses native settings wire names and explicit consent envelopes', async () =>
 			'cmd_summarize_message',
 			{ messageId: 'message-one', consent: true, expected: ai },
 		],
+		['cmd_shell_preferences'],
+		[
+			'cmd_save_shell_preferences',
+			{
+				preferences: {
+					close_to_tray: false,
+					minimize_to_tray: true,
+				},
+			},
+		],
+		['cmd_quit_app'],
 	]);
 });

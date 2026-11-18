@@ -47,6 +47,22 @@ pub struct SettingsDto {
     pub experimental_semantic_search: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShellPreferencesDto {
+    pub close_to_tray: bool,
+    pub minimize_to_tray: bool,
+}
+
+impl Default for ShellPreferencesDto {
+    fn default() -> Self {
+        Self {
+            close_to_tray: true,
+            minimize_to_tray: false,
+        }
+    }
+}
+
 /// INVARIANT: Deserialize failures must not echo key material across IPC.
 pub struct IncomingApiKey(pub Zeroizing<String>);
 impl<'de> Deserialize<'de> for IncomingApiKey {
@@ -255,5 +271,38 @@ impl DesktopService {
             .summarize_async(&subject, &body)
             .await
             .map_err(|_| IpcError::RemoteUnavailable)
+    }
+
+    pub(crate) fn read_shell_preferences(&self) -> Result<ShellPreferencesDto, IpcError> {
+        match self.vault.get_secret(&vault_key("shell-preferences")?) {
+            Ok(bytes) => serde_json::from_slice(&Zeroizing::new(bytes))
+                .map_err(|_| IpcError::VaultUnavailable),
+            Err(vault::VaultError::NotFound(_)) => Ok(ShellPreferencesDto::default()),
+            Err(_) => Err(IpcError::VaultUnavailable),
+        }
+    }
+
+    pub async fn get_shell_preferences(self: &Arc<Self>) -> Result<ShellPreferencesDto, IpcError> {
+        self.blocking(|s| {
+            let _guard = s.settings_gate.lock().map_err(|_| IpcError::Internal)?;
+            s.read_shell_preferences()
+        })
+        .await
+    }
+
+    pub async fn save_shell_preferences(
+        self: &Arc<Self>,
+        preferences: ShellPreferencesDto,
+    ) -> Result<ShellPreferencesDto, IpcError> {
+        self.blocking(move |s| {
+            let _guard = s.settings_gate.lock().map_err(|_| IpcError::Internal)?;
+            let bytes =
+                Zeroizing::new(serde_json::to_vec(&preferences).map_err(|_| IpcError::Internal)?);
+            s.vault
+                .set_secret(&vault_key("shell-preferences")?, &bytes)
+                .map_err(|_| IpcError::VaultUnavailable)?;
+            Ok(preferences)
+        })
+        .await
     }
 }

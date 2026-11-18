@@ -33,6 +33,15 @@ export interface SettingsLabels {
 		previewTheme: (target: string) => string;
 		light: string;
 		dark: string;
+		trayTitle: string;
+		trayDesc: string;
+		closeToTrayLabel: string;
+		closeToTrayDesc: string;
+		minimizeToTrayLabel: string;
+		minimizeToTrayDesc: string;
+		traySaveError: string;
+		quitCompletelyBtn: string;
+		quitCompletelyHint: string;
 		aboutTitle: string;
 		aboutBody: string;
 		aboutStack: string;
@@ -228,6 +237,18 @@ export const settingsLabels: Record<SupportedLocale, SettingsLabels> = {
 			previewTheme: (target) => `Preview ${target}`,
 			light: 'Light',
 			dark: 'Dark',
+			trayTitle: 'System Tray & Background Lifecycle',
+			trayDesc:
+				'Control how triage-mail behaves when you close or minimize the desktop window.',
+			closeToTrayLabel: 'Keep running in System Tray when closed',
+			closeToTrayDesc:
+				'Closing the window hides it to the tray so background IMAP sync and alerts stay active.',
+			minimizeToTrayLabel: 'Hide to System Tray on minimize',
+			minimizeToTrayDesc:
+				'Minimizing the window hides it to the tray instead of keeping a taskbar window open.',
+			traySaveError: 'Could not save system tray preference.',
+			quitCompletelyBtn: 'Quit Completely',
+			quitCompletelyHint: 'Stops background IMAP sync and exits triage-mail immediately.',
 			aboutTitle: 'About triage-mail',
 			aboutBody:
 				'100% Local-First, Provider-Agnostic, Open-Source (AGPLv3) Email Aggregator & Triage Engine.',
@@ -457,6 +478,19 @@ export const settingsLabels: Record<SupportedLocale, SettingsLabels> = {
 			previewTheme: (target) => `Visualizar ${target}`,
 			light: 'Claro',
 			dark: 'Escuro',
+			trayTitle: 'Bandeja do Sistema e Segundo Plano',
+			trayDesc:
+				'Controla como o triage-mail se comporta ao fechar ou minimizar a janela.',
+			closeToTrayLabel: 'Manter em execução na bandeja ao fechar',
+			closeToTrayDesc:
+				'Fechar a janela oculta o aplicativo na bandeja para manter sincronização IMAP e alertas ativos.',
+			minimizeToTrayLabel: 'Ocultar na bandeja ao minimizar',
+			minimizeToTrayDesc:
+				'Minimizar a janela oculta o aplicativo na bandeja em vez de mantê-lo na barra de tarefas.',
+			traySaveError: 'Não foi possível salvar a preferência da bandeja.',
+			quitCompletelyBtn: 'Encerrar Completamente',
+			quitCompletelyHint:
+				'Interrompe a sincronização IMAP em segundo plano e encerra o triage-mail imediatamente.',
 			aboutTitle: 'Sobre o triage-mail',
 			aboutBody:
 				'Agregador e motor de triagem de e-mail 100% local, independente de provedor e código aberto (AGPLv3).',

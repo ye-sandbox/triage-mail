@@ -1,3 +1,4 @@
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { WindowState, WindowTransport } from './types';
 
@@ -38,6 +39,10 @@ export function createTauriWindowTransport(): WindowTransport {
 		async close(): Promise<void> {
 			if (!isNativeTauriWindow()) return;
 			await getCurrentWindow().close();
+		},
+		async hide(): Promise<void> {
+			if (!isNativeTauriWindow()) return;
+			await getCurrentWindow().hide();
 		},
 		subscribeState(onChange: (state: WindowState) => void): () => void {
 			if (!isNativeTauriWindow()) {
@@ -101,11 +106,37 @@ export function createTauriWindowTransport(): WindowTransport {
 					unlisten?.();
 				}
 			};
+		},
+		subscribeTrayNavigate(onNavigate: (route: string) => void): () => void {
+			if (!isNativeTauriWindow()) {
+				return () => {};
+			}
+			let disposed = false;
+			let activeUnlisten: (() => void) | null = null;
+			void listen<string>('tray://navigate', (event) => {
+				if (!disposed && typeof event.payload === 'string') {
+					onNavigate(event.payload);
+				}
+			})
+				.then((unlisten) => {
+					if (disposed) {
+						unlisten();
+					} else {
+						activeUnlisten = unlisten;
+					}
+				})
+				.catch(() => {});
+
+			return () => {
+				disposed = true;
+				activeUnlisten?.();
+				activeUnlisten = null;
+			};
 		}
 	};
 }
 
-export type FakeWindowAction = 'minimize' | 'toggleMaximize' | 'close' | 'startDragging';
+export type FakeWindowAction = 'minimize' | 'toggleMaximize' | 'close' | 'hide' | 'startDragging';
 
 export type FakeWindowTransportOptions = {
 	available?: boolean;
@@ -120,10 +151,13 @@ export type FakeWindowTransport = WindowTransport & {
 		minimize: number;
 		toggleMaximize: number;
 		close: number;
+		hide: number;
 		getState: number;
 		subscribeState: number;
+		subscribeTrayNavigate: number;
 	};
 	emitState(next: Partial<WindowState>): void;
+	emitTrayNavigate(route: string): void;
 	wasUnsubscribed(): boolean;
 	resolveLateListeners(): Promise<void>;
 };
@@ -137,6 +171,7 @@ export function createFakeWindowTransport(
 		focused: options.initialState?.focused ?? true
 	};
 	const listeners = new Set<(next: WindowState) => void>();
+	const trayListeners = new Set<(route: string) => void>();
 	let unsubscribed = false;
 	let lateSubscribedDisposed = false;
 	const pendingRegistrations: Array<() => void> = [];
@@ -146,8 +181,10 @@ export function createFakeWindowTransport(
 		minimize: 0,
 		toggleMaximize: 0,
 		close: 0,
+		hide: 0,
 		getState: 0,
-		subscribeState: 0
+		subscribeState: 0,
+		subscribeTrayNavigate: 0
 	};
 
 	const maybeFail = (action: FakeWindowAction) => {
@@ -193,6 +230,11 @@ export function createFakeWindowTransport(
 			if (!available) return;
 			maybeFail('close');
 		},
+		async hide(): Promise<void> {
+			calls.hide += 1;
+			if (!available) return;
+			maybeFail('hide');
+		},
 		subscribeState(onChange: (next: WindowState) => void): () => void {
 			calls.subscribeState += 1;
 			if (!available) {
@@ -219,10 +261,41 @@ export function createFakeWindowTransport(
 				listeners.delete(onChange);
 			};
 		},
+		subscribeTrayNavigate(onNavigate: (route: string) => void): () => void {
+			calls.subscribeTrayNavigate += 1;
+			if (!available) {
+				return () => {};
+			}
+			if (options.lateSubscribe) {
+				let localDisposed = false;
+				pendingRegistrations.push(() => {
+					if (localDisposed) {
+						lateSubscribedDisposed = true;
+					} else {
+						trayListeners.add(onNavigate);
+					}
+				});
+				return () => {
+					localDisposed = true;
+					unsubscribed = true;
+					trayListeners.delete(onNavigate);
+				};
+			}
+			trayListeners.add(onNavigate);
+			return () => {
+				unsubscribed = true;
+				trayListeners.delete(onNavigate);
+			};
+		},
 		emitState(next: Partial<WindowState>) {
 			state = { ...state, ...next };
 			for (const listener of listeners) {
 				listener({ ...state });
+			}
+		},
+		emitTrayNavigate(route: string) {
+			for (const listener of trayListeners) {
+				listener(route);
 			}
 		},
 		wasUnsubscribed() {

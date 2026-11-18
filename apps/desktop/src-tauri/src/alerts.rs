@@ -37,7 +37,8 @@ impl AlertTransport for NativeAlerts {
         event: &str,
     ) -> (DeliveryOutcome, i64) {
         if d.kind == DestinationKind::Local {
-            return (native::notify().await, 0);
+            let (summary, body) = format_local_notification(d, payload);
+            return (native::notify(&summary, &body).await, 0);
         }
         let Some(secret) = secret else {
             return (DeliveryOutcome::Unavailable, 0);
@@ -558,6 +559,252 @@ fn retry_after(value: &str) -> i64 {
         .unwrap_or(0)
 }
 
+const DEFAULT_LOCAL_SUMMARY: &str = "New mail";
+const DEFAULT_LOCAL_BODY: &str = "A new message matched an alert rule.";
+const MAX_SUMMARY_CHARS: usize = 100;
+const MAX_BODY_CHARS: usize = 240;
+
+fn scrub_text(input: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    let mut out = String::new();
+    let mut prev_space = true;
+    let mut count = 0usize;
+    for ch in input.chars() {
+        let normalized = if matches!(ch, '\n' | '\r' | '\t' | ' ') {
+            Some(' ')
+        } else if ch.is_control() {
+            None
+        } else {
+            Some(ch)
+        };
+        let Some(c) = normalized else {
+            continue;
+        };
+        if c == ' ' {
+            if prev_space {
+                continue;
+            }
+            prev_space = true;
+        } else {
+            prev_space = false;
+        }
+        if count >= max_chars {
+            if out.ends_with(' ') {
+                out.pop();
+            }
+            out.push('…');
+            return out;
+        }
+        out.push(c);
+        count += 1;
+    }
+    if out.ends_with(' ') {
+        out.pop();
+    }
+    out
+}
+
+fn format_extracted_facts(facts: &serde_json::Value) -> Option<String> {
+    let mut parts = Vec::new();
+    if let Some(due_dates) = facts.get("due_dates").and_then(serde_json::Value::as_array) {
+        if let Some(first_due) = due_dates
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .map(|d| scrub_text(d, 16))
+            .find(|d| !d.is_empty())
+        {
+            parts.push(format!("Due {first_due}"));
+        }
+    }
+    if let Some(amounts) = facts
+        .get("amounts_cents")
+        .and_then(serde_json::Value::as_array)
+    {
+        if let Some(cents) = amounts.iter().find_map(serde_json::Value::as_u64) {
+            parts.push(format!("Amount {}.{:02}", cents / 100, cents % 100));
+        }
+    }
+    (!parts.is_empty()).then(|| parts.join(" · "))
+}
+
+fn format_attachments(attachments: &serde_json::Value) -> Option<String> {
+    let list = attachments.as_array()?;
+    if list.is_empty() {
+        return None;
+    }
+    let first_name = list
+        .first()
+        .and_then(|item| item.get("name"))
+        .and_then(serde_json::Value::as_str)
+        .map(|name| scrub_text(name, 48))
+        .filter(|name| !name.is_empty());
+    match (list.len(), first_name) {
+        (1, Some(name)) => Some(format!("Attachment: {name}")),
+        (n, Some(name)) => Some(format!("{n} attachments ({name})")),
+        (1, None) => Some("1 attachment".into()),
+        (n, None) => Some(format!("{n} attachments")),
+    }
+}
+
+/// INVARIANT: Formats title and body strictly from the already field-consented payload JSON.
+/// Never queries storage or enriches beyond consented fields; zero shell or remote asset syntax.
+pub(crate) fn format_local_notification(
+    destination: &Destination,
+    payload: &str,
+) -> (String, String) {
+    if payload.len() > triage_ai::alerts::MAX_PAYLOAD_BYTES {
+        return (DEFAULT_LOCAL_SUMMARY.into(), DEFAULT_LOCAL_BODY.into());
+    }
+    let Ok(serde_json::Value::Object(obj)) = serde_json::from_str::<serde_json::Value>(payload)
+    else {
+        return (DEFAULT_LOCAL_SUMMARY.into(), DEFAULT_LOCAL_BODY.into());
+    };
+
+    let dest_name = scrub_text(&destination.name, 40);
+
+    if obj.get("test").and_then(serde_json::Value::as_bool) == Some(true) {
+        let summary = if dest_name.is_empty() {
+            "triage-mail · Test alert".into()
+        } else {
+            scrub_text(&format!("triage-mail · {dest_name}"), MAX_SUMMARY_CHARS)
+        };
+        return (summary, "Local desktop notification test succeeded.".into());
+    }
+
+    if obj.get("digest").and_then(serde_json::Value::as_bool) == Some(true) {
+        let total = obj
+            .get("total")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
+        let summary = if dest_name.is_empty() {
+            scrub_text(&format!("Mail digest ({total})"), MAX_SUMMARY_CHARS)
+        } else {
+            scrub_text(
+                &format!("{dest_name} · Digest ({total})"),
+                MAX_SUMMARY_CHARS,
+            )
+        };
+
+        let mut previews = Vec::new();
+        if let Some(entries) = obj.get("entries").and_then(serde_json::Value::as_array) {
+            for entry in entries.iter().take(3) {
+                let subj = entry
+                    .get("subject")
+                    .and_then(serde_json::Value::as_str)
+                    .map(|s| scrub_text(s, 48))
+                    .filter(|s| !s.is_empty());
+                let sender = entry
+                    .get("sender")
+                    .and_then(serde_json::Value::as_str)
+                    .map(|s| scrub_text(s, 40))
+                    .filter(|s| !s.is_empty());
+                let facts = entry
+                    .get("extracted_facts")
+                    .and_then(format_extracted_facts);
+                let item = match (subj, sender, facts) {
+                    (Some(su), Some(se), _) => format!("{su} ({se})"),
+                    (Some(su), None, Some(fa)) => format!("{su} [{fa}]"),
+                    (Some(su), None, None) => su,
+                    (None, Some(se), Some(fa)) => format!("{se} [{fa}]"),
+                    (None, Some(se), None) => se,
+                    (None, None, Some(fa)) => fa,
+                    (None, None, None) => continue,
+                };
+                previews.push(item);
+            }
+        }
+        let body = if previews.is_empty() {
+            scrub_text(
+                &format!("{total} matching message(s) queued in this digest."),
+                MAX_BODY_CHARS,
+            )
+        } else {
+            scrub_text(
+                &format!("{total} alerts: {}", previews.join(" · ")),
+                MAX_BODY_CHARS,
+            )
+        };
+        return (summary, body);
+    }
+
+    let sender = obj
+        .get("sender")
+        .and_then(serde_json::Value::as_str)
+        .map(|s| scrub_text(s, 80))
+        .filter(|s| !s.is_empty());
+    let subject = obj
+        .get("subject")
+        .and_then(serde_json::Value::as_str)
+        .map(|s| scrub_text(s, 96))
+        .filter(|s| !s.is_empty());
+    let preview = obj
+        .get("excerpt")
+        .or_else(|| obj.get("body"))
+        .and_then(serde_json::Value::as_str)
+        .map(|s| scrub_text(s, 140))
+        .filter(|s| !s.is_empty());
+    let facts = obj.get("extracted_facts").and_then(format_extracted_facts);
+    let attachments = obj.get("attachments").and_then(format_attachments);
+    let account = obj
+        .get("account_id")
+        .and_then(serde_json::Value::as_str)
+        .map(|s| scrub_text(s, 48))
+        .filter(|s| !s.is_empty());
+
+    let has_consented_detail = sender.is_some()
+        || subject.is_some()
+        || preview.is_some()
+        || facts.is_some()
+        || attachments.is_some()
+        || account.is_some();
+
+    if !has_consented_detail {
+        return (DEFAULT_LOCAL_SUMMARY.into(), DEFAULT_LOCAL_BODY.into());
+    }
+
+    let summary = match (&dest_name, &subject, &sender) {
+        (d, Some(subj), _) if !d.is_empty() => {
+            scrub_text(&format!("{d}: {subj}"), MAX_SUMMARY_CHARS)
+        }
+        (_, Some(subj), _) => scrub_text(subj, MAX_SUMMARY_CHARS),
+        (d, None, Some(snd)) if !d.is_empty() => {
+            scrub_text(&format!("{d}: {snd}"), MAX_SUMMARY_CHARS)
+        }
+        (_, None, Some(snd)) => scrub_text(snd, MAX_SUMMARY_CHARS),
+        (d, None, None) if !d.is_empty() => {
+            scrub_text(&format!("{d}: {DEFAULT_LOCAL_SUMMARY}"), MAX_SUMMARY_CHARS)
+        }
+        _ => DEFAULT_LOCAL_SUMMARY.into(),
+    };
+
+    let mut body_parts = Vec::new();
+    if let Some(snd) = sender {
+        body_parts.push(format!("From: {snd}"));
+    }
+    if let Some(prev) = preview {
+        body_parts.push(prev);
+    }
+    if let Some(f) = facts {
+        body_parts.push(f);
+    }
+    if let Some(att) = attachments {
+        body_parts.push(att);
+    }
+    if let Some(acct) = account {
+        body_parts.push(format!("Account: {acct}"));
+    }
+
+    let body = if body_parts.is_empty() {
+        DEFAULT_LOCAL_BODY.into()
+    } else {
+        scrub_text(&body_parts.join(" · "), MAX_BODY_CHARS)
+    };
+
+    (summary, body)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -740,6 +987,135 @@ mod tests {
         assert_eq!(retry_after("999999"), 3_600_000);
         assert_eq!(retry_after("invalid"), 0);
         assert_eq!(retry_after("Fri, 01 Jan 2100 00:00:00 GMT"), 3_600_000);
+    }
+
+    #[test]
+    fn local_notification_respects_consent_scrubs_controls_and_bounds_lengths() {
+        let local_dest = Destination {
+            id: "local-1".into(),
+            revision: 1,
+            name: "Boletos\nUrgentes\u{0000}\u{001b}[31m".into(),
+            kind: DestinationKind::Local,
+            enabled: true,
+            fields: vec![],
+            public_origin: None,
+            has_credentials: false,
+        };
+
+        // Zero consented fields -> redacted generic fallback
+        let unconsented = serde_json::json!({
+            "schema_version": 1,
+            "event_id": "evt-1",
+            "timestamp_epoch_ms": 1000,
+            "truncated": false
+        })
+        .to_string();
+        assert_eq!(
+            format_local_notification(&local_dest, &unconsented),
+            (
+                "New mail".into(),
+                "A new message matched an alert rule.".into()
+            )
+        );
+
+        // Consented fields -> formatted, control-char-scrubbed, bounded
+        let consented = serde_json::json!({
+            "schema_version": 1,
+            "event_id": "evt-2",
+            "timestamp_epoch_ms": 1000,
+            "sender": "billing@example.com\r\n\u{0007}",
+            "subject": "Conta de Energia\tVencimento\u{001b}",
+            "excerpt": "Pagamento via Pix ou boleto.\nLinha digitavel",
+            "extracted_facts": {
+                "due_dates": ["2026-11-20"],
+                "amounts_cents": [14950]
+            },
+            "attachments": [
+                {"name": "fatura.pdf", "mime_type": "application/pdf"}
+            ],
+            "truncated": false
+        })
+        .to_string();
+        let (summary, body) = format_local_notification(&local_dest, &consented);
+        assert!(summary.contains("Boletos Urgentes[31m: Conta de Energia Vencimento"));
+        assert!(!summary.chars().any(char::is_control));
+        assert!(!body.chars().any(char::is_control));
+        assert!(body.contains("From: billing@example.com"));
+        assert!(body.contains("Due 2026-11-20"));
+        assert!(body.contains("Amount 149.50"));
+        assert!(body.contains("Attachment: fatura.pdf"));
+
+        // Oversized unicode input stays bounded with ellipsis
+        let huge = serde_json::json!({
+            "schema_version": 1,
+            "event_id": "evt-3",
+            "timestamp_epoch_ms": 1000,
+            "subject": "😀".repeat(400),
+            "body": "Texto longo ".repeat(100),
+            "truncated": true
+        })
+        .to_string();
+        let (huge_summary, huge_body) = format_local_notification(&local_dest, &huge);
+        assert!(huge_summary.chars().count() <= MAX_SUMMARY_CHARS + 1);
+        assert!(huge_summary.ends_with('…'));
+        assert!(huge_body.chars().count() <= MAX_BODY_CHARS + 1);
+        assert!(huge_body.ends_with('…'));
+
+        // Digest payload formats summary and respects unconsented vs consented entries
+        let digest_unconsented = serde_json::json!({
+            "schema_version": 1,
+            "event_id": "dig-1",
+            "timestamp_epoch_ms": 1000,
+            "digest": true,
+            "total": 4,
+            "omitted": 0,
+            "truncated": false,
+            "entries": [{"schema_version": 1, "event_id": "e1"}]
+        })
+        .to_string();
+        let (d_sum, d_body) = format_local_notification(&local_dest, &digest_unconsented);
+        assert!(d_sum.contains("Digest (4)"));
+        assert_eq!(d_body, "4 matching message(s) queued in this digest.");
+
+        let digest_consented = serde_json::json!({
+            "schema_version": 1,
+            "event_id": "dig-2",
+            "timestamp_epoch_ms": 1000,
+            "digest": true,
+            "total": 2,
+            "omitted": 0,
+            "truncated": false,
+            "entries": [
+                {"subject": "Invoice #1", "sender": "a@example.com"},
+                {"subject": "Invoice #2", "extracted_facts": {"due_dates": ["2026-11-22"], "amounts_cents": []}}
+            ]
+        })
+        .to_string();
+        let (_, dc_body) = format_local_notification(&local_dest, &digest_consented);
+        assert!(
+            dc_body.contains("2 alerts: Invoice #1 (a@example.com) · Invoice #2 [Due 2026-11-22]")
+        );
+
+        // Test payload
+        let test_payload = serde_json::json!({
+            "schema_version": 1,
+            "event_id": "test-1",
+            "timestamp_epoch_ms": 1000,
+            "test": true
+        })
+        .to_string();
+        let (t_sum, t_body) = format_local_notification(&local_dest, &test_payload);
+        assert!(t_sum.starts_with("triage-mail · "));
+        assert_eq!(t_body, "Local desktop notification test succeeded.");
+
+        // Malformed payload falls back safely
+        assert_eq!(
+            format_local_notification(&local_dest, "not-json"),
+            (
+                "New mail".into(),
+                "A new message matched an alert rule.".into()
+            )
+        );
     }
 }
 

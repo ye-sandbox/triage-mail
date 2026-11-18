@@ -12,4 +12,8 @@ export const nativeSettingsTransport: SettingsTransport = {
 	download: (request) => invoke('cmd_download_model', { request }),
 	summarize: (messageId, consent, expected) =>
 		invoke('cmd_summarize_message', { messageId, consent, expected }),
+	shellPreferences: () => invoke('cmd_shell_preferences'),
+	saveShellPreferences: (preferences) =>
+		invoke('cmd_save_shell_preferences', { preferences }),
+	quitApp: () => invoke('cmd_quit_app'),
 };

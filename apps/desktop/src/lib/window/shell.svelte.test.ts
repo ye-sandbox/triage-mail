@@ -1,5 +1,14 @@
 import { createRawSnippet, flushSync, mount, unmount } from 'svelte';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { mockGoto } = vi.hoisted(() => ({
+	mockGoto: vi.fn<(route: string) => Promise<void>>().mockResolvedValue(undefined)
+}));
+
+vi.mock('$app/navigation', () => ({
+	goto: mockGoto
+}));
+
 import { i18n } from '$lib/i18n/index.svelte';
 import { appStore } from '$lib/stores/app.svelte';
 import Layout from '../../routes/+layout.svelte';
@@ -16,6 +25,7 @@ describe('UI v2 Desktop Shell Layout (+layout.svelte / AppShell)', () => {
 	let instance: Record<string, unknown> | null = null;
 
 	beforeEach(() => {
+		mockGoto.mockClear();
 		localStorage.clear();
 		i18n.setLocale('en');
 		appStore.setTheme('light');
@@ -23,6 +33,8 @@ describe('UI v2 Desktop Shell Layout (+layout.svelte / AppShell)', () => {
 		appStore.mobileDrawerOpen = false;
 		appStore.commandOpen = false;
 		appStore.overdueAndDueTodayCount = 0;
+		appStore.vaultUnlocked = true;
+		appStore.setShellPreferences({ close_to_tray: true, minimize_to_tray: false });
 		container = document.createElement('div');
 		document.body.appendChild(container);
 	});
@@ -34,6 +46,8 @@ describe('UI v2 Desktop Shell Layout (+layout.svelte / AppShell)', () => {
 		}
 		container.remove();
 		i18n.setLocale('en');
+		appStore.vaultUnlocked = true;
+		appStore.setShellPreferences({ close_to_tray: true, minimize_to_tray: false });
 	});
 
 	it('renders .desktop-shell with persistent AppShell header above .desktop-shell-content when native window is available', async () => {
@@ -244,5 +258,66 @@ describe('UI v2 Desktop Shell Layout (+layout.svelte / AppShell)', () => {
 		expect(container.querySelector('button[aria-label="Maximize"]')?.getAttribute('aria-pressed')).toBe(
 			'false'
 		);
+	});
+
+	it('hides native window on minimize only when minimize_to_tray is enabled and vault is unlocked', async () => {
+		const transport = createFakeWindowTransport({ available: true });
+		const children = createRawSnippet(() => ({
+			render: () => '<div>Route</div>'
+		}));
+
+		instance = mount(Layout, {
+			target: container,
+			props: { children, transport }
+		});
+		await flushMicrotasks();
+
+		const minBtn = container.querySelector<HTMLButtonElement>('button[aria-label="Minimize"]');
+		appStore.setShellPreferences({ close_to_tray: true, minimize_to_tray: true });
+		appStore.vaultUnlocked = false;
+		minBtn?.click();
+		await flushMicrotasks();
+		expect(transport.calls.minimize).toBe(1);
+		expect(transport.calls.hide).toBe(0);
+
+		appStore.vaultUnlocked = true;
+		minBtn?.click();
+		await flushMicrotasks();
+		expect(transport.calls.minimize).toBe(1);
+		expect(transport.calls.hide).toBe(1);
+	});
+
+	it('routes allowlisted tray://navigate events and cleans up listener on unmount', async () => {
+		const transport = createFakeWindowTransport({ available: true });
+		const children = createRawSnippet(() => ({
+			render: () => '<div>Route</div>'
+		}));
+
+		appStore.setScope({ kind: 'category', category: 'Financial' });
+		instance = mount(Layout, {
+			target: container,
+			props: { children, transport }
+		});
+		await flushMicrotasks();
+
+		transport.emitTrayNavigate('/settings');
+		await flushMicrotasks();
+		expect(mockGoto).not.toHaveBeenCalled();
+
+		transport.emitTrayNavigate('/due-dates');
+		await flushMicrotasks();
+		expect(mockGoto).toHaveBeenCalledWith('/due-dates');
+
+		transport.emitTrayNavigate('/');
+		await flushMicrotasks();
+		expect(appStore.activeScope).toEqual({ kind: 'inbox' });
+		expect(mockGoto).toHaveBeenLastCalledWith('/');
+
+		unmount(instance);
+		instance = null;
+		mockGoto.mockClear();
+		transport.emitTrayNavigate('/due-dates');
+		await flushMicrotasks();
+		expect(mockGoto).not.toHaveBeenCalled();
 	});
 });

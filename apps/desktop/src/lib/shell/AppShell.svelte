@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { goto } from '$app/navigation';
 	import {
 		AlertTriangle,
 		CheckCircle2,
@@ -27,7 +28,26 @@
 	let { children, transport = createTauriWindowTransport() }: Props = $props();
 
 	$effect(() => {
-		return windowController.connect(transport);
+		const disconnectWindow = windowController.connect(transport);
+		const unsubTray = transport.subscribeTrayNavigate?.((route) => {
+			if (route !== '/' && route !== '/due-dates') return;
+			if (windowController.mode === 'minimized') {
+				windowController.restoreFromDock();
+			} else if (windowController.mode === 'closed') {
+				windowController.reopen();
+			}
+			if (route === '/') {
+				appStore.setScope({ kind: 'inbox' });
+			}
+			void goto(route).catch(() => {
+				// Unit tests mount AppShell without booting SvelteKit's client router.
+			});
+		});
+
+		return () => {
+			unsubTray?.();
+			disconnectWindow();
+		};
 	});
 
 	function handleGlobalKeydown(event: KeyboardEvent) {

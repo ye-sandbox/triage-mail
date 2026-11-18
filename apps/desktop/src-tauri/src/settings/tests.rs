@@ -243,3 +243,43 @@ async fn experimental_semantic_search_persists_in_settings() {
     let disabled = service.get_settings().await.unwrap();
     assert!(!disabled.experimental_semantic_search);
 }
+
+#[tokio::test]
+async fn shell_preferences_default_and_persist_in_vault_independently_of_ai_settings() {
+    let service = fixture();
+    let defaults = service.get_shell_preferences().await.unwrap();
+    assert_eq!(
+        defaults,
+        ShellPreferencesDto {
+            close_to_tray: true,
+            minimize_to_tray: false,
+        }
+    );
+
+    let updated = service
+        .save_shell_preferences(ShellPreferencesDto {
+            close_to_tray: false,
+            minimize_to_tray: true,
+        })
+        .await
+        .unwrap();
+    assert!(!updated.close_to_tray);
+    assert!(updated.minimize_to_tray);
+
+    // Reopening DesktopService with the same vault preserves shell preferences
+    // and leaves AI settings untouched.
+    let reopened = DesktopService::new_with_store(
+        service.store.clone(),
+        service.vault.clone(),
+        service.remote.clone(),
+        None,
+    );
+    assert_eq!(
+        reopened.get_shell_preferences().await.unwrap(),
+        ShellPreferencesDto {
+            close_to_tray: false,
+            minimize_to_tray: true,
+        }
+    );
+    assert!(!reopened.get_settings().await.unwrap().ai.enabled);
+}

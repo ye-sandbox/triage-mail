@@ -24,6 +24,10 @@ export interface Settings {
 	model_cached: boolean;
 	experimental_semantic_search: boolean;
 }
+export interface ShellPreferences {
+	close_to_tray: boolean;
+	minimize_to_tray: boolean;
+}
 export interface SettingsTransport {
 	embeddingState?(): Promise<EmbeddingState>;
 	rebuildEmbeddings?(consent: boolean): Promise<void>;
@@ -41,4 +45,7 @@ export interface SettingsTransport {
 		consent: boolean,
 		expected: AiSettings,
 	): Promise<string>;
+	shellPreferences?(): Promise<ShellPreferences>;
+	saveShellPreferences?(preferences: ShellPreferences): Promise<ShellPreferences>;
+	quitApp?(): Promise<void>;
 }

@@ -95,11 +95,15 @@ afterEach(() => {
 	i18n.setLocale('en');
 	appStore.setTheme('light');
 	appStore.semanticSearchEnabled = false;
+	appStore.setShellPreferences({ close_to_tray: true, minimize_to_tray: false });
 });
 
 describe('settings helpers, fixtures, and i18n parity', () => {
 	it('maintains EN and pt-BR dictionary parity across all settings labels', () => {
 		expect(Object.keys(settingsLabels.en.tabs)).toEqual(Object.keys(settingsLabels['pt-BR'].tabs));
+		expect(Object.keys(settingsLabels.en.general)).toEqual(
+			Object.keys(settingsLabels['pt-BR'].general)
+		);
 		expect(Object.keys(settingsLabels.en.search.states)).toEqual(
 			Object.keys(settingsLabels['pt-BR'].search.states)
 		);
@@ -138,6 +142,19 @@ describe('settings helpers, fixtures, and i18n parity', () => {
 		const demo = createDemoSettingsTransport();
 		const initial = await demo.get();
 		expect(initial.experimental_semantic_search).toBe(false);
+
+		const initialShell = await demo.shellPreferences!();
+		expect(initialShell).toEqual({ close_to_tray: true, minimize_to_tray: false });
+		const savedShell = await demo.saveShellPreferences!({
+			close_to_tray: false,
+			minimize_to_tray: true
+		});
+		expect(savedShell).toEqual({ close_to_tray: false, minimize_to_tray: true });
+		await expect(demo.shellPreferences!()).resolves.toEqual({
+			close_to_tray: false,
+			minimize_to_tray: true
+		});
+		await expect(demo.quitApp!()).resolves.toBeUndefined();
 
 		await expect(demo.rebuildEmbeddings!(false)).rejects.toThrow('Consent required');
 		await demo.download({
@@ -257,6 +274,68 @@ describe('WdgPrivacyPanel', () => {
 		toggleThemeBtn.click();
 		flushSync();
 		expect(appStore.theme).not.toBe(beforeTheme);
+
+		await unmount(component);
+	});
+
+	it('persists tray lifecycle switches, rolls back on failure, and invokes quitApp', async () => {
+		const { target, transport } = fixture();
+		const shellPreferences = vi
+			.fn<NonNullable<SettingsTransport['shellPreferences']>>()
+			.mockResolvedValue({ close_to_tray: true, minimize_to_tray: false });
+		const saveShellPreferences = vi
+			.fn<NonNullable<SettingsTransport['saveShellPreferences']>>()
+			.mockImplementationOnce(async (prefs) => prefs)
+			.mockRejectedValueOnce(new Error('vault unavailable'));
+		const quitApp = vi.fn<NonNullable<SettingsTransport['quitApp']>>().mockResolvedValue();
+
+		const customTransport: SettingsTransport = {
+			...transport,
+			shellPreferences,
+			saveShellPreferences,
+			quitApp
+		};
+
+		const component = mount(WdgPrivacyPanel, {
+			target,
+			props: { section: 'general', transport: customTransport }
+		});
+		await settle();
+
+		expect(shellPreferences).toHaveBeenCalledOnce();
+		const closeSwitch = target.querySelector<HTMLButtonElement>(
+			'button[role="switch"][aria-label="Keep running in System Tray when closed"]'
+		)!;
+		const minimizeSwitch = target.querySelector<HTMLButtonElement>(
+			'button[role="switch"][aria-label="Hide to System Tray on minimize"]'
+		)!;
+		expect(closeSwitch.getAttribute('aria-checked')).toBe('true');
+		expect(minimizeSwitch.getAttribute('aria-checked')).toBe('false');
+
+		minimizeSwitch.click();
+		await settle();
+
+		expect(saveShellPreferences).toHaveBeenCalledWith({
+			close_to_tray: true,
+			minimize_to_tray: true
+		});
+		expect(minimizeSwitch.getAttribute('aria-checked')).toBe('true');
+		expect(appStore.shellPreferences.minimize_to_tray).toBe(true);
+
+		closeSwitch.click();
+		await settle();
+		expect(closeSwitch.getAttribute('aria-checked')).toBe('true');
+		expect(appStore.shellPreferences.close_to_tray).toBe(true);
+		expect(target.querySelector('[role="alert"]')?.textContent).toContain(
+			'Could not save system tray preference.'
+		);
+
+		const quitBtn = [...target.querySelectorAll('button')].find((b) =>
+			b.textContent?.includes('Quit Completely')
+		)!;
+		quitBtn.click();
+		await settle();
+		expect(quitApp).toHaveBeenCalledOnce();
 
 		await unmount(component);
 	});

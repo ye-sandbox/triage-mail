@@ -7,6 +7,49 @@
 
 ## Active Task
 
+### Task [04.23]: Streaming Save-As & Safe Ephemeral Attachment Preview (`BODY.PEEK`)
+
+- **Status:** READY FOR PLANNING
+- **Priority:** 1 of 2 (Lazy Attachment UX & 100k+ Exact RAM Search — 2026-11-18)
+- **Systems Involved:** `apps/desktop/src-tauri/src/file_picker.rs`, `apps/desktop/src-tauri/src/service.rs`, `apps/desktop/src-tauri/src/runtime.rs`, `apps/desktop/src/lib/inbox/WdgMessageReader.svelte`, `apps/desktop/src/lib/reader/**`, `apps/desktop/src/lib/i18n/**`.
+- **Scope Summary:**
+  1. `[04.23.1]` `[BATCH: B1]` **Native Suggested-Filename Save Dialog & Rust Direct-to-Disk Write (`apps/desktop/src-tauri`):** Extend `file_picker` to pass sanitized `current_name` (`SaveFile`) and add additive `cmd_save_attachment(request: AttachmentRequestDto) -> Option<AttachmentSavedDto { bytes_written: u64 }>` that prompts for target path before network fetch, streams/fetches via `IMAP BODY.PEEK[part_id]` (50 MiB cap), validates non-symlink target safety, and writes directly from Rust to disk without serializing megabyte `Vec<u8>` JSON arrays over WebView IPC and without storing attachment bytes in SQLCipher. Cap `cmd_fetch_attachment` at 10 MiB strictly for ephemeral preview.
+  2. `[04.23.2]` `[BATCH: B2]` **Safe Ephemeral In-Memory Preview Modal & Reader Controls (`apps/desktop/src`):** Replace the `<a download>` blob workaround in `WdgMessageReader.svelte` with explicit **"Save As…"** and **"Preview"** controls. Support ephemeral preview ($\le 10$ MiB) only for safe allowlisted MIME types: raster images (`image/png`, `image/jpeg`, `image/webp`, `image/gif` — explicitly blocking `image/svg+xml`), plain text/structured text (`text/plain`, `text/csv`, `application/json`, `application/xml` read-only preformatted view), and `application/pdf` in an isolated frame, revoking `blob:` URLs and zeroing `Uint8Array` buffers immediately on close or message change.
+
+---
+
+## Prioritized Queue (User-Selected — 2026-11-18)
+
+### Task [90.6]: Zeroized In-Memory Exact `int8` Vector & Eligibility Accelerator (`100k+` Scale)
+
+- **Status:** READY FOR PLANNING
+- **Priority:** 2 of 2
+- **Systems Involved:** `crates/storage`, `apps/desktop/src-tauri`, `docs/performance`, `.agent/NOTES.md`.
+- **Scope Summary:**
+  1. `[90.6.1]` `[BATCH: B1]` **Zeroized-on-Drop Contiguous `int8[384]` Arena & Exact Scoped Cosine Ranker (`crates/storage`):** Implement a 100% safe Rust (`#![deny(unsafe_code)]`), auto-vectorized contiguous RAM index (`RamVectorIndex`, ~38.8 MiB for 100k messages) with `Zeroize` wipe on drop/lock, generation-synchronized with SQLite vector writes/rebuilds, resolving the scoped vector latency bottleneck (`106–390ms` in `sqlite-vec` `vec0` over SQLCipher) without the recall loss proven in `docs/performance/binary-quantization.md` (`k-023`).
+  2. `[90.6.2]` `[BATCH: B2]` **Read-Pool Integration, 100k Benchmark & Exact Oracle Parity Proof (`crates/storage`, `apps/desktop/src-tauri`, `docs/performance`):** Integrate `RamVectorIndex` transparently into `SqliteMailStore` semantic/hybrid search with graceful `vec0` fallback during hydration, add a 100k-message benchmark + exact ordered-page parity test proving 100% recall equivalence and `< 5ms` p95 vector ranking across Global, Inbox, Category, and Sender Review scopes, and record empirical metrics in `docs/performance/`.
+
+---
+
+## Latest Completed Task
+
+### Task [04.22]: System Tray, Background Sync Lifecycle & Actionable Desktop Notifications
+
+- **Status:** DONE
+- **Priority:** 1 of 3 (Desktop Polish, Lazy Attachment UX & 100k+ Exact RAM Search — 2026-11-18)
+- **Systems Involved:** `apps/desktop/src-tauri`, `apps/desktop/src/lib/settings`, `apps/desktop/src/lib/shell`, `apps/desktop/src/lib/window`, `apps/desktop/src/lib/i18n`.
+- **Delivered:**
+  1. `[04.22.1]` Enabled `tray-icon` and `image-png` on `tauri` (`Cargo.lock` untouched outside existing `image` edge); added `ShellPreferencesDto` vault persistence (`VaultKey::for_account("application", "shell-preferences")`), `cmd_shell_preferences`, `cmd_save_shell_preferences`, `cmd_quit_app`, `DueDateSummaryCounts` (`reminders.rs`), `TrayController` (`tray.rs` with 32x32 icon, left-click window toggle, dynamic `Open Inbox`, `Due Dates & Boletos`, read-only `Due Today / Overdue` summary, and `Quit Completely`), `WindowEvent::CloseRequested` hide-on-close when unlocked + enabled, `EventBus` tray summary refresh task, and `core:window:allow-hide` capability.
+  2. `[04.22.2]` Extended `alerts::native::notify(summary, body)` and `format_local_notification` in `apps/desktop/src-tauri/src/alerts.rs` to derive control-character-scrubbed, length-bounded summaries and bodies strictly from already field-consented payload JSON (test, digest, single-message fields), falling back cleanly to redacted generic strings when zero fields are consented.
+  3. `[04.22.3]` Added `ShellPreferences` transport bindings and demo fixtures (`settings/types.ts`, `settings/transport.ts`, `settings/settings.fixtures.ts`), `AppStore.shellPreferences` hydration (`stores/app.svelte.ts`), EN/PT-BR General settings controls (`close_to_tray` & `minimize_to_tray` `bits-ui` switches + `Quit Completely` button in `WdgPrivacyPanel.svelte`), `WindowController.minimize()` minimize-to-tray support (`shell/window.svelte.ts`), `tray://navigate` event listener (`AppShell.svelte`, `window/transport.ts`), and Vitest/Rust test coverage.
+- **Validation:** `cargo fmt --all -- --check`, `cargo check --workspace`, `cargo check --no-default-features -p triage-mail-desktop`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (51 unit + 34 integration tests in `triage-mail-desktop`) all exited 0; `pnpm --filter desktop check` passed (0 errors/warnings); `pnpm --filter desktop test` passed (31 files, 195 tests); `pnpm --filter desktop build` succeeded; `! grep -rn "export let" apps/desktop/src/` exited 0; `node scripts/ci-guard.mjs` (471 tracked text files, 0 findings) & `node --test scripts/ci-guard.test.mjs` (5 passed); `git diff --check` clean. Prettier is not installed locally, so it was not run.
+- **Contracts:** `.agent/NOTES.md` (`System Tray, Background Sync Lifecycle & Actionable Desktop Notifications ([04.22])`).
+- **Next:** Promoted `[04.23]` (`READY FOR PLANNING`), followed by `[90.6]`.
+
+---
+
+## Previous Completed Tasks
+
 ### Task [04.21]: Account Subscription Badges & Automatic IMAP Quota Detection
 
 - **Status:** DONE
@@ -31,11 +74,9 @@
 - **Validation:** `cargo fmt --check`, `cargo check`, `cargo clippy -D warnings`, `cargo test --workspace` all exit 0; `pnpm --filter desktop check` 0 errors/warnings; `pnpm --filter desktop test` 31 files / 191 tests; `pnpm --filter desktop build` succeeded; `export let` invariant, `ci-guard` (464 files, 0 findings) and `git diff --check` clean. Prettier is not installed locally, so it was not run.
 - **Contracts:** `.agent/NOTES.md` (`Account Subscription Badges & IMAP Quota Detection ([04.21])`).
 - **Commit:** `9fb2c41`.
-- **Next:** No prioritized active task; awaiting user selection.
+- **Next:** Promoted `[04.22]` (`PLANNING`), followed by `[04.23]` and `[90.6]`.
 
 ---
-
-## Latest Completed Task
 
 ### Task [02.9]: Actionable Connection, Credential & OAuth Error Diagnostics
 
@@ -2583,9 +2624,7 @@ All tasks inherit the repository DoD when implemented.
 
 ## Other Future Backlog / Ideas (Unprioritized)
 
-- Offline cached-mail CLI [00.3], offline CLI container [00.4] and shared sync foundation [00.5] completed; active headless sync/daemon and writable container deployment remain unprioritized
-- Outbound SMTP & lightweight Markdown/Plain-text reply composer (`v0.2+`)
-- Multi-folder sync (Archive/All Mail with Gmail dedup, Sent read-only): scoped into the proposed [04.1] mailbox queue; implementation pending approval
-- Real Tier 2 ONNX inference via `ort`: completed in [03.10].
-- Coverage-guided fuzzing for the in-house IMAP parser: completed in [02.7].
-- Optional binary-quantized ANN candidate stage + exact int8 rerank (`v0.2`)
+- Outbound SMTP & lightweight Markdown/Plain-text reply composer (`v0.3+`)
+- Multi-folder continuous background sync (`Archive`/`All Mail` with Gmail dedup, `Sent` read-only)
+- E2EE Zero-Knowledge Portable Sync Bundle for rules, saved views, and preferences across devices
+- Additional ecosystem alert connectors (e.g., WhatsApp Gatekeeper API)

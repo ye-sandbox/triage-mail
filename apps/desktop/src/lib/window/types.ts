@@ -19,7 +19,9 @@ export interface WindowTransport {
 	minimize(): Promise<void>;
 	toggleMaximize(): Promise<boolean>;
 	close(): Promise<void>;
+	hide?(): Promise<void>;
 	subscribeState(onChange: (state: WindowState) => void): () => void;
+	subscribeTrayNavigate?(onNavigate: (route: string) => void): () => void;
 }
 
 const LABELS_EN: WindowLabels = {

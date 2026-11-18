@@ -150,6 +150,10 @@ export const PORTABLE_IMPORT_PREVIEW_FIXTURE: PortableImportPreview = {
 export function createDemoSettingsTransport(): SettingsTransport {
 	let current: Settings = structuredClone(INITIAL_DEMO_SETTINGS);
 	let embedding: EmbeddingState = structuredClone(EMBEDDING_STATE_PRESETS.Disabled);
+	let shellPrefs = {
+		close_to_tray: true,
+		minimize_to_tray: false
+	};
 
 	return {
 		async get() {
@@ -191,6 +195,17 @@ export function createDemoSettingsTransport(): SettingsTransport {
 		},
 		async summarize() {
 			return 'Local AI summary preview.';
-		}
+		},
+		async shellPreferences() {
+			return { ...shellPrefs };
+		},
+		async saveShellPreferences(preferences) {
+			shellPrefs = {
+				close_to_tray: preferences.close_to_tray,
+				minimize_to_tray: preferences.minimize_to_tray
+			};
+			return { ...shellPrefs };
+		},
+		async quitApp() {}
 	};
 }

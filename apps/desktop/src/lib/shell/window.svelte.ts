@@ -159,7 +159,15 @@ export class WindowController {
 		this.actionError = null;
 		if (this.transport.isAvailable()) {
 			try {
-				await this.transport.minimize();
+				if (
+					appStore.vaultUnlocked &&
+					appStore.shellPreferences.minimize_to_tray &&
+					this.transport.hide
+				) {
+					await this.transport.hide();
+				} else {
+					await this.transport.minimize();
+				}
 			} catch {
 				this.actionError = t(appStore.locale, 'windowActionError');
 			}

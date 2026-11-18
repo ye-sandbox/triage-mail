@@ -83,12 +83,14 @@ describe('AppStore', () => {
 		const prevAccounts = appStore.accounts;
 		const prevSavedViews = appStore.savedViews;
 		const prevVault = appStore.vaultUnlocked;
+		const prevShellPrefs = { ...appStore.shellPreferences };
 
 		try {
 			appStore.loadedCount = 0;
 			appStore.unreadTotal = 0;
 			appStore.overdueAndDueTodayCount = 0;
 			appStore.accounts = [];
+			appStore.setShellPreferences({ close_to_tray: true, minimize_to_tray: false });
 
 			await appStore.hydrateNativeShellCounts({
 				isNative: () => true,
@@ -187,6 +189,12 @@ describe('AppStore', () => {
 							is_dismissed: false
 						}
 					])
+				},
+				settingsTransport: {
+					shellPreferences: vi.fn().mockResolvedValue({
+						close_to_tray: false,
+						minimize_to_tray: true
+					})
 				}
 			});
 
@@ -196,6 +204,10 @@ describe('AppStore', () => {
 			expect(appStore.unreadForAccountFolder('acct_native_1', 'INBOX')).toBe(4);
 			expect(appStore.overdueAndDueTodayCount).toBe(1);
 			expect(appStore.savedViews).toEqual([{ id: 'sv_1', name: 'Invoices', query: 'boleto' }]);
+			expect(appStore.shellPreferences).toEqual({
+				close_to_tray: false,
+				minimize_to_tray: true
+			});
 		} finally {
 			appStore.loadedCount = prevLoaded;
 			appStore.unreadTotal = prevUnread;
@@ -203,6 +215,7 @@ describe('AppStore', () => {
 			appStore.accounts = prevAccounts;
 			appStore.savedViews = prevSavedViews;
 			appStore.vaultUnlocked = prevVault;
+			appStore.setShellPreferences(prevShellPrefs);
 		}
 	});
 });

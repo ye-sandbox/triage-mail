@@ -8,6 +8,8 @@ import type { AccountConfig, AccountTransport } from '$lib/onboarding/types';
 import { createDueDateFixtures } from '$lib/reminders/due-dates.seed';
 import { nativeRemindersTransport } from '$lib/reminders/transport';
 import { countOverdueAndDueToday, type RemindersTransport } from '$lib/reminders/types';
+import { nativeSettingsTransport } from '$lib/settings/transport';
+import type { SettingsTransport, ShellPreferences } from '$lib/settings/types';
 import type {
 	AlertDestination,
 	AutomationRule,
@@ -36,6 +38,7 @@ export interface NativeShellHydrationDeps {
 	accountTransport?: Pick<AccountTransport, 'list' | 'subscriptions'>;
 	inboxTransport?: Pick<InboxTransport, 'listFolders' | 'search' | 'savedViews'>;
 	remindersTransport?: Pick<RemindersTransport, 'listDueDates'>;
+	settingsTransport?: Pick<SettingsTransport, 'shellPreferences'>;
 }
 
 function mapAccountToShellAccount(acct: AccountConfig): MailAccount {
@@ -98,6 +101,10 @@ class AppStore {
 	semanticSearchEnabled = $state<boolean>(false);
 	vaultUnlocked = $state<boolean>(true);
 	privacyBlockRemoteImages = $state<boolean>(true);
+	shellPreferences = $state<ShellPreferences>({
+		close_to_tray: true,
+		minimize_to_tray: false
+	});
 
 	activeScope = $state<ScopeFilter>({ kind: 'inbox' });
 	pendingSelectMessageId = $state<string | null>(null);
@@ -134,6 +141,21 @@ class AppStore {
 		}
 	}
 
+	private async loadShellPreferences(
+		transport: Pick<SettingsTransport, 'shellPreferences'>,
+		generation: number
+	): Promise<void> {
+		if (!transport.shellPreferences) return;
+		try {
+			const prefs = await transport.shellPreferences();
+			if (generation === this.hydrationGeneration) {
+				this.setShellPreferences(prefs);
+			}
+		} catch {
+			// Best-effort: retain default shell preferences if unavailable.
+		}
+	}
+
 	accountSubscriptions = $state<Record<string, AccountSubscription>>({});
 	savedViews = $state<SavedView[]>(
 		nativeAvailable() ? [] : structuredClone(SHELL_SAVED_VIEW_FIXTURES)
@@ -150,6 +172,13 @@ class AppStore {
 
 	get locale(): SupportedLocale {
 		return i18n.locale;
+	}
+
+	setShellPreferences(next: ShellPreferences) {
+		this.shellPreferences = {
+			close_to_tray: next.close_to_tray,
+			minimize_to_tray: next.minimize_to_tray
+		};
 	}
 
 	setTheme(next: ThemeMode) {
@@ -285,6 +314,7 @@ class AppStore {
 		const accountTransport = deps.accountTransport ?? nativeAccountTransport;
 		const inboxTransport = deps.inboxTransport ?? nativeTransport;
 		const remindersTransport = deps.remindersTransport ?? nativeRemindersTransport;
+		const settingsTransport = deps.settingsTransport ?? nativeSettingsTransport;
 
 		let accountConfigs: AccountConfig[];
 		try {
@@ -297,12 +327,14 @@ class AppStore {
 		this.vaultUnlocked = true;
 		this.accounts = accountConfigs.map(mapAccountToShellAccount);
 		void this.loadAccountSubscriptions(accountTransport, generation);
+		const shellPrefsPromise = this.loadShellPreferences(settingsTransport, generation);
 
 		if (accountConfigs.length === 0) {
 			this.loadedCount = 0;
 			this.unreadTotal = 0;
 			this.overdueAndDueTodayCount = 0;
 			this.folderUnreadCounts = {};
+			await shellPrefsPromise;
 			return;
 		}
 
@@ -326,7 +358,8 @@ class AppStore {
 					scope: 'GlobalAllMail'
 				}),
 				remindersTransport.listDueDates(),
-				inboxTransport.savedViews ? inboxTransport.savedViews.list() : Promise.resolve(null)
+				inboxTransport.savedViews ? inboxTransport.savedViews.list() : Promise.resolve(null),
+				shellPrefsPromise
 			]);
 
 		if (generation !== this.hydrationGeneration) return;

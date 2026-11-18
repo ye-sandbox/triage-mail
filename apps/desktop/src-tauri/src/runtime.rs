@@ -1,6 +1,7 @@
 //! Tauri-specific command registration and native lifecycle. No core crate depends on this module.
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use tauri::{ipc::Channel, Manager, State};
@@ -14,6 +15,8 @@ use crate::onboarding::{
 };
 use crate::ownership::bootstrap;
 use crate::service::{DesktopService, IncomingCredentials, IpcError};
+use crate::settings::ShellPreferencesDto;
+use crate::tray::TrayController;
 use crate::worker::WorkerSupervisor;
 
 pub struct RuntimeState {
@@ -24,6 +27,10 @@ pub struct RuntimeState {
     authorizations: AuthorizationSessions,
     recovery_gate: Arc<tokio::sync::Mutex<()>>,
     ownership: OnceCell<Arc<sync_runtime::ownership::WriterOwnership>>,
+    shell_prefs: Mutex<ShellPreferencesDto>,
+    quitting: AtomicBool,
+    tray: Arc<Mutex<Option<TrayController<tauri::Wry>>>>,
+    tray_summary_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl RuntimeState {
@@ -36,13 +43,28 @@ impl RuntimeState {
             authorizations: AuthorizationSessions::default(),
             recovery_gate: Arc::new(tokio::sync::Mutex::new(())),
             ownership: OnceCell::new(),
+            shell_prefs: Mutex::new(ShellPreferencesDto::default()),
+            quitting: AtomicBool::new(false),
+            tray: Arc::new(Mutex::new(None)),
+            tray_summary_task: Mutex::new(None),
         }
+    }
+
+    fn set_cached_shell_prefs(&self, prefs: ShellPreferencesDto) {
+        if let Ok(mut guard) = self.shell_prefs.lock() {
+            *guard = prefs;
+        }
+    }
+
+    async fn refresh_tray_summary(&self, service: &Arc<DesktopService>) {
+        refresh_tray_summary_for_handle(&self.tray, service).await;
     }
 
     async fn initialize(
         &self,
         passphrase: Option<Zeroizing<String>>,
     ) -> Result<Arc<DesktopService>, IpcError> {
+        let was_initialized = self.service.get().is_some();
         let recovery = Arc::new(self.recovery_gate.clone().lock_owned().await);
         // INVARIANT: Always acquire recovery_gate before ownership. Retain the
         // guard through failed unlock/retry; cancellation cannot unlock active work.
@@ -63,6 +85,37 @@ impl RuntimeState {
             })
             .await?
             .clone();
+        if !was_initialized {
+            if let Ok(prefs) = service.get_shell_preferences().await {
+                self.set_cached_shell_prefs(prefs);
+            }
+            self.refresh_tray_summary(&service).await;
+            let has_tray = self.tray.lock().is_ok_and(|guard| guard.is_some());
+            if has_tray {
+                let tray = self.tray.clone();
+                let svc = service.clone();
+                let mut rx = service.events.subscribe();
+                let handle = tokio::spawn(async move {
+                    loop {
+                        match rx.recv().await {
+                            Ok(event)
+                                if event.new_messages_count > 0
+                                    || !event.triage_alerts.is_empty() =>
+                            {
+                                refresh_tray_summary_for_handle(&tray, &svc).await;
+                            }
+                            Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                        }
+                    }
+                });
+                if let Ok(mut guard) = self.tray_summary_task.lock() {
+                    if let Some(prev) = guard.replace(handle) {
+                        prev.abort();
+                    }
+                }
+            }
+        }
         self.workers
             .get_or_try_init(|| async {
                 let supervisor = WorkerSupervisor::new(service.clone());
@@ -84,6 +137,37 @@ impl RuntimeState {
             .await
             .cloned()
     }
+}
+
+async fn refresh_tray_summary_for_handle(
+    tray: &Arc<Mutex<Option<TrayController<tauri::Wry>>>>,
+    service: &Arc<DesktopService>,
+) {
+    let has_tray = tray.lock().is_ok_and(|guard| guard.is_some());
+    if !has_tray {
+        return;
+    }
+    if let Ok(counts) = service.due_date_summary_counts().await {
+        if let Ok(guard) = tray.lock() {
+            if let Some(controller) = guard.as_ref() {
+                controller.update_summary(counts);
+            }
+        }
+    }
+}
+
+pub(crate) fn request_quit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let state = app.state::<RuntimeState>();
+    state.quitting.store(true, Ordering::SeqCst);
+    if let Ok(mut guard) = state.tray_summary_task.lock() {
+        if let Some(handle) = guard.take() {
+            handle.abort();
+        }
+    }
+    if let Some(workers) = state.workers.get() {
+        workers.shutdown();
+    }
+    app.exit(0);
 }
 
 #[tauri::command]
@@ -439,11 +523,10 @@ pub async fn cmd_dismiss_due_date_item(
     state: State<'_, RuntimeState>,
     message_id: String,
 ) -> Result<(), IpcError> {
-    state
-        .initialize(None)
-        .await?
-        .dismiss_due_date_item(message_id)
-        .await
+    let service = state.initialize(None).await?;
+    service.dismiss_due_date_item(message_id).await?;
+    state.refresh_tray_summary(&service).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -807,6 +890,38 @@ pub async fn cmd_save_settings(
 }
 
 #[tauri::command]
+pub async fn cmd_shell_preferences(
+    state: State<'_, RuntimeState>,
+) -> Result<ShellPreferencesDto, IpcError> {
+    let prefs = state
+        .initialize(None)
+        .await?
+        .get_shell_preferences()
+        .await?;
+    state.set_cached_shell_prefs(prefs);
+    Ok(prefs)
+}
+
+#[tauri::command]
+pub async fn cmd_save_shell_preferences(
+    state: State<'_, RuntimeState>,
+    preferences: ShellPreferencesDto,
+) -> Result<ShellPreferencesDto, IpcError> {
+    let saved = state
+        .initialize(None)
+        .await?
+        .save_shell_preferences(preferences)
+        .await?;
+    state.set_cached_shell_prefs(saved);
+    Ok(saved)
+}
+
+#[tauri::command]
+pub fn cmd_quit_app<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
+    request_quit(&app);
+}
+
+#[tauri::command]
 pub async fn cmd_set_tokenizer(
     state: State<'_, RuntimeState>,
     tokenizer: storage::FtsTokenizerMode,
@@ -1007,7 +1122,13 @@ pub fn run() {
     let app = tauri::Builder::default()
         .setup(|app| {
             let data = app.path().app_data_dir()?;
-            app.manage(RuntimeState::new(data));
+            let state = RuntimeState::new(data);
+            if let Ok(controller) = crate::tray::init(app.handle()) {
+                if let Ok(mut guard) = state.tray.lock() {
+                    *guard = Some(controller);
+                }
+            }
+            app.manage(state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1064,6 +1185,9 @@ pub fn run() {
             cmd_rebuild_embeddings,
             cmd_get_settings,
             cmd_save_settings,
+            cmd_shell_preferences,
+            cmd_save_shell_preferences,
+            cmd_quit_app,
             cmd_set_tokenizer,
             cmd_set_experimental_semantic_search,
             cmd_download_model,
@@ -1093,14 +1217,30 @@ pub fn run() {
             cmd_subscribe_sync
         ])
         .on_window_event(|window, event| {
-            if matches!(event, tauri::WindowEvent::Destroyed) {
-                let state = window.state::<RuntimeState>();
-                state.authorizations.cancel(window.label());
-                if let Ok(mut subscriptions) = state.subscriptions.lock() {
-                    if let Some(task) = subscriptions.remove(window.label()) {
-                        task.abort();
+            let state = window.state::<RuntimeState>();
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    let quitting = state.quitting.load(Ordering::SeqCst);
+                    let service_ready = state.service.get().is_some();
+                    let prefs = state
+                        .shell_prefs
+                        .lock()
+                        .map(|guard| *guard)
+                        .unwrap_or_default();
+                    if crate::tray::should_prevent_close(quitting, service_ready, prefs) {
+                        api.prevent_close();
+                        let _ = window.hide();
                     }
-                };
+                }
+                tauri::WindowEvent::Destroyed => {
+                    state.authorizations.cancel(window.label());
+                    if let Ok(mut subscriptions) = state.subscriptions.lock() {
+                        if let Some(task) = subscriptions.remove(window.label()) {
+                            task.abort();
+                        }
+                    }
+                }
+                _ => {}
             }
         })
         .build(tauri::generate_context!())
@@ -1108,6 +1248,11 @@ pub fn run() {
     app.run(|handle, event| {
         if matches!(event, tauri::RunEvent::Exit) {
             let state = handle.state::<RuntimeState>();
+            if let Ok(mut guard) = state.tray_summary_task.lock() {
+                if let Some(task) = guard.take() {
+                    task.abort();
+                }
+            }
             if let Some(workers) = state.workers.get() {
                 workers.shutdown();
             }
@@ -1302,6 +1447,8 @@ mod tests {
                 cmd_rebuild_embeddings,
                 cmd_get_settings,
                 cmd_save_settings,
+                cmd_shell_preferences,
+                cmd_save_shell_preferences,
                 cmd_set_tokenizer,
                 cmd_set_experimental_semantic_search,
                 cmd_download_model,
@@ -1508,6 +1655,29 @@ mod tests {
         let settings = invoke(&window, "cmd_get_settings", json!({})).unwrap();
         assert_eq!(settings["ai"]["enabled"], false);
         assert_eq!(settings["has_api_key"], false);
+        assert_eq!(
+            invoke(&window, "cmd_shell_preferences", json!({})).unwrap(),
+            json!({"close_to_tray": true, "minimize_to_tray": false})
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_save_shell_preferences",
+                json!({"preferences": {"close_to_tray": false, "minimize_to_tray": true}})
+            )
+            .unwrap(),
+            json!({"close_to_tray": false, "minimize_to_tray": true})
+        );
+        assert_eq!(
+            invoke(&window, "cmd_shell_preferences", json!({})).unwrap(),
+            json!({"close_to_tray": false, "minimize_to_tray": true})
+        );
+        assert!(invoke(
+            &window,
+            "cmd_save_shell_preferences",
+            json!({"preferences": {"close_to_tray": false, "minimize_to_tray": true, "extra": 1}})
+        )
+        .is_err());
         assert_eq!(
             invoke(&window, "cmd_set_tokenizer", json!({"tokenizer":"Trigram"})),
             Ok(json!(null))

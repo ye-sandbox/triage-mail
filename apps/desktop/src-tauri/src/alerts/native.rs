@@ -24,7 +24,7 @@ pub async fn available() -> bool {
         .is_ok()
 }
 #[cfg(target_os = "linux")]
-pub async fn notify() -> DeliveryOutcome {
+pub async fn notify(summary: &str, body: &str) -> DeliveryOutcome {
     let Ok(c) = connection().await else {
         return DeliveryOutcome::Unavailable;
     };
@@ -46,8 +46,8 @@ pub async fn notify() -> DeliveryOutcome {
                 "triage-mail",
                 0u32,
                 "",
-                "New mail",
-                "A new message matched an alert rule.",
+                summary,
+                body,
                 Vec::<String>::new(),
                 hints,
                 -1i32,
@@ -65,6 +65,6 @@ pub async fn available() -> bool {
     false
 }
 #[cfg(not(target_os = "linux"))]
-pub async fn notify() -> DeliveryOutcome {
+pub async fn notify(_summary: &str, _body: &str) -> DeliveryOutcome {
     DeliveryOutcome::Unavailable
 }
