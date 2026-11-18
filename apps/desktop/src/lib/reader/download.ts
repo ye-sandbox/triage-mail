@@ -8,29 +8,3 @@ export function safeFilename(filename: string): string {
 			.slice(0, 180) || 'attachment'
 	);
 }
-
-export function saveAttachment(bytes: number[], filename: string): () => void {
-	// INVARIANT: Treat all downloaded content as a file; never navigate to or render attachment bytes.
-	const blob = new Blob([new Uint8Array(bytes)], { type: 'application/octet-stream' });
-	const url = URL.createObjectURL(blob);
-	const link = document.createElement('a');
-	let timer: ReturnType<typeof setTimeout>;
-	const release = () => {
-		clearTimeout(timer);
-		URL.revokeObjectURL(url);
-	};
-	try {
-		link.href = url;
-		link.download = safeFilename(filename);
-		document.body.append(link);
-		link.click();
-	} catch (error) {
-		release();
-		throw error;
-	} finally {
-		link.remove();
-	}
-	// Let the webview consume the URL before releasing it; unmount also releases it.
-	timer = setTimeout(release, 60_000);
-	return release;
-}

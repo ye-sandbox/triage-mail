@@ -76,6 +76,59 @@ pub async fn fetch_attachment_checked<S: AsyncRead + AsyncWrite + Unpin + Send>(
     Ok(session.fetch_attachment_bytes(uid, part).await?)
 }
 
+fn validate_part_spec(part: &str) -> Result<(), MutationError> {
+    if part.is_empty()
+        || !part
+            .split('.')
+            .all(|n| n.parse::<u32>().is_ok_and(|n| n > 0))
+    {
+        return Err(MutationError::InvalidRequest);
+    }
+    Ok(())
+}
+
+fn map_attachment_engine_error(err: EngineError) -> MutationError {
+    match err {
+        EngineError::AttachmentTooLarge { .. } => MutationError::InvalidRequest,
+        other => MutationError::Engine(other),
+    }
+}
+
+pub async fn fetch_attachment_checked_capped<S: AsyncRead + AsyncWrite + Unpin + Send>(
+    session: &mut ImapSession<S>,
+    folder: &str,
+    uid: u32,
+    part: &str,
+    uidvalidity: u32,
+    max_bytes: usize,
+) -> Result<Vec<u8>, MutationError> {
+    validate_part_spec(part)?;
+    select_checked(session, folder, uid, uidvalidity).await?;
+    // INVARIANT: Never fetch full RFC822; only the explicitly requested BODY.PEEK section up to max_bytes.
+    session
+        .fetch_attachment_bytes_capped(uid, part, max_bytes)
+        .await
+        .map_err(map_attachment_engine_error)
+}
+
+pub async fn stream_attachment_checked<S: AsyncRead + AsyncWrite + Unpin + Send>(
+    session: &mut ImapSession<S>,
+    folder: &str,
+    uid: u32,
+    part: &str,
+    uidvalidity: u32,
+    max_bytes: usize,
+    writer: &mut (dyn std::io::Write + Send),
+) -> Result<u64, MutationError> {
+    validate_part_spec(part)?;
+    select_checked(session, folder, uid, uidvalidity).await?;
+    // INVARIANT: Stream BODY.PEEK literal bytes directly to writer without buffering oversized attachments.
+    session
+        .fetch_attachment_to_writer(uid, part, max_bytes, writer)
+        .await
+        .map_err(map_attachment_engine_error)
+}
+
 pub async fn execute_imap_mutation<S: AsyncRead + AsyncWrite + Unpin + Send>(
     session: &mut ImapSession<S>,
     caps: &ServerCapabilities,
@@ -431,5 +484,43 @@ mod wire_tests {
             MutationOutcome::FlagsUpdated
         ));
         server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn streams_and_caps_attachment_by_uidvalidity_and_size() {
+        let (mut session, srv) = server(vec![
+            (
+                "A0001 SELECT \"INBOX\"\r\n",
+                "* OK [UIDVALIDITY 7]\r\nA0001 OK selected\r\n",
+            ),
+            (
+                "A0002 UID FETCH 1 (BODY.PEEK[2])\r\n",
+                "* 1 FETCH (UID 1 BODY[2] {5}\r\nhello\r\n)\r\nA0002 OK fetched\r\n",
+            ),
+        ]);
+        let mut out = Vec::new();
+        let written = stream_attachment_checked(&mut session, "INBOX", 1, "2", 7, 5, &mut out)
+            .await
+            .unwrap();
+        assert_eq!(written, 5);
+        assert_eq!(out, b"hello");
+        srv.await.unwrap();
+
+        let (mut session, srv) = server(vec![
+            (
+                "A0001 SELECT \"INBOX\"\r\n",
+                "* OK [UIDVALIDITY 7]\r\nA0001 OK selected\r\n",
+            ),
+            (
+                "A0002 UID FETCH 1 (BODY.PEEK[2])\r\n",
+                "* 1 FETCH (UID 1 BODY[2] {6}\r\nhello!\r\n)\r\nA0002 OK fetched\r\n",
+            ),
+        ]);
+        let err = fetch_attachment_checked_capped(&mut session, "INBOX", 1, "2", 7, 5)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, MutationError::InvalidRequest));
+        drop(session);
+        let _ = srv.await;
     }
 }

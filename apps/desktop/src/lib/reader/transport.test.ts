@@ -9,6 +9,8 @@ describe('reader IPC wire contract', () => {
 		const request = { account_id: 'local', folder: 'INBOX', uid: 1, part_id: '2' };
 		await nativeReaderTransport.attachment(request);
 		expect(invoke).toHaveBeenLastCalledWith('cmd_fetch_attachment', { request });
+		await nativeReaderTransport.saveAttachment?.(request);
+		expect(invoke).toHaveBeenLastCalledWith('cmd_save_attachment', { request });
 		const ai = { enabled: true, provider: 'Ollama' as const, endpoint: 'http://127.0.0.1:11434', model: 'llama3' };
 		await nativeReaderTransport.summarize?.('message-local', true, ai);
 		expect(invoke).toHaveBeenLastCalledWith('cmd_summarize_message', {

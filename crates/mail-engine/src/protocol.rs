@@ -164,6 +164,43 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
         Ok(literal)
     }
 
+    /// Streams exactly `size` literal bytes directly into `writer` using bounded chunk reads.
+    async fn stream_exact_bytes(
+        &mut self,
+        size: usize,
+        writer: &mut (dyn std::io::Write + Send),
+    ) -> Result<u64, EngineError> {
+        let mut remaining = size;
+        let from_buf = remaining.min(self.buffer.len());
+        if from_buf > 0 {
+            writer.write_all(&self.buffer[..from_buf]).map_err(|e| {
+                EngineError::ImapProtocol(format!("failed writing attachment: {e}"))
+            })?;
+            self.buffer.drain(..from_buf);
+            remaining -= from_buf;
+        }
+        let mut buf = [0u8; 16 * 1024];
+        while remaining > 0 {
+            let n = self.stream.read(&mut buf).await.map_err(|e| {
+                EngineError::ImapProtocol(format!("failed reading literal bytes: {e}"))
+            })?;
+            if n == 0 {
+                return Err(EngineError::ImapProtocol(
+                    "unexpected EOF while reading IMAP literal".to_string(),
+                ));
+            }
+            let take = remaining.min(n);
+            writer.write_all(&buf[..take]).map_err(|e| {
+                EngineError::ImapProtocol(format!("failed writing attachment: {e}"))
+            })?;
+            if n > take {
+                self.buffer.extend_from_slice(&buf[take..n]);
+            }
+            remaining -= take;
+        }
+        Ok(size as u64)
+    }
+
     /// Reads initial server greeting line (e.g. `* OK ...`).
     pub async fn read_greeting(&mut self) -> Result<String, EngineError> {
         self.read_crlf_line().await
@@ -778,6 +815,152 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
         Ok(bytes)
     }
 
+    /// Fetches a single binary attachment part on demand via `IMAP BODY.PEEK[part_id]`,
+    /// failing closed before buffering if the IMAP literal exceeds `max_bytes`.
+    pub async fn fetch_attachment_bytes_capped(
+        &mut self,
+        uid: u32,
+        part_id: &str,
+        max_bytes: usize,
+    ) -> Result<Vec<u8>, EngineError> {
+        let mut out = Vec::new();
+        self.fetch_attachment_to_writer(uid, part_id, max_bytes, &mut out)
+            .await?;
+        Ok(out)
+    }
+
+    /// Fetches a single binary attachment part via `IMAP BODY.PEEK[part_id]` and streams
+    /// literal bytes directly into `writer`, failing closed if the payload exceeds `max_bytes`.
+    pub async fn fetch_attachment_to_writer(
+        &mut self,
+        uid: u32,
+        part_id: &str,
+        max_bytes: usize,
+        writer: &mut (dyn std::io::Write + Send),
+    ) -> Result<u64, EngineError> {
+        let tag = self.next_tag();
+        let wire_command = format!("{} UID FETCH {} (BODY.PEEK[{}])\r\n", tag, uid, part_id);
+
+        self.stream
+            .write_all(wire_command.as_bytes())
+            .await
+            .map_err(|e| {
+                EngineError::ImapProtocol(format!("failed writing command to socket: {e}"))
+            })?;
+        self.stream
+            .flush()
+            .await
+            .map_err(|e| EngineError::ImapProtocol(format!("failed flushing IMAP socket: {e}")))?;
+
+        let mut total_written: u64 = 0;
+        loop {
+            let line = self.read_crlf_line().await?;
+            if line.starts_with(&tag) {
+                let parts: Vec<&str> = line.splitn(3, ' ').collect();
+                if parts.len() < 2 {
+                    return Err(EngineError::ImapProtocol(format!(
+                        "malformed tagged response: {line}"
+                    )));
+                }
+                match parts[1] {
+                    "OK" => return Ok(total_written),
+                    "NO" | "BAD" => {
+                        let msg = parts.get(2).copied().unwrap_or_default();
+                        return Err(EngineError::ImapProtocol(format!(
+                            "fetching attachment part failed: {msg}"
+                        )));
+                    }
+                    other => {
+                        return Err(EngineError::ImapProtocol(format!(
+                            "unrecognized tagged status: {other}"
+                        )));
+                    }
+                }
+            } else if line.starts_with('*') && line.contains("FETCH") {
+                total_written = self
+                    .stream_fetch_response_line(
+                        &line,
+                        uid,
+                        part_id,
+                        max_bytes,
+                        total_written,
+                        writer,
+                    )
+                    .await?;
+            }
+        }
+    }
+
+    async fn stream_fetch_response_line(
+        &mut self,
+        line: &str,
+        target_uid: u32,
+        part_id: &str,
+        max_bytes: usize,
+        mut total_written: u64,
+        writer: &mut (dyn std::io::Write + Send),
+    ) -> Result<u64, EngineError> {
+        let mut current_chunk = line.to_string();
+        let mut depth = 0usize;
+        let mut msg_uid = 0u32;
+        let mut wrote_any = false;
+
+        loop {
+            advance_fetch_depth(&current_chunk, &mut depth)?;
+            if msg_uid == 0 {
+                if let Some(uid_pos) = current_chunk.find("UID ") {
+                    let remainder = &current_chunk[uid_pos + 4..];
+                    let token = remainder
+                        .split(|c: char| !c.is_ascii_digit())
+                        .next()
+                        .unwrap_or_default();
+                    if let Ok(uid) = token.parse::<u32>() {
+                        msg_uid = uid;
+                    }
+                }
+            }
+
+            if let Some(literal_size) = extract_trailing_literal_size(&current_chunk)? {
+                // INVARIANT: Enforce the attachment cap before reading or allocating literal bytes.
+                if literal_size > max_bytes {
+                    return Err(EngineError::AttachmentTooLarge { max_bytes });
+                }
+                let section = extract_body_section_name(&current_chunk);
+                let is_target = (msg_uid == 0 || msg_uid == target_uid)
+                    && (section.as_deref() == Some(part_id) || (section.is_none() && !wrote_any));
+                if is_target {
+                    let next_total = total_written
+                        .checked_add(literal_size as u64)
+                        .ok_or(EngineError::AttachmentTooLarge { max_bytes })?;
+                    if next_total > max_bytes as u64 {
+                        return Err(EngineError::AttachmentTooLarge { max_bytes });
+                    }
+                    self.stream_exact_bytes(literal_size, writer).await?;
+                    total_written = next_total;
+                    wrote_any = true;
+                } else {
+                    self.stream_exact_bytes(literal_size, &mut std::io::sink())
+                        .await?;
+                }
+
+                current_chunk = self.read_crlf_line().await?;
+                while current_chunk.is_empty() {
+                    current_chunk = self.read_crlf_line().await?;
+                }
+            } else {
+                if depth != 0 {
+                    return Err(EngineError::ImapProtocol("unclosed FETCH response".into()));
+                }
+                if wrote_any && msg_uid != 0 && msg_uid != target_uid {
+                    return Err(EngineError::ImapProtocol("attachment UID mismatch".into()));
+                }
+                break;
+            }
+        }
+
+        Ok(total_written)
+    }
+
     /// Enters RFC 2177 `IDLE` mode and returns the active command tag once `+` continuation is received.
     pub async fn enter_idle(&mut self) -> Result<String, EngineError> {
         let tag = self.next_tag();
@@ -1288,5 +1471,59 @@ mod tests {
         // Starred folder
         let starred = parse_list_line("* LIST (\\Flagged) \"/\" \"[Gmail]/Com Estrela\"").unwrap();
         assert_eq!(starred.role, Some(SpecialFolderRole::Starred));
+    }
+
+    #[tokio::test]
+    async fn streaming_attachment_handles_multi_chunk_literals_and_rejects_oversized() {
+        let payload = vec![0x5au8; 40_000];
+        let (client_stream, mut server_stream) = duplex(1024);
+        let mut session = ImapSession::new(client_stream);
+        let expected = payload.clone();
+        let server = tokio::spawn(async move {
+            let mut buf = [0u8; 512];
+            let n = server_stream.read(&mut buf).await.unwrap();
+            assert!(String::from_utf8_lossy(&buf[..n]).contains("UID FETCH 77 (BODY.PEEK[2.1])"));
+            let header = format!("* 1 FETCH (UID 77 BODY[2.1] {{{}}}\r\n", payload.len());
+            server_stream.write_all(header.as_bytes()).await.unwrap();
+            for chunk in payload.chunks(1337) {
+                server_stream.write_all(chunk).await.unwrap();
+            }
+            server_stream
+                .write_all(b"\r\n)\r\nA0001 OK UID FETCH completed\r\n")
+                .await
+                .unwrap();
+        });
+
+        let mut writer = Vec::new();
+        let written = session
+            .fetch_attachment_to_writer(77, "2.1", 64 * 1024, &mut writer)
+            .await
+            .unwrap();
+        assert_eq!(written, 40_000);
+        assert_eq!(writer, expected);
+        server.await.unwrap();
+
+        let (client_stream, mut server_stream) = duplex(1024);
+        let mut session = ImapSession::new(client_stream);
+        let server = tokio::spawn(async move {
+            let mut buf = [0u8; 512];
+            let _ = server_stream.read(&mut buf).await.unwrap();
+            server_stream
+                .write_all(b"* 1 FETCH (UID 78 BODY[2] {1024}\r\n")
+                .await
+                .unwrap();
+        });
+        let mut writer = Vec::new();
+        let err = session
+            .fetch_attachment_to_writer(78, "2", 512, &mut writer)
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            EngineError::AttachmentTooLarge { max_bytes: 512 }
+        ));
+        assert!(writer.is_empty());
+        drop(session);
+        let _ = server.await;
     }
 }

@@ -1,13 +1,19 @@
 <script lang="ts">
 	import { onDestroy, untrack } from 'svelte';
-	import { Download, Paperclip, ShieldAlert, Sparkles } from 'lucide-svelte';
+	import { Download, Eye, Paperclip, ShieldAlert, Sparkles } from 'lucide-svelte';
 	import { formatBytes, t } from '$lib/i18n';
 	import { hasBlockedRemoteImages, sanitizeEmailHtml } from '$lib/security/sanitize';
-	import { safeFilename, saveAttachment } from '$lib/reader/download';
+	import { safeFilename } from '$lib/reader/download';
+	import {
+		canPreviewAttachment,
+		createEphemeralPreview,
+		type EphemeralAttachmentPreview
+	} from '$lib/reader/preview';
 	import type { AttachmentMeta, MessageDetailDto } from '$lib/reader/types';
 	import type { Settings } from '$lib/settings/types';
 	import { appStore } from '$lib/stores/app.svelte';
 	import type { MessageRowDto } from './types';
+	import WdgAttachmentPreviewModal from '../reader/WdgAttachmentPreviewModal.svelte';
 	import WdgConversationThread from './WdgConversationThread.svelte';
 	import WdgExtractionSummary from './WdgExtractionSummary.svelte';
 	import WdgReaderHeader from './WdgReaderHeader.svelte';
@@ -57,14 +63,52 @@
 	let aiError = $state('');
 	let aiSummaries = $state<Record<string, string>>({});
 
-	let fetchingPartId = $state<string | null>(null);
+	let savingPartId = $state<string | null>(null);
+	let previewingPartId = $state<string | null>(null);
 	let attachmentStatus = $state<Record<string, string>>({});
+	let currentPreviewRef: EphemeralAttachmentPreview | null = null;
+	let activePreview = $state.raw<EphemeralAttachmentPreview | null>(null);
+	let previewAttachmentMeta = $state.raw<AttachmentMeta | null>(null);
 	let active = true;
-	let releaseDownload: (() => void) | undefined;
+
+	function closePreview() {
+		// INVARIANT: Always revoke ephemeral blob URLs and zero transient buffers immediately.
+		currentPreviewRef?.release();
+		currentPreviewRef = null;
+		activePreview = null;
+		previewAttachmentMeta = null;
+	}
+
+	function setAttachmentStatus(partId: string, statusText: string | null) {
+		if (statusText === null) {
+			const next = { ...attachmentStatus };
+			delete next[partId];
+			attachmentStatus = next;
+			return;
+		}
+		attachmentStatus = {
+			...attachmentStatus,
+			[partId]: statusText
+		};
+	}
 
 	onDestroy(() => {
 		active = false;
-		releaseDownload?.();
+		closePreview();
+	});
+
+	$effect(() => {
+		identity;
+		untrack(() => {
+			closePreview();
+			savingPartId = null;
+			previewingPartId = null;
+			attachmentStatus = {};
+		});
+		return () => {
+			currentPreviewRef?.release();
+			currentPreviewRef = null;
+		};
 	});
 
 	$effect(() => {
@@ -74,7 +118,6 @@
 			detail = null;
 			loading = false;
 			error = '';
-			fetchingPartId = null;
 			return;
 		}
 		let currentActive = true;
@@ -83,7 +126,6 @@
 		detail = null;
 		aiSettings = null;
 		aiError = '';
-		fetchingPartId = null;
 
 		void workspace.readerTransport
 			.body(id)
@@ -169,15 +211,55 @@
 		}
 	}
 
-	async function fetchAttachment(att: AttachmentMeta) {
-		if (!message || fetchingPartId === att.part_id) return;
+	async function saveAttachmentAs(att: AttachmentMeta) {
+		if (!message || savingPartId === att.part_id) return;
+		const saver = workspace.readerTransport.saveAttachment;
+		if (!saver) {
+			setAttachmentStatus(att.part_id, t(appStore.locale, 'saveAttachmentError'));
+			return;
+		}
 		const targetIdentity = identity;
 		const currentMessage = message;
-		fetchingPartId = att.part_id;
-		attachmentStatus = {
-			...attachmentStatus,
-			[att.part_id]: t(appStore.locale, 'fetchingAttachment')
-		};
+		savingPartId = att.part_id;
+		setAttachmentStatus(att.part_id, t(appStore.locale, 'savingAttachment'));
+		try {
+			const saved = await saver({
+				account_id: currentMessage.account_id,
+				folder: currentMessage.folder,
+				uid: currentMessage.uid,
+				part_id: att.part_id
+			});
+			// INVARIANT: A response from a dismissed message must never mutate active UI state.
+			if (!active || identity !== targetIdentity) return;
+			if (saved === null) {
+				setAttachmentStatus(att.part_id, null);
+			} else {
+				setAttachmentStatus(att.part_id, t(appStore.locale, 'savedAttachment'));
+			}
+		} catch (err: unknown) {
+			if (active && identity === targetIdentity) {
+				setAttachmentStatus(
+					att.part_id,
+					err === 'Unsupported'
+						? t(appStore.locale, 'attachmentUnavailableOffline')
+						: t(appStore.locale, 'saveAttachmentError')
+				);
+			}
+		} finally {
+			if (active && identity === targetIdentity) savingPartId = null;
+		}
+	}
+
+	async function previewAttachment(att: AttachmentMeta) {
+		if (!message || previewingPartId === att.part_id) return;
+		if (!canPreviewAttachment(att)) {
+			setAttachmentStatus(att.part_id, t(appStore.locale, 'previewAttachmentUnsupported'));
+			return;
+		}
+		const targetIdentity = identity;
+		const currentMessage = message;
+		previewingPartId = att.part_id;
+		setAttachmentStatus(att.part_id, t(appStore.locale, 'previewingAttachment'));
 		try {
 			const { bytes } = await workspace.readerTransport.attachment({
 				account_id: currentMessage.account_id,
@@ -185,26 +267,27 @@
 				uid: currentMessage.uid,
 				part_id: att.part_id
 			});
-			// INVARIANT: A response from a dismissed message must never trigger a file download.
-			if (!active || identity !== targetIdentity) return;
-			releaseDownload?.();
-			releaseDownload = saveAttachment(bytes, att.filename);
-			attachmentStatus = {
-				...attachmentStatus,
-				[att.part_id]: t(appStore.locale, 'downloaded')
-			};
+			if (!active || identity !== targetIdentity) {
+				bytes.fill(0);
+				return;
+			}
+			closePreview();
+			const preview = createEphemeralPreview(bytes, att);
+			currentPreviewRef = preview;
+			activePreview = preview;
+			previewAttachmentMeta = att;
+			setAttachmentStatus(att.part_id, null);
 		} catch (err: unknown) {
 			if (active && identity === targetIdentity) {
-				attachmentStatus = {
-					...attachmentStatus,
-					[att.part_id]:
-						err === 'Unsupported'
-							? t(appStore.locale, 'attachmentUnavailableOffline')
-							: 'Download failed. Please try again.'
-				};
+				setAttachmentStatus(
+					att.part_id,
+					err === 'Unsupported'
+						? t(appStore.locale, 'attachmentUnavailableOffline')
+						: t(appStore.locale, 'previewAttachmentError')
+				);
 			}
 		} finally {
-			if (active && identity === targetIdentity) fetchingPartId = null;
+			if (active && identity === targetIdentity) previewingPartId = null;
 		}
 	}
 </script>
@@ -353,30 +436,61 @@
 							</div>
 							<div class="flex flex-col gap-2">
 								{#each detail.attachments_meta as att (att.part_id)}
-									{@const fetching = fetchingPartId === att.part_id}
+									{@const filename = safeFilename(att.filename)}
+									{@const saving = savingPartId === att.part_id}
+									{@const previewing = previewingPartId === att.part_id}
+									{@const previewSupported = canPreviewAttachment(att)}
 									{@const status = attachmentStatus[att.part_id]}
-									<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-separator bg-field px-3 py-2 text-xs">
-										<div class="flex min-w-0 items-center gap-2">
-											<span class="truncate font-medium text-foreground">
-												{safeFilename(att.filename)}
-											</span>
-											<span class="text-secondary">·</span>
-											<span class="font-mono text-[11px] text-secondary">{att.mime_type}</span>
-											<span class="text-secondary">·</span>
-											<span class="font-mono text-[11px] tabular-nums text-secondary">
-												{formatBytes(att.size_bytes)}
-											</span>
+									<div class="flex flex-col gap-1.5 rounded-md border border-separator bg-field px-3 py-2 text-xs">
+										<div class="flex flex-wrap items-center justify-between gap-2">
+											<div class="flex min-w-0 items-center gap-2">
+												<span class="truncate font-medium text-foreground">
+													{filename}
+												</span>
+												<span class="text-secondary">·</span>
+												<span class="font-mono text-[11px] text-secondary">{att.mime_type}</span>
+												<span class="text-secondary">·</span>
+												<span class="font-mono text-[11px] tabular-nums text-secondary">
+													{formatBytes(att.size_bytes)}
+												</span>
+											</div>
+											<div class="flex items-center gap-2">
+												<button
+													type="button"
+													disabled={previewing || !previewSupported}
+													aria-label={`Preview ${filename}`}
+													title={!previewSupported
+														? t(appStore.locale, 'previewAttachmentUnsupported')
+														: undefined}
+													onclick={() => void previewAttachment(att)}
+													class="flex min-h-11 items-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1 text-xs font-medium text-foreground transition-transform duration-100 ease-out hover:bg-selection-soft active:scale-[0.98] disabled:opacity-50 md:min-h-8"
+												>
+													<Eye class="h-3.5 w-3.5" />
+													<span>
+														{previewing
+															? t(appStore.locale, 'previewingAttachment')
+															: t(appStore.locale, 'previewAttachment')}
+													</span>
+												</button>
+												<button
+													type="button"
+													disabled={saving}
+													aria-label={`Save As ${filename}`}
+													onclick={() => void saveAttachmentAs(att)}
+													class="flex min-h-11 items-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1 text-xs font-medium text-foreground transition-transform duration-100 ease-out hover:bg-selection-soft active:scale-[0.98] disabled:opacity-50 md:min-h-8"
+												>
+													<Download class="h-3.5 w-3.5" />
+													<span>
+														{saving
+															? t(appStore.locale, 'savingAttachment')
+															: t(appStore.locale, 'saveAttachmentAs')}
+													</span>
+												</button>
+											</div>
 										</div>
-										<button
-											type="button"
-											disabled={fetching}
-											aria-label={`Download ${safeFilename(att.filename)}`}
-											onclick={() => void fetchAttachment(att)}
-											class="flex min-h-11 items-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1 text-xs font-medium text-foreground transition-transform duration-100 ease-out hover:bg-selection-soft active:scale-[0.98] disabled:opacity-50 md:min-h-8"
-										>
-											<Download class="h-3.5 w-3.5" />
-											<span>{status || t(appStore.locale, 'fetchAttachment')}</span>
-										</button>
+										{#if status}
+											<p role="status" class="text-[11px] text-secondary">{status}</p>
+										{/if}
 									</div>
 								{/each}
 							</div>
@@ -386,4 +500,12 @@
 			</div>
 		{/key}
 	{/if}
+	<WdgAttachmentPreviewModal
+		preview={activePreview}
+		onClose={closePreview}
+		onSaveAs={previewAttachmentMeta
+			? () => previewAttachmentMeta && void saveAttachmentAs(previewAttachmentMeta)
+			: undefined}
+		saving={previewAttachmentMeta !== null && savingPartId === previewAttachmentMeta.part_id}
+	/>
 </div>

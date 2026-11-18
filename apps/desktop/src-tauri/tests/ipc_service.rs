@@ -2466,3 +2466,161 @@ async fn quota_refresh_infers_badge_and_manual_override_persists_additively() {
     // Extras are additive: the account config still deserializes unchanged.
     assert_eq!(service.list_accounts().await.unwrap(), vec![cfg]);
 }
+
+#[tokio::test]
+async fn attachment_save_streams_to_disk_rejects_symlinks_and_enforces_caps() {
+    use triage_mail_desktop_lib::service::{
+        MAX_PREVIEW_ATTACHMENT_BYTES, MAX_SAVE_ATTACHMENT_BYTES,
+    };
+
+    let remote = Arc::new(FakeRemote::default());
+    let (service, store, _) = setup(remote.clone());
+    seed(&service, &store).await;
+
+    let mut oversized_preview = record();
+    oversized_preview.id = "m-2".into();
+    oversized_preview.uid = 2;
+    oversized_preview.message_id_header = Some("<preview-cap@example.com>".into());
+    oversized_preview.attachments = vec![
+        AttachmentRecord {
+            id: "a-2".into(),
+            message_id: "m-2".into(),
+            part_id: "2".into(),
+            filename: "../invoice.pdf".into(),
+            content_type: "application/pdf".into(),
+            size_bytes: (MAX_PREVIEW_ATTACHMENT_BYTES + 1) as i64,
+            content_id: None,
+            is_inline: false,
+        },
+        AttachmentRecord {
+            id: "a-3".into(),
+            message_id: "m-2".into(),
+            part_id: "3".into(),
+            filename: "huge.bin".into(),
+            content_type: "application/octet-stream".into(),
+            size_bytes: (MAX_SAVE_ATTACHMENT_BYTES + 1) as i64,
+            content_id: None,
+            is_inline: false,
+        },
+    ];
+    let mut msg3 = record();
+    msg3.id = "m-3".into();
+    msg3.uid = 3;
+    msg3.message_id_header = Some("<save-ok@example.com>".into());
+    msg3.attachments = vec![AttachmentRecord {
+        id: "a-4".into(),
+        message_id: "m-3".into(),
+        part_id: "2".into(),
+        filename: "report.pdf".into(),
+        content_type: "application/pdf".into(),
+        size_bytes: 3,
+        content_id: None,
+        is_inline: false,
+    }];
+    store.insert_message(&oversized_preview).unwrap();
+    store.insert_message(&msg3).unwrap();
+
+    // Preview (cmd_fetch_attachment) rejects payloads > 10 MiB before network call.
+    assert_eq!(
+        service
+            .fetch_attachment(AttachmentRequestDto {
+                account_id: "acct-1".into(),
+                folder: "INBOX".into(),
+                uid: 2,
+                part_id: "2".into(),
+            })
+            .await,
+        Err(IpcError::InvalidRequest)
+    );
+    assert_eq!(remote.attachments.load(Ordering::SeqCst), 0);
+
+    // Save-As allows > 10 MiB up to 50 MiB, and rejects > 50 MiB before dialog/network.
+    assert_eq!(
+        service
+            .prepare_attachment_save(&AttachmentRequestDto {
+                account_id: "acct-1".into(),
+                folder: "INBOX".into(),
+                uid: 2,
+                part_id: "2".into(),
+            })
+            .await
+            .unwrap(),
+        "../invoice.pdf"
+    );
+    assert_eq!(
+        service
+            .prepare_attachment_save(&AttachmentRequestDto {
+                account_id: "acct-1".into(),
+                folder: "INBOX".into(),
+                uid: 2,
+                part_id: "3".into(),
+            })
+            .await,
+        Err(IpcError::InvalidRequest)
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let canonical_dir = dir.path().canonicalize().unwrap();
+    let save_req = AttachmentRequestDto {
+        account_id: "acct-1".into(),
+        folder: "INBOX".into(),
+        uid: 3,
+        part_id: "2".into(),
+    };
+
+    // Reject traversal and directories before network fetch.
+    assert_eq!(
+        service
+            .save_attachment_to_path(save_req.clone(), canonical_dir.join("../escape.pdf"))
+            .await,
+        Err(IpcError::InvalidRequest)
+    );
+    assert_eq!(
+        service
+            .save_attachment_to_path(save_req.clone(), canonical_dir.clone())
+            .await,
+        Err(IpcError::InvalidRequest)
+    );
+    assert_eq!(remote.attachments.load(Ordering::SeqCst), 0);
+
+    #[cfg(unix)]
+    {
+        let real = canonical_dir.join("existing.pdf");
+        std::fs::write(&real, b"keep-me").unwrap();
+        let symlink = canonical_dir.join("link.pdf");
+        std::os::unix::fs::symlink(&real, &symlink).unwrap();
+        assert_eq!(
+            service
+                .save_attachment_to_path(save_req.clone(), symlink)
+                .await,
+            Err(IpcError::InvalidRequest)
+        );
+        assert_eq!(std::fs::read(&real).unwrap(), b"keep-me");
+        let linked_dir = canonical_dir.join("linked-dir");
+        std::os::unix::fs::symlink(&canonical_dir, &linked_dir).unwrap();
+        assert_eq!(
+            service
+                .save_attachment_to_path(save_req.clone(), linked_dir.join("out.pdf"))
+                .await,
+            Err(IpcError::InvalidRequest)
+        );
+        assert_eq!(remote.attachments.load(Ordering::SeqCst), 0);
+    }
+
+    // Valid target saves bytes directly to disk and overwrites regular files safely.
+    let target = canonical_dir.join("report.pdf");
+    let saved = service
+        .save_attachment_to_path(save_req.clone(), target.clone())
+        .await
+        .unwrap();
+    assert_eq!(saved.bytes_written, 3);
+    assert_eq!(std::fs::read(&target).unwrap(), vec![1, 2, 3]);
+    assert_eq!(remote.attachments.load(Ordering::SeqCst), 1);
+
+    // No staging temp files remain in the target directory.
+    let entries: Vec<_> = std::fs::read_dir(&canonical_dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(!entries.iter().any(|name| name.starts_with(".triage-att-")));
+}

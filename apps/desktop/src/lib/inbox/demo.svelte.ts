@@ -412,6 +412,23 @@ export function createDemoBackend(): DemoBackend {
 			const sample = new TextEncoder().encode(`Synthetic attachment part ${req.part_id}\n`);
 			return { bytes: Array.from(sample) };
 		},
+		saveAttachment: async (req) => {
+			const msg = messages.find((m) => m.account_id === req.account_id);
+			if (msg) {
+				messages = messages.map((m) =>
+					m.id === msg.id
+						? {
+								...m,
+								attachments_meta: m.attachments_meta.map((a) =>
+									a.id === req.part_id ? { ...a, downloaded: true } : a
+								)
+							}
+						: m
+				);
+			}
+			const sample = new TextEncoder().encode(`Synthetic attachment part ${req.part_id}\n`);
+			return { bytes_written: sample.byteLength };
+		},
 		summarize: async (messageId) => {
 			const msg = messages.find((m) => m.id === messageId);
 			if (!msg) return 'Local Summary: Message unavailable.';

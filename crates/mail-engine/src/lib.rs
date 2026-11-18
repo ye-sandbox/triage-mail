@@ -97,6 +97,8 @@ pub enum EngineError {
     MimeParse(String),
     #[error("RFC 8058 One-Click Unsubscribe failed: {0}")]
     UnsubscribeFailed(String),
+    #[error("attachment exceeds maximum allowed size of {max_bytes} bytes")]
+    AttachmentTooLarge { max_bytes: usize },
 }
 
 impl EngineError {
@@ -145,7 +147,10 @@ impl EngineError {
                     None
                 }
             }
-            Self::Vault(_) | Self::MimeParse(_) | Self::UnsubscribeFailed(_) => None,
+            Self::Vault(_)
+            | Self::MimeParse(_)
+            | Self::UnsubscribeFailed(_)
+            | Self::AttachmentTooLarge { .. } => None,
         }
     }
 }

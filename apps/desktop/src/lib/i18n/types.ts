@@ -381,5 +381,15 @@ export interface Translations {
 		resetCategory: string;
 		noDisplayableContent: string;
 		attachmentUnavailableOffline: string;
+		saveAttachmentAs: string;
+		savingAttachment: string;
+		savedAttachment: string;
+		saveAttachmentError: string;
+		previewAttachment: string;
+		previewingAttachment: string;
+		closePreview: string;
+		previewAttachmentUnsupported: string;
+		previewAttachmentError: string;
+		previewEphemeralNotice: string;
 	};
 }

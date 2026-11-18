@@ -41,12 +41,14 @@ export type AttachmentRequestDto = {
 	part_id: string;
 };
 export type AttachmentBytesDto = { bytes: number[] };
+export type AttachmentSavedDto = { bytes_written: number };
 import type { Category, CategoryMetadata } from '../categories/types';
 import type { AiSettings } from '../settings/types';
 
 export interface ReaderTransport {
 	body(messageId: string): Promise<MessageDetailDto>;
 	attachment(request: AttachmentRequestDto): Promise<AttachmentBytesDto>;
+	saveAttachment?(request: AttachmentRequestDto): Promise<AttachmentSavedDto | null>;
 	summarize?(messageId: string, consent: boolean, expected: AiSettings): Promise<string>;
 	categoryMetadata?(messageId: string): Promise<CategoryMetadata>;
 	correctCategory?(

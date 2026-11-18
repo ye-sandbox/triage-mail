@@ -1004,6 +1004,20 @@ pub async fn cmd_fetch_attachment(
 }
 
 #[tauri::command]
+pub async fn cmd_save_attachment(
+    state: State<'_, RuntimeState>,
+    request: AttachmentRequestDto,
+) -> Result<Option<AttachmentSavedDto>, IpcError> {
+    let service = state.initialize(None).await?;
+    let suggested_name = service.prepare_attachment_save(&request).await?;
+    let Some(path) = crate::file_picker::choose_save_with_name(Some(&suggested_name)).await? else {
+        return Ok(None);
+    };
+    let saved = service.save_attachment_to_path(request, path).await?;
+    Ok(Some(saved))
+}
+
+#[tauri::command]
 pub async fn cmd_subscribe_sync(
     state: State<'_, RuntimeState>,
     window: tauri::WebviewWindow,
@@ -1214,6 +1228,7 @@ pub fn run() {
             cmd_triage_action,
             cmd_get_message_body,
             cmd_fetch_attachment,
+            cmd_save_attachment,
             cmd_subscribe_sync
         ])
         .on_window_event(|window, event| {
@@ -1443,6 +1458,7 @@ mod tests {
                 cmd_get_message_body,
                 cmd_triage_action,
                 cmd_fetch_attachment,
+                cmd_save_attachment,
                 cmd_embedding_state,
                 cmd_rebuild_embeddings,
                 cmd_get_settings,
@@ -1735,6 +1751,14 @@ mod tests {
             invoke(
                 &window,
                 "cmd_fetch_attachment",
+                json!({"request":{"account_id":"acct-1","folder":"INBOX","uid":0,"part_id":"2"}})
+            ),
+            Err(json!("InvalidRequest"))
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "cmd_save_attachment",
                 json!({"request":{"account_id":"acct-1","folder":"INBOX","uid":0,"part_id":"2"}})
             ),
             Err(json!("InvalidRequest"))

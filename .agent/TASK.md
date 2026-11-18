@@ -7,23 +7,10 @@
 
 ## Active Task
 
-### Task [04.23]: Streaming Save-As & Safe Ephemeral Attachment Preview (`BODY.PEEK`)
-
-- **Status:** READY FOR PLANNING
-- **Priority:** 1 of 2 (Lazy Attachment UX & 100k+ Exact RAM Search — 2026-11-18)
-- **Systems Involved:** `apps/desktop/src-tauri/src/file_picker.rs`, `apps/desktop/src-tauri/src/service.rs`, `apps/desktop/src-tauri/src/runtime.rs`, `apps/desktop/src/lib/inbox/WdgMessageReader.svelte`, `apps/desktop/src/lib/reader/**`, `apps/desktop/src/lib/i18n/**`.
-- **Scope Summary:**
-  1. `[04.23.1]` `[BATCH: B1]` **Native Suggested-Filename Save Dialog & Rust Direct-to-Disk Write (`apps/desktop/src-tauri`):** Extend `file_picker` to pass sanitized `current_name` (`SaveFile`) and add additive `cmd_save_attachment(request: AttachmentRequestDto) -> Option<AttachmentSavedDto { bytes_written: u64 }>` that prompts for target path before network fetch, streams/fetches via `IMAP BODY.PEEK[part_id]` (50 MiB cap), validates non-symlink target safety, and writes directly from Rust to disk without serializing megabyte `Vec<u8>` JSON arrays over WebView IPC and without storing attachment bytes in SQLCipher. Cap `cmd_fetch_attachment` at 10 MiB strictly for ephemeral preview.
-  2. `[04.23.2]` `[BATCH: B2]` **Safe Ephemeral In-Memory Preview Modal & Reader Controls (`apps/desktop/src`):** Replace the `<a download>` blob workaround in `WdgMessageReader.svelte` with explicit **"Save As…"** and **"Preview"** controls. Support ephemeral preview ($\le 10$ MiB) only for safe allowlisted MIME types: raster images (`image/png`, `image/jpeg`, `image/webp`, `image/gif` — explicitly blocking `image/svg+xml`), plain text/structured text (`text/plain`, `text/csv`, `application/json`, `application/xml` read-only preformatted view), and `application/pdf` in an isolated frame, revoking `blob:` URLs and zeroing `Uint8Array` buffers immediately on close or message change.
-
----
-
-## Prioritized Queue (User-Selected — 2026-11-18)
-
 ### Task [90.6]: Zeroized In-Memory Exact `int8` Vector & Eligibility Accelerator (`100k+` Scale)
 
 - **Status:** READY FOR PLANNING
-- **Priority:** 2 of 2
+- **Priority:** 2 of 2 (Lazy Attachment UX & 100k+ Exact RAM Search — 2026-11-18)
 - **Systems Involved:** `crates/storage`, `apps/desktop/src-tauri`, `docs/performance`, `.agent/NOTES.md`.
 - **Scope Summary:**
   1. `[90.6.1]` `[BATCH: B1]` **Zeroized-on-Drop Contiguous `int8[384]` Arena & Exact Scoped Cosine Ranker (`crates/storage`):** Implement a 100% safe Rust (`#![deny(unsafe_code)]`), auto-vectorized contiguous RAM index (`RamVectorIndex`, ~38.8 MiB for 100k messages) with `Zeroize` wipe on drop/lock, generation-synchronized with SQLite vector writes/rebuilds, resolving the scoped vector latency bottleneck (`106–390ms` in `sqlite-vec` `vec0` over SQLCipher) without the recall loss proven in `docs/performance/binary-quantization.md` (`k-023`).
@@ -32,6 +19,23 @@
 ---
 
 ## Latest Completed Task
+
+### Task [04.23]: Streaming Save-As & Safe Ephemeral Attachment Preview (`BODY.PEEK`)
+
+- **Status:** DONE
+- **Priority:** 1 of 2 (Lazy Attachment UX & 100k+ Exact RAM Search — 2026-11-18)
+- **Systems Involved:** `crates/mail-engine`, `apps/desktop/src-tauri`, `apps/desktop/src/lib/reader`, `apps/desktop/src/lib/inbox`, `apps/desktop/src/lib/i18n`.
+- **Delivered:**
+  1. `[04.23.1]` Added bounded and streaming IMAP attachment primitives in `crates/mail-engine` (`protocol.rs`, `mutations.rs`, `lib.rs`): `EngineError::AttachmentTooLarge { max_bytes }`, `fetch_attachment_bytes_capped` / `fetch_attachment_checked_capped`, and `fetch_attachment_to_writer` / `stream_attachment_checked` copying literal bytes in 16 KiB stack chunks into `&mut dyn std::io::Write` with pre-allocation literal size validation and offline `tokio::io::duplex` unit tests.
+  2. `[04.23.2]` Added `file_picker::sanitize_suggested_filename` and `choose_save_with_name(suggested_name)` (`current_name` on `org.freedesktop.portal.FileChooser.SaveFile`), `AttachmentSavedDto`, `RemoteAttachmentTarget` + `RemoteMail::save_attachment_to_writer`, 10 MiB preview cap on `DesktopService::fetch_attachment`, `prepare_attachment_save` (50 MiB cap + metadata/`LocalArchive` check before prompting) and `save_attachment_to_path` (canonical parent & `symlink_metadata` target validation, `create_new` `0o600` staging file, `sync_all`, atomic rename), and additive `cmd_save_attachment` IPC with `ipc_service` integration tests.
+  3. `[04.23.3]` Updated `tauri.conf.json` CSP (`img-src 'self' data: blob:; frame-src 'self' blob:;`), added `saveAttachment` to `ReaderTransport` (`transport.ts`, `demo.svelte.ts`), built `reader/preview.ts` (10 MiB cap, strict MIME allowlist blocking `image/svg+xml`, immediate `URL.revokeObjectURL` and `Uint8Array.fill(0)`), built `WdgAttachmentPreviewModal.svelte` (`bits-ui` `Dialog`), replaced `<a download>` in `WdgMessageReader.svelte` / `reader/download.ts` with explicit **Preview** and **Save As…** controls, added EN/PT-BR i18n strings, and updated Vitest coverage (`reader.svelte.test.ts`, `transport.test.ts`).
+- **Validation:** `cargo fmt --all -- --check`, `cargo check --workspace`, `cargo check --no-default-features -p triage-mail-desktop`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (`mail-engine` 65 unit + 34 integration, `triage-mail-desktop` 52 unit + 35 integration) all exited 0; `pnpm --filter desktop check` passed (0 errors/warnings); `pnpm --filter desktop test` passed (31 files, 196 tests); `pnpm --filter desktop build` succeeded; `! grep -rn "export let" apps/desktop/src/` exited 0; `node scripts/ci-guard.mjs` (474 tracked text files, 0 findings) & `node --test scripts/ci-guard.test.mjs` (5 passed); `git diff --check` clean.
+- **Contracts:** `.agent/NOTES.md` (`Streaming Save-As & Safe Ephemeral Attachment Preview ([04.23])`).
+- **Next:** Promoted `[90.6]` (`READY FOR PLANNING`).
+
+---
+
+## Previous Completed Tasks
 
 ### Task [04.22]: System Tray, Background Sync Lifecycle & Actionable Desktop Notifications
 
@@ -47,8 +51,6 @@
 - **Next:** Promoted `[04.23]` (`READY FOR PLANNING`), followed by `[90.6]`.
 
 ---
-
-## Previous Completed Tasks
 
 ### Task [04.21]: Account Subscription Badges & Automatic IMAP Quota Detection
 

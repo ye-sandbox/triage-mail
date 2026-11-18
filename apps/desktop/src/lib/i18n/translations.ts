@@ -599,7 +599,18 @@ export const translations: Record<SupportedLocale, Translations> = {
 			resetCategory: 'Reset to automatic',
 			noDisplayableContent: 'This message has no displayable content.',
 			attachmentUnavailableOffline:
-				'Offline archive — attachment binary is not stored for on-demand fetch.'
+				'Offline archive — attachment binary is not stored for on-demand fetch.',
+			saveAttachmentAs: 'Save As…',
+			savingAttachment: 'Saving…',
+			savedAttachment: 'Saved',
+			saveAttachmentError: 'Save failed. Please try again.',
+			previewAttachment: 'Preview',
+			previewingAttachment: 'Opening preview…',
+			closePreview: 'Close preview',
+			previewAttachmentUnsupported:
+				'Preview is only supported for safe images, text, and PDFs up to 10 MiB.',
+			previewAttachmentError: 'Preview failed. Save the file instead.',
+			previewEphemeralNotice: 'Ephemeral in-memory preview — cleared immediately on close.'
 		}
 	},
 	'pt-BR': {
@@ -1202,7 +1213,19 @@ export const translations: Record<SupportedLocale, Translations> = {
 			resetCategory: 'Restaurar automático',
 			noDisplayableContent: 'Esta mensagem não possui conteúdo exibível.',
 			attachmentUnavailableOffline:
-				'Arquivo offline — o binário do anexo não está disponível para busca sob demanda.'
+				'Arquivo offline — o binário do anexo não está disponível para busca sob demanda.',
+			saveAttachmentAs: 'Salvar como…',
+			savingAttachment: 'Salvando…',
+			savedAttachment: 'Salvo',
+			saveAttachmentError: 'Falha ao salvar. Tente novamente.',
+			previewAttachment: 'Visualizar',
+			previewingAttachment: 'Abrindo visualização…',
+			closePreview: 'Fechar visualização',
+			previewAttachmentUnsupported:
+				'A visualização é suportada apenas para imagens seguras, texto e PDFs de até 10 MiB.',
+			previewAttachmentError: 'Falha ao visualizar. Salve o arquivo em vez disso.',
+			previewEphemeralNotice:
+				'Visualização efêmera em memória — apagada imediatamente ao fechar.'
 		}
 	}
 };

@@ -15,7 +15,7 @@ use crate::{
     settings::IncomingApiKey,
 };
 
-fn local_path(path: &Path) -> Result<(), IpcError> {
+pub(crate) fn local_path(path: &Path) -> Result<(), IpcError> {
     if !path.is_absolute()
         || path.components().any(|c| {
             matches!(

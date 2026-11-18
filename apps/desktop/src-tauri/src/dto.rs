@@ -221,6 +221,11 @@ pub struct AttachmentBytesDto {
     pub bytes: Vec<u8>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AttachmentSavedDto {
+    pub bytes_written: u64,
+}
+
 /// Mailbox folder metadata returned to the UI (`cmd_list_folders`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FolderDto {

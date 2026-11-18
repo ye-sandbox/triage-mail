@@ -674,11 +674,119 @@ impl DesktopService {
         self: &Arc<Self>,
         request: AttachmentRequestDto,
     ) -> Result<AttachmentBytesDto, IpcError> {
+        let (config, expected_uidvalidity, _) = self
+            .validate_attachment_request(&request, MAX_PREVIEW_ATTACHMENT_BYTES)
+            .await?;
+        let target = crate::remote::RemoteAttachmentTarget {
+            folder: &request.folder,
+            uid: request.uid,
+            part: &request.part_id,
+            expected_uidvalidity,
+        };
+        let bytes = tokio::time::timeout(
+            std::time::Duration::from_secs(120),
+            self.remote
+                .fetch_attachment_capped(&config, target, MAX_PREVIEW_ATTACHMENT_BYTES),
+        )
+        .await
+        .map_err(|_| IpcError::RemoteUnavailable)??;
+        Ok(AttachmentBytesDto { bytes })
+    }
+
+    /// Validates attachment metadata, UIDVALIDITY, account mode, and 50 MiB cap before
+    /// prompting the user with a native save dialog, returning the raw suggested filename.
+    pub async fn prepare_attachment_save(
+        self: &Arc<Self>,
+        request: &AttachmentRequestDto,
+    ) -> Result<String, IpcError> {
+        let (_, _, filename) = self
+            .validate_attachment_request(request, MAX_SAVE_ATTACHMENT_BYTES)
+            .await?;
+        Ok(filename)
+    }
+
+    /// Streams an attachment directly via `BODY.PEEK[part_id]` into a validated non-symlink
+    /// local file path without buffering megabyte payloads across IPC or writing to SQLCipher.
+    pub async fn save_attachment_to_path(
+        self: &Arc<Self>,
+        request: AttachmentRequestDto,
+        path: std::path::PathBuf,
+    ) -> Result<AttachmentSavedDto, IpcError> {
+        let (config, expected_uidvalidity, _) = self
+            .validate_attachment_request(&request, MAX_SAVE_ATTACHMENT_BYTES)
+            .await?;
+
+        let (stage_path, stage_file) = tokio::task::spawn_blocking({
+            let path = path.clone();
+            move || prepare_attachment_stage_file(&path)
+        })
+        .await
+        .map_err(|_| IpcError::Internal)??;
+
+        let mut writer = std::io::BufWriter::with_capacity(64 * 1024, stage_file);
+        let target = crate::remote::RemoteAttachmentTarget {
+            folder: &request.folder,
+            uid: request.uid,
+            part: &request.part_id,
+            expected_uidvalidity,
+        };
+        let stream_result = tokio::time::timeout(
+            std::time::Duration::from_secs(300),
+            self.remote.save_attachment_to_writer(
+                &config,
+                target,
+                MAX_SAVE_ATTACHMENT_BYTES,
+                &mut writer,
+            ),
+        )
+        .await;
+
+        let bytes_written = match stream_result {
+            Ok(Ok(written)) => written,
+            Ok(Err(err)) => {
+                drop(writer);
+                let _ = std::fs::remove_file(&stage_path);
+                return Err(err);
+            }
+            Err(_) => {
+                drop(writer);
+                let _ = std::fs::remove_file(&stage_path);
+                return Err(IpcError::RemoteUnavailable);
+            }
+        };
+
+        tokio::task::spawn_blocking(move || -> Result<(), IpcError> {
+            use std::io::Write;
+            let result = (|| -> Result<(), IpcError> {
+                writer.flush().map_err(|_| IpcError::StorageUnavailable)?;
+                let file = writer
+                    .into_inner()
+                    .map_err(|_| IpcError::StorageUnavailable)?;
+                file.sync_all().map_err(|_| IpcError::StorageUnavailable)?;
+                drop(file);
+                commit_attachment_stage_file(&stage_path, &path)
+            })();
+            if result.is_err() {
+                let _ = std::fs::remove_file(&stage_path);
+            }
+            result
+        })
+        .await
+        .map_err(|_| IpcError::Internal)??;
+
+        Ok(AttachmentSavedDto { bytes_written })
+    }
+
+    async fn validate_attachment_request(
+        self: &Arc<Self>,
+        request: &AttachmentRequestDto,
+        max_bytes: usize,
+    ) -> Result<(AccountConfigDto, u32, String), IpcError> {
         if request.uid == 0 || !valid_folder(&request.folder) || !valid_part(&request.part_id) {
             return Err(IpcError::InvalidRequest);
         }
         let check = request.clone();
-        let expected_uidvalidity = self
+        let (expected_uidvalidity, filename) = self
             .blocking(move |s| {
                 let id = s
                     .store
@@ -690,38 +798,27 @@ impl DesktopService {
                     .get_message_by_id(&id)
                     .map_err(storage_error)?
                     .ok_or(IpcError::NotFound)?;
-                if !record
+                let attachment = record
                     .attachments
                     .iter()
-                    .any(|a| a.part_id == check.part_id)
-                {
-                    return Err(IpcError::NotFound);
+                    .find(|a| a.part_id == check.part_id)
+                    .ok_or(IpcError::NotFound)?;
+                if attachment.size_bytes < 0 || attachment.size_bytes > max_bytes as i64 {
+                    return Err(IpcError::InvalidRequest);
                 }
                 let state = s
                     .store
                     .get_folder_sync_state(&check.account_id, &check.folder)
                     .map_err(storage_error)?
                     .ok_or(IpcError::StaleMessage)?;
-                Ok(state.uidvalidity)
+                Ok((state.uidvalidity, attachment.filename.clone()))
             })
             .await?;
-        let config = self.account(request.account_id).await?;
+        let config = self.account(request.account_id.clone()).await?;
         if config.auth_method == AuthMethod::LocalArchive {
             return Err(IpcError::Unsupported);
         }
-        let bytes = tokio::time::timeout(
-            std::time::Duration::from_secs(120),
-            self.remote.fetch_attachment(
-                &config,
-                &request.folder,
-                request.uid,
-                &request.part_id,
-                expected_uidvalidity,
-            ),
-        )
-        .await
-        .map_err(|_| IpcError::RemoteUnavailable)??;
-        Ok(AttachmentBytesDto { bytes })
+        Ok((config, expected_uidvalidity, filename))
     }
 
     pub async fn triage_action(
@@ -1022,4 +1119,57 @@ impl Drop for StoredOAuthClient {
         self.client_id.zeroize();
         self.client_secret.zeroize();
     }
+}
+
+pub const MAX_PREVIEW_ATTACHMENT_BYTES: usize = 10 * 1024 * 1024;
+pub const MAX_SAVE_ATTACHMENT_BYTES: usize = 50 * 1024 * 1024;
+
+fn validate_save_target_path(path: &std::path::Path) -> Result<&std::path::Path, IpcError> {
+    crate::backup::local_path(path)?;
+    if path.file_name().is_none() {
+        return Err(IpcError::InvalidRequest);
+    }
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) => {
+            if meta.file_type().is_symlink() || !meta.is_file() {
+                return Err(IpcError::InvalidRequest);
+            }
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err(IpcError::InvalidRequest),
+    }
+    path.parent().ok_or(IpcError::InvalidRequest)
+}
+
+fn prepare_attachment_stage_file(
+    target: &std::path::Path,
+) -> Result<(std::path::PathBuf, std::fs::File), IpcError> {
+    let parent = validate_save_target_path(target)?;
+    let stage_path = parent.join(format!(
+        ".triage-att-{}.part",
+        vault::backup::random_id().map_err(|_| IpcError::Internal)?
+    ));
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let file = options
+        .open(&stage_path)
+        .map_err(|_| IpcError::StorageUnavailable)?;
+    Ok((stage_path, file))
+}
+
+fn commit_attachment_stage_file(
+    stage_path: &std::path::Path,
+    target: &std::path::Path,
+) -> Result<(), IpcError> {
+    let parent = validate_save_target_path(target)?;
+    std::fs::rename(stage_path, target).map_err(|_| IpcError::StorageUnavailable)?;
+    if let Ok(dir) = std::fs::File::open(parent) {
+        let _ = dir.sync_all();
+    }
+    Ok(())
 }

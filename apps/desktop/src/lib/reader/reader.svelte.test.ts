@@ -7,7 +7,13 @@ import type { MessageRowDto } from '../inbox/types';
 import type { CategoryMetadata } from '../categories/types';
 import type { Settings, SettingsTransport } from '../settings/types';
 import type { MessageDetailDto, ReaderTransport } from './types';
-import { safeFilename, saveAttachment } from './download';
+import { safeFilename } from './download';
+import {
+	MAX_PREVIEW_BYTES,
+	canPreviewAttachment,
+	classifyPreviewMime,
+	createEphemeralPreview
+} from './preview';
 
 const row = (id: string): MessageRowDto => ({
 	id,
@@ -58,7 +64,12 @@ function deferred<T>() {
 function setup(readerOverrides: Partial<ReaderTransport> = {}, aiEnabled = false) {
 	const body = vi.fn<ReaderTransport['body']>();
 	const attachment = vi.fn<ReaderTransport['attachment']>().mockResolvedValue({ bytes: [1, 2, 3] });
-	const summarize = vi.fn<NonNullable<ReaderTransport['summarize']>>().mockResolvedValue('Concise local summary.');
+	const saveAttachment = vi
+		.fn<NonNullable<ReaderTransport['saveAttachment']>>()
+		.mockResolvedValue({ bytes_written: 3 });
+	const summarize = vi
+		.fn<NonNullable<ReaderTransport['summarize']>>()
+		.mockResolvedValue('Concise local summary.');
 	const categoryMetadata = vi
 		.fn<NonNullable<ReaderTransport['categoryMetadata']>>()
 		.mockResolvedValue({
@@ -123,6 +134,7 @@ function setup(readerOverrides: Partial<ReaderTransport> = {}, aiEnabled = false
 		readerTransport: {
 			body,
 			attachment,
+			saveAttachment,
 			summarize,
 			categoryMetadata,
 			correctCategory,
@@ -147,6 +159,7 @@ function setup(readerOverrides: Partial<ReaderTransport> = {}, aiEnabled = false
 		render,
 		body,
 		attachment,
+		saveAttachment,
 		summarize,
 		settingsTransport
 	};
@@ -156,6 +169,7 @@ afterEach(() => {
 	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
 	vi.useRealTimers();
+	document.body.innerHTML = '';
 });
 
 describe('UI v2 message reader (WdgMessageReader)', () => {
@@ -254,12 +268,137 @@ describe('UI v2 message reader (WdgMessageReader)', () => {
 		target.remove();
 	});
 
-	it('downloads only on click, rejects duplicate clicks, and releases its object URL', async () => {
-		const { inbox, target, render, body, attachment } = setup();
+	it('saves directly to disk on Save As click, rejects duplicate clicks, and handles cancel cleanly', async () => {
+		const { inbox, target, render, body, saveAttachment, attachment } = setup();
 		body.mockResolvedValue(detail('first'));
-		const pending = deferred<{ bytes: number[] }>();
-		attachment.mockReturnValue(pending.promise);
-		const create = vi.fn().mockReturnValue('blob:local');
+		const pending = deferred<{ bytes_written: number } | null>();
+		saveAttachment.mockReturnValueOnce(pending.promise).mockResolvedValueOnce(null);
+		const create = vi.fn().mockReturnValue('blob:unexpected');
+		vi.stubGlobal(
+			'URL',
+			Object.assign(class extends URL {}, {
+				createObjectURL: create,
+				revokeObjectURL: vi.fn()
+			})
+		);
+		const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click');
+		const component = render();
+		await vi.waitFor(() =>
+			expect(target.querySelector('[aria-label="Save As invoice.pdf"]')).not.toBeNull()
+		);
+		expect(saveAttachment).not.toHaveBeenCalled();
+		expect(attachment).not.toHaveBeenCalled();
+		const button = target.querySelector<HTMLButtonElement>('[aria-label="Save As invoice.pdf"]')!;
+		button.click();
+		button.click();
+		flushSync();
+		expect(saveAttachment).toHaveBeenCalledExactlyOnceWith({
+			account_id: 'local',
+			folder: 'INBOX',
+			uid: 1,
+			part_id: '2'
+		});
+		pending.resolve({ bytes_written: 3 });
+		await vi.waitFor(() => expect(target.textContent).toContain('Saved'));
+		expect(create).not.toHaveBeenCalled();
+		expect(anchorClick).not.toHaveBeenCalled();
+
+		// User cancelling native save dialog clears status cleanly with no error.
+		target.querySelector<HTMLButtonElement>('[aria-label="Save As invoice.pdf"]')!.click();
+		await vi.waitFor(() => expect(saveAttachment).toHaveBeenCalledTimes(2));
+		await vi.waitFor(() => expect(target.textContent).not.toContain('Saved'));
+		expect(target.textContent).not.toContain('Save failed');
+
+		await unmount(component);
+		inbox.dispose();
+		target.remove();
+	});
+
+	it('ignores a dismissed message save and redacts Save As failures', async () => {
+		const { inbox, target, render, body, saveAttachment } = setup();
+		body.mockResolvedValue(detail('first'));
+		const pending = deferred<{ bytes_written: number } | null>();
+		saveAttachment.mockRejectedValueOnce('private error').mockReturnValueOnce(pending.promise);
+		const component = render();
+		await vi.waitFor(() =>
+			expect(target.querySelector('[aria-label="Save As invoice.pdf"]')).not.toBeNull()
+		);
+		target.querySelector<HTMLButtonElement>('[aria-label="Save As invoice.pdf"]')!.click();
+		await vi.waitFor(() => expect(target.textContent).toContain('Save failed'));
+		expect(target.textContent).not.toContain('private error');
+		target.querySelector<HTMLButtonElement>('[aria-label="Save As invoice.pdf"]')!.click();
+		inbox.selectedId = null;
+		flushSync();
+		pending.resolve({ bytes_written: 1 });
+		await tick();
+		expect(target.querySelector('[aria-label="Save As invoice.pdf"]')).toBeNull();
+		await unmount(component);
+		inbox.dispose();
+		target.remove();
+	});
+
+	it('shows clear offline archive message when Save As returns Unsupported', async () => {
+		const { inbox, target, render, body, saveAttachment } = setup();
+		body.mockResolvedValue(detail('first'));
+		saveAttachment.mockRejectedValueOnce('Unsupported');
+		const component = render();
+		await vi.waitFor(() =>
+			expect(target.querySelector('[aria-label="Save As invoice.pdf"]')).not.toBeNull()
+		);
+		target.querySelector<HTMLButtonElement>('[aria-label="Save As invoice.pdf"]')!.click();
+		await vi.waitFor(() =>
+			expect(target.textContent).toContain(
+				'Offline archive — attachment binary is not stored for on-demand fetch.'
+			)
+		);
+		await unmount(component);
+		inbox.dispose();
+		target.remove();
+	});
+
+	it('previews allowlisted PDF/images/text ephemerally and revokes blob URLs on close and message switch', async () => {
+		const { inbox, secondRow, target, render, body, attachment } = setup();
+		const pdfDetail = detail('first');
+		pdfDetail.attachments_meta = [
+			...pdfDetail.attachments_meta,
+			{
+				part_id: '3',
+				filename: 'logo.svg',
+				mime_type: 'image/svg+xml',
+				size_bytes: 120,
+				content_id: null,
+				is_inline: false
+			},
+			{
+				part_id: '4',
+				filename: 'huge.png',
+				mime_type: 'image/png',
+				size_bytes: MAX_PREVIEW_BYTES + 1,
+				content_id: null,
+				is_inline: false
+			},
+			{
+				part_id: '5',
+				filename: 'notes.txt',
+				mime_type: 'text/plain; charset=utf-8',
+				size_bytes: 19,
+				content_id: null,
+				is_inline: false
+			},
+			{
+				part_id: '6',
+				filename: 'photo.png',
+				mime_type: 'image/png',
+				size_bytes: 4,
+				content_id: null,
+				is_inline: false
+			}
+		];
+		body.mockImplementation(async (id) => (id === 'first' ? pdfDetail : detail(id)));
+		const create = vi
+			.fn()
+			.mockReturnValueOnce('blob:pdf-preview')
+			.mockReturnValueOnce('blob:png-preview');
 		const revoke = vi.fn();
 		vi.stubGlobal(
 			'URL',
@@ -268,69 +407,74 @@ describe('UI v2 message reader (WdgMessageReader)', () => {
 				revokeObjectURL: revoke
 			})
 		);
-		const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+		const textBytes = Array.from(new TextEncoder().encode('Hello <script> text'));
+		const pdfBytes = [0x25, 0x50, 0x44, 0x46];
+		const pngBytes = [0x89, 0x50, 0x4e, 0x47];
+		attachment
+			.mockResolvedValueOnce({ bytes: pdfBytes })
+			.mockResolvedValueOnce({ bytes: textBytes })
+			.mockResolvedValueOnce({ bytes: pngBytes });
+
 		const component = render();
 		await vi.waitFor(() =>
-			expect(target.querySelector('[aria-label="Download invoice.pdf"]')).not.toBeNull()
+			expect(target.querySelector('[aria-label="Preview invoice.pdf"]')).not.toBeNull()
 		);
+
+		// SVG and > 10 MiB attachments have disabled Preview buttons and never hit IPC.
+		const svgPreviewBtn = target.querySelector<HTMLButtonElement>('[aria-label="Preview logo.svg"]')!;
+		const hugePreviewBtn = target.querySelector<HTMLButtonElement>('[aria-label="Preview huge.png"]')!;
+		expect(svgPreviewBtn.disabled).toBe(true);
+		expect(hugePreviewBtn.disabled).toBe(true);
+		svgPreviewBtn.click();
+		hugePreviewBtn.click();
 		expect(attachment).not.toHaveBeenCalled();
-		const button = target.querySelector<HTMLButtonElement>('[aria-label="Download invoice.pdf"]')!;
-		button.click();
-		button.click();
-		flushSync();
-		expect(attachment).toHaveBeenCalledExactlyOnceWith({
-			account_id: 'local',
-			folder: 'INBOX',
-			uid: 1,
-			part_id: '2'
-		});
-		pending.resolve({ bytes: [1, 2, 3] });
-		await vi.waitFor(() => expect(click).toHaveBeenCalledOnce());
-		expect(create).toHaveBeenCalledOnce();
-		await unmount(component);
-		inbox.dispose();
-		expect(revoke).toHaveBeenCalledWith('blob:local');
-		target.remove();
-	});
 
-	it('ignores a dismissed message download and redacts attachment failures', async () => {
-		const { inbox, target, render, body, attachment } = setup();
-		body.mockResolvedValue(detail('first'));
-		const pending = deferred<{ bytes: number[] }>();
-		const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-		attachment.mockRejectedValueOnce('private error').mockReturnValueOnce(pending.promise);
-		const component = render();
+		// 1) PDF preview renders isolated blob iframe and revokes on close.
+		target.querySelector<HTMLButtonElement>('[aria-label="Preview invoice.pdf"]')!.click();
 		await vi.waitFor(() =>
-			expect(target.querySelector('[aria-label="Download invoice.pdf"]')).not.toBeNull()
+			expect(document.body.querySelector('[data-testid="attachment-preview-dialog"]')).not.toBeNull()
 		);
-		target.querySelector<HTMLButtonElement>('[aria-label="Download invoice.pdf"]')!.click();
-		await vi.waitFor(() => expect(target.textContent).toContain('Download failed'));
-		expect(target.textContent).not.toContain('private error');
-		target.querySelector<HTMLButtonElement>('[aria-label="Download invoice.pdf"]')!.click();
-		inbox.selectedId = null;
-		flushSync();
-		pending.resolve({ bytes: [1] });
-		await tick();
-		expect(click).not.toHaveBeenCalled();
-		await unmount(component);
-		inbox.dispose();
-		target.remove();
-	});
+		const dialog = document.body.querySelector('[data-testid="attachment-preview-dialog"]')!;
+		const pdfFrame = dialog.querySelector('iframe')!;
+		expect(pdfFrame).not.toBeNull();
+		expect(pdfFrame.getAttribute('src')).toBe('blob:pdf-preview');
+		expect(pdfFrame.getAttribute('sandbox')).toBe('allow-scripts');
+		expect(pdfFrame.getAttribute('referrerpolicy')).toBe('no-referrer');
+		expect(pdfBytes.every((b) => b === 0)).toBe(true);
 
-	it('shows clear offline archive message when attachment download returns Unsupported', async () => {
-		const { inbox, target, render, body, attachment } = setup();
-		body.mockResolvedValue(detail('first'));
-		attachment.mockRejectedValueOnce('Unsupported');
-		const component = render();
+		document.body.querySelector<HTMLButtonElement>('[aria-label="Close preview"]')!.click();
+		flushSync();
+		expect(revoke).toHaveBeenCalledWith('blob:pdf-preview');
+		const closedDialog = document.body.querySelector('[data-testid="attachment-preview-dialog"]');
+		expect(closedDialog === null || closedDialog.getAttribute('data-state') === 'closed').toBe(true);
+		expect(document.body.querySelector('[data-testid="attachment-preview-dialog"] iframe')).toBeNull();
+
+		// 2) Text preview renders safe preformatted text with zeroed source bytes and no blob URL.
+		target.querySelector<HTMLButtonElement>('[aria-label="Preview notes.txt"]')!.click();
 		await vi.waitFor(() =>
-			expect(target.querySelector('[aria-label="Download invoice.pdf"]')).not.toBeNull()
+			expect(
+				document.body.querySelector('[data-testid="attachment-preview-dialog"] pre')?.textContent
+			).toBe('Hello <script> text')
 		);
-		target.querySelector<HTMLButtonElement>('[aria-label="Download invoice.pdf"]')!.click();
+		expect(create).toHaveBeenCalledTimes(1);
+		expect(textBytes.every((b) => b === 0)).toBe(true);
+		document.body.querySelector<HTMLButtonElement>('[aria-label="Close preview"]')!.click();
+		flushSync();
+
+		// 3) Raster PNG preview revokes blob URL immediately when switching messages.
+		target.querySelector<HTMLButtonElement>('[aria-label="Preview photo.png"]')!.click();
 		await vi.waitFor(() =>
-			expect(target.textContent).toContain(
-				'Offline archive — attachment binary is not stored for on-demand fetch.'
-			)
+			expect(
+				document.body
+					.querySelector('[data-testid="attachment-preview-dialog"] img')
+					?.getAttribute('src')
+			).toBe('blob:png-preview')
 		);
+		expect(pngBytes.every((b) => b === 0)).toBe(true);
+		inbox.selectedId = secondRow.id;
+		flushSync();
+		await vi.waitFor(() => expect(revoke).toHaveBeenCalledWith('blob:png-preview'));
+
 		await unmount(component);
 		inbox.dispose();
 		target.remove();
@@ -372,23 +516,47 @@ describe('UI v2 message reader (WdgMessageReader)', () => {
 	});
 });
 
-it('normalizes path/control filenames and revokes failed downloads', () => {
+it('normalizes filenames, enforces preview MIME/size allowlists, and wipes ephemeral buffers', () => {
 	expect(safeFilename('..\\folder/' + String.fromCodePoint(0x202e) + ' invoice?.pdf')).toBe(
 		'_ invoice_.pdf'
 	);
 	expect(safeFilename('../../..')).toBe('attachment');
+
+	expect(classifyPreviewMime('image/png')).toBe('image');
+	expect(classifyPreviewMime('IMAGE/JPEG; name=a.jpg')).toBe('image');
+	expect(classifyPreviewMime('image/webp')).toBe('image');
+	expect(classifyPreviewMime('image/gif')).toBe('image');
+	expect(classifyPreviewMime('image/svg+xml')).toBeNull();
+	expect(classifyPreviewMime('text/html')).toBeNull();
+	expect(classifyPreviewMime('application/octet-stream')).toBeNull();
+	expect(classifyPreviewMime('text/csv; charset=utf-8')).toBe('text');
+	expect(classifyPreviewMime('application/json')).toBe('text');
+	expect(classifyPreviewMime('application/xml')).toBe('text');
+	expect(classifyPreviewMime('application/pdf')).toBe('pdf');
+
+	expect(canPreviewAttachment({ mime_type: 'image/png', size_bytes: MAX_PREVIEW_BYTES })).toBe(true);
+	expect(canPreviewAttachment({ mime_type: 'image/png', size_bytes: MAX_PREVIEW_BYTES + 1 })).toBe(
+		false
+	);
+	expect(canPreviewAttachment({ mime_type: 'image/svg+xml', size_bytes: 16 })).toBe(false);
+
 	const revoke = vi.fn();
 	vi.stubGlobal(
 		'URL',
 		Object.assign(class extends URL {}, {
-			createObjectURL: () => 'blob:test',
+			createObjectURL: () => 'blob:ephemeral',
 			revokeObjectURL: revoke
 		})
 	);
-	vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {
-		throw new Error('Save failed');
+	const raw = new Uint8Array([1, 2, 3, 4]);
+	const handle = createEphemeralPreview(raw, {
+		filename: 'img.png',
+		mime_type: 'image/png',
+		size_bytes: 4
 	});
-	expect(() => saveAttachment([1], 'file')).toThrow('Save failed');
-	expect(revoke).toHaveBeenCalledWith('blob:test');
-	expect(document.querySelector('a[download]')).toBeNull();
+	expect(handle.blobUrl).toBe('blob:ephemeral');
+	handle.release();
+	handle.release();
+	expect(revoke).toHaveBeenCalledOnce();
+	expect(Array.from(raw)).toEqual([0, 0, 0, 0]);
 });

@@ -1,8 +1,8 @@
 //! Network operations are injectable so IPC tests never contact external services.
 use async_trait::async_trait;
 use mail_engine::mutations::{
-    execute_imap_mutation, fetch_attachment_checked, ImapMutation, ImapMutationRequest,
-    MutationError,
+    execute_imap_mutation, fetch_attachment_checked, fetch_attachment_checked_capped,
+    stream_attachment_checked, ImapMutation, ImapMutationRequest, MutationError,
 };
 use mail_engine::protocol::IdleWaitOutcome;
 use mail_engine::provider::{ProviderKind, SpecialFolderRole};
@@ -30,6 +30,14 @@ pub struct RemoteMutation {
 
 pub use mail_engine::mutations::MutationOutcome;
 
+#[derive(Debug, Clone, Copy)]
+pub struct RemoteAttachmentTarget<'a> {
+    pub folder: &'a str,
+    pub uid: u32,
+    pub part: &'a str,
+    pub expected_uidvalidity: u32,
+}
+
 #[async_trait]
 pub trait RemoteMail: Send + Sync {
     async fn fetch_attachment(
@@ -40,6 +48,41 @@ pub trait RemoteMail: Send + Sync {
         part: &str,
         expected_uidvalidity: u32,
     ) -> Result<Vec<u8>, IpcError>;
+    async fn fetch_attachment_capped(
+        &self,
+        config: &AccountConfigDto,
+        target: RemoteAttachmentTarget<'_>,
+        max_bytes: usize,
+    ) -> Result<Vec<u8>, IpcError> {
+        let bytes = self
+            .fetch_attachment(
+                config,
+                target.folder,
+                target.uid,
+                target.part,
+                target.expected_uidvalidity,
+            )
+            .await?;
+        if bytes.len() > max_bytes {
+            return Err(IpcError::InvalidRequest);
+        }
+        Ok(bytes)
+    }
+    async fn save_attachment_to_writer(
+        &self,
+        config: &AccountConfigDto,
+        target: RemoteAttachmentTarget<'_>,
+        max_bytes: usize,
+        writer: &mut (dyn std::io::Write + Send),
+    ) -> Result<u64, IpcError> {
+        let bytes = self
+            .fetch_attachment_capped(config, target, max_bytes)
+            .await?;
+        writer
+            .write_all(&bytes)
+            .map_err(|_| IpcError::StorageUnavailable)?;
+        Ok(bytes.len() as u64)
+    }
     async fn mutate(
         &self,
         config: &AccountConfigDto,
@@ -135,6 +178,46 @@ impl RemoteMail for NativeRemoteMail {
         fetch_attachment_checked(&mut session, folder, uid, part, expected_uidvalidity)
             .await
             .map_err(mutation_error)
+    }
+
+    async fn fetch_attachment_capped(
+        &self,
+        config: &AccountConfigDto,
+        target: RemoteAttachmentTarget<'_>,
+        max_bytes: usize,
+    ) -> Result<Vec<u8>, IpcError> {
+        let (mut session, _) = self.session(config).await?;
+        fetch_attachment_checked_capped(
+            &mut session,
+            target.folder,
+            target.uid,
+            target.part,
+            target.expected_uidvalidity,
+            max_bytes,
+        )
+        .await
+        .map_err(mutation_error)
+    }
+
+    async fn save_attachment_to_writer(
+        &self,
+        config: &AccountConfigDto,
+        target: RemoteAttachmentTarget<'_>,
+        max_bytes: usize,
+        writer: &mut (dyn std::io::Write + Send),
+    ) -> Result<u64, IpcError> {
+        let (mut session, _) = self.session(config).await?;
+        stream_attachment_checked(
+            &mut session,
+            target.folder,
+            target.uid,
+            target.part,
+            target.expected_uidvalidity,
+            max_bytes,
+            writer,
+        )
+        .await
+        .map_err(mutation_error)
     }
 
     async fn mutate(
