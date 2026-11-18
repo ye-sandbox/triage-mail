@@ -3,6 +3,22 @@ use rusqlite::{params, OptionalExtension, Transaction};
 
 use crate::{AccountRecord, SqliteMailStore, StorageError};
 
+/// Allow-listed additive keys stored inside `account_connections.config_json`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AccountConnectionExtra {
+    Quota,
+    BadgeOverride,
+}
+
+impl AccountConnectionExtra {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Quota => "quota",
+            Self::BadgeOverride => "badge_override",
+        }
+    }
+}
+
 fn query_error(e: rusqlite::Error) -> StorageError {
     StorageError::Query(e.to_string())
 }
@@ -91,6 +107,52 @@ impl SqliteMailStore {
         )
         .optional()
         .map_err(query_error)
+    }
+
+    /// Reads one allow-listed additive extra (`quota`, `badge_override`) from an account's
+    /// `config_json` as JSON text; `None` when the account or field is absent.
+    pub fn get_account_connection_extra(
+        &self,
+        account_id: &str,
+        key: AccountConnectionExtra,
+    ) -> Result<Option<String>, StorageError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StorageError::Query("storage lock unavailable".into()))?;
+        let path = format!("$.{}", key.as_str());
+        conn.query_row(
+            "SELECT json_extract(config_json, ?2) FROM account_connections WHERE account_id=?1",
+            params![account_id, path],
+            |r| r.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .map(Option::flatten)
+        .map_err(query_error)
+    }
+
+    /// Sets one allow-listed additive extra inside `config_json` without touching other keys.
+    /// Returns `false` when the account has no connection row.
+    // INVARIANT: Extras live additively in `config_json`; the schema version is unchanged and
+    // existing config deserialization ignores unknown keys.
+    pub fn set_account_connection_extra(
+        &self,
+        account_id: &str,
+        key: AccountConnectionExtra,
+        value_json: &str,
+    ) -> Result<bool, StorageError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StorageError::Query("storage lock unavailable".into()))?;
+        let path = format!("$.{}", key.as_str());
+        let changed = conn
+            .execute(
+                "UPDATE account_connections SET config_json=json_set(config_json, ?2, json(?3)) WHERE account_id=?1",
+                params![account_id, path, value_json],
+            )
+            .map_err(query_error)?;
+        Ok(changed > 0)
     }
 
     pub fn find_message_id(

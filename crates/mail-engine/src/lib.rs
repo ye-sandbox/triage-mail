@@ -24,6 +24,7 @@ pub mod mime_parser;
 pub mod mutations;
 pub mod protocol;
 pub mod provider;
+pub mod quota;
 pub mod sync;
 pub mod tls;
 pub mod unsubscribe;
@@ -57,6 +58,10 @@ pub type NativeSession =
     protocol::ImapSession<tokio_rustls::client::TlsStream<tokio::net::TcpStream>>;
 pub use provider::{
     classify_folder, is_gmail_virtual_all_mail, ProviderKind, ServerCapabilities, SpecialFolderRole,
+};
+pub use quota::{
+    infer_subscription_badge, parse_quota_line, AccountBadgeOverride, AccountPlanBadge,
+    AccountStorageQuota, MAX_CUSTOM_BADGE_CHARS,
 };
 pub use unsubscribe::{
     validate_rfc8058_descriptor, validate_rfc8058_uri, Rfc8058ClientConfig,

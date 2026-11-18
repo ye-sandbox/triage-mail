@@ -1,3 +1,4 @@
+import type { AccountSubscription, BadgeOverride } from './subscriptions';
 export type AuthMethod =
 	| 'AppPassword'
 	| 'ProtonBridgeLocal'
@@ -65,6 +66,8 @@ export interface AccountTransport {
 	): Promise<ConnectionTestResult>;
 	reauthorize?(reauthorization: Reauthorization, ready: () => void): Promise<string>;
 	diagnostics?(): Promise<Record<string, ConnectionDiagnosticCode>>;
+	subscriptions?(): Promise<Record<string, AccountSubscription>>;
+	setBadge?(accountId: string, override: BadgeOverride): Promise<AccountSubscription>;
 	chooseArchiveFile?(): Promise<string | null>;
 	importLocalArchive?(
 		path: string,

@@ -2,6 +2,7 @@
 	import { Archive, Inbox, Mail, Trash2 } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import { appStore } from '$lib/stores/app.svelte';
+	import WdgAccountPlanBadge from '$lib/onboarding/WdgAccountPlanBadge.svelte';
 	import type { FolderId, ScopeFilter } from '$lib/types';
 
 	type Props = {
@@ -28,6 +29,10 @@
 				<div class="flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium text-foreground">
 					<Mail class="h-3 w-3 shrink-0 text-secondary" />
 					<span class="truncate">{account.address}</span>
+					<WdgAccountPlanBadge
+						label={appStore.accountSubscriptions[account.account_id]?.effective_badge ?? null}
+						quota={appStore.accountSubscriptions[account.account_id]?.quota}
+					/>
 				</div>
 				{#each account.folders as folder (folder.id)}
 					{@const Icon = folderIcon(folder.id)}

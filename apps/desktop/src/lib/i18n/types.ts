@@ -149,6 +149,14 @@ export interface Translations {
 		reauthorizeSuccess: string;
 		reauthorizeError: string;
 		accountDiagnosticBanner: string;
+		planBadge: string;
+		planAuto: string;
+		planHidden: string;
+		planCustom: string;
+		planCustomLabel: string;
+		planApply: string;
+		planError: string;
+		storageUsage: string;
 	};
 	accountForm: {
 		discoveryIntro: string;

@@ -372,6 +372,12 @@
 				authorizing={session.accounts.authorizing}
 				reauthorizingAccountId={session.accounts.reauthorizingAccountId}
 				accountDiagnostics={session.accounts.accountDiagnostics}
+				subscriptions={session.accounts.subscriptions}
+				badgeError={session.accounts.badgeError}
+				onSetBadge={async (id, override) => {
+					await session.accounts.setBadge(id, override);
+					appStore.accountSubscriptions = { ...session.accounts.subscriptions };
+				}}
 				diagnostic={session.accounts.diagnostic}
 				error={session.accounts.error}
 				{avatarTransport}

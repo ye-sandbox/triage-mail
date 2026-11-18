@@ -1,5 +1,6 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import type { ConnectionDiagnosticCode, SyncProgressEvent } from '../inbox/types';
+import type { AccountSubscription } from './subscriptions';
 import type {
 	AccountTransport,
 	ConnectionTestResult,
@@ -39,6 +40,9 @@ export const nativeAccountTransport: AccountTransport = {
 		});
 	},
 	diagnostics: () => invoke<Record<string, ConnectionDiagnosticCode>>('cmd_account_diagnostics'),
+	subscriptions: () => invoke<Record<string, AccountSubscription>>('cmd_account_subscriptions'),
+	setBadge: (accountId, overrideMode) =>
+		invoke<AccountSubscription>('cmd_set_account_badge', { accountId, overrideMode }),
 	chooseArchiveFile: () => invoke<string | null>('cmd_choose_transfer_file', { save: false }),
 	importLocalArchive(path, emailDisplay, format, onProgress) {
 		let active = true;

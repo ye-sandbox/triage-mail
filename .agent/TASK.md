@@ -7,7 +7,30 @@
 
 ## Active Task
 
-*No prioritized active task.* All three tasks from the Email-Access Improvement Initiative (`[02.8]`, `[04.20]`, `[02.9]`) are complete; awaiting user selection from `Other Future Backlog / Ideas` or new priorities.
+### Task [04.21]: Account Subscription Badges & Automatic IMAP Quota Detection
+
+- **Status:** DONE
+- **Priority:** 1 (User-selected — 2026-11-17)
+- **Systems Involved:** `crates/mail-engine`, `crates/storage`, `apps/desktop/src-tauri`, `apps/desktop/src/lib/onboarding`, `apps/desktop/src/lib/shell`, `apps/desktop/src/lib/stores`, `apps/desktop/src/lib/i18n`.
+- **Problem:** Users managing multiple email accounts (especially multiple Google/Gmail accounts with different plans such as Free 15 GB, Google One 100/200 GB, Google AI Pro 2 TB, or Google AI Ultra 5 TB/30 TB+) have no visual indicator or storage quota telemetry in the sidebar or account list to distinguish subscribed accounts from free accounts. Inferring account-level subscriptions from email bodies risks false positives from marketing/forwarded emails, whereas IMAP `GETQUOTAROOT` (RFC 2087) provides an authoritative, zero-false-positive automatic signal directly from the server, complemented by a manual user badge override.
+- **Proposed Scope & Atomic Subtasks:**
+  1. `[04.21.1]` `[BATCH: B1]` **RFC 2087 IMAP `QUOTA` Parser, Automatic Tier Inference & Storage Persistence (`crates/mail-engine`, `crates/storage`):**
+     - Extend `ServerCapabilities` (`caps.quota` from `QUOTA` token) and `ImapSession::fetch_storage_quota(mailbox)` in `crates/mail-engine/src/protocol.rs` to execute `GETQUOTAROOT "INBOX"` and parse untagged `* QUOTA <root> (STORAGE <used_kib> <limit_kib>)` responses into `AccountStorageQuota { used_bytes: u64, limit_bytes: u64 }` (converting RFC 2087 1024-octet KiB blocks with checked arithmetic).
+     - Add deterministic `infer_subscription_badge(provider: ProviderKind, host: &str, quota: Option<AccountStorageQuota>) -> Option<AccountPlanBadge>` mapping Google/Gmail (`>= 5 TiB` $\rightarrow$ `Ultra`, `>= 500 GiB` $\rightarrow$ `Pro`, `> 20 GiB` $\rightarrow$ `One`) and generic IMAP quotas without any email-body heuristics.
+     - Persist per-account `quota` and manual `badge_override` (`Auto`, `Hidden`, `Preset(AccountPlanBadge)`, `Custom(String)`) additively inside `account_connections.config_json` in `crates/storage/src/desktop.rs` without altering `CURRENT_SCHEMA_VERSION = 11` or breaking existing `AccountConfigDto` / `AccountConnectionConfig` deserialization.
+  2. `[04.21.2]` `[BATCH: B2]` **Desktop Worker Quota Refresh & Additive Subscription IPC (`apps/desktop/src-tauri`):**
+     - Extend `RemoteMail` with best-effort `fetch_quota(&self, config: &AccountConfigDto) -> Result<Option<AccountStorageQuota>, IpcError>` and update the account sync worker to refresh and persist account storage quota automatically during folder discovery/sync (never failing message sync if a server omits `QUOTA`).
+     - Expose additive IPC commands `cmd_account_subscriptions() -> HashMap<String, AccountSubscriptionDto>` and `cmd_set_account_badge(accountId: String, override_mode: AccountBadgeOverrideDto) -> AccountSubscriptionDto` returning `{ account_id, effective_badge, badge_override, inferred_badge, quota }`.
+  3. `[04.21.3]` `[BATCH: B3]` **Sidebar Subscription Pills, Quota Bar & Manual Badge Override UI (`apps/desktop/src`):**
+     - Render compact, color-coded subscription badges (`ULTRA`, `PRO`, `ONE`, `WORKSPACE`, `PLUS`, or custom label) with storage quota tooltip next to accounts in `SidebarNavAccounts.svelte` and `WdgConnectedAccountList.svelte`.
+     - Add a discrete storage usage bar (`used / limit`) and inline **"Plan / Badge"** selector (`Auto (IMAP Quota)`, `ULTRA`, `PRO`, `ONE`, `WORKSPACE`, `PLUS`, `Custom`, `Hidden`) on each account card in `WdgConnectedAccountList.svelte` with full EN/PT-BR localization and unit tests.
+
+#### Completion (2026-11-17)
+
+- **Delivered:** RFC 2087 `GETQUOTAROOT` parsing and Google tier inference (`crates/mail-engine::quota`), additive quota/override persistence in `config_json` (`storage::desktop::AccountConnectionExtra`), throttled best-effort quota refresh during folder discovery, `cmd_account_subscriptions` / `cmd_set_account_badge`, sidebar and account-list subscription pills, quota bar and Plan / Badge selector (EN/PT-BR).
+- **Validation:** `cargo fmt --check`, `cargo check`, `cargo clippy -D warnings`, `cargo test --workspace` all exit 0; `pnpm --filter desktop check` 0 errors/warnings; `pnpm --filter desktop test` 31 files / 191 tests; `pnpm --filter desktop build` succeeded; `export let` invariant, `ci-guard` (464 files, 0 findings) and `git diff --check` clean. Prettier is not installed locally, so it was not run.
+- **Contracts:** `.agent/NOTES.md` (`Account Subscription Badges & IMAP Quota Detection ([04.21])`).
+- **Next:** No prioritized active task; awaiting user selection.
 
 ---
 

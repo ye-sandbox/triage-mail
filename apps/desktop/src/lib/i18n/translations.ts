@@ -148,7 +148,15 @@ export const translations: Record<SupportedLocale, Translations> = {
 				'OAuth tokens refreshed. Sync resumed without touching local mail.',
 			reauthorizeError:
 				'Reauthorization did not complete. Review the guidance below and try again.',
-			accountDiagnosticBanner: 'Connection attention required'
+			accountDiagnosticBanner: 'Connection attention required',
+			planBadge: 'Plan / Badge',
+			planAuto: 'Auto (IMAP Quota)',
+			planHidden: 'Hidden',
+			planCustom: 'Custom',
+			planCustomLabel: 'Custom label (max 12 characters)',
+			planApply: 'Apply',
+			planError: 'The badge could not be saved. Try again.',
+			storageUsage: 'Storage used'
 		},
 		accountForm: {
 			discoveryIntro:
@@ -743,7 +751,15 @@ export const translations: Record<SupportedLocale, Translations> = {
 				'Tokens OAuth renovados. A sincronização foi retomada sem alterar os e-mails locais.',
 			reauthorizeError:
 				'A reautorização não foi concluída. Confira a orientação abaixo e tente novamente.',
-			accountDiagnosticBanner: 'Atenção necessária na conexão'
+			accountDiagnosticBanner: 'Atenção necessária na conexão',
+			planBadge: 'Plano / Selo',
+			planAuto: 'Automático (cota IMAP)',
+			planHidden: 'Oculto',
+			planCustom: 'Personalizado',
+			planCustomLabel: 'Rótulo personalizado (máx. 12 caracteres)',
+			planApply: 'Aplicar',
+			planError: 'Não foi possível salvar o selo. Tente novamente.',
+			storageUsage: 'Armazenamento usado'
 		},
 		accountForm: {
 			discoveryIntro:

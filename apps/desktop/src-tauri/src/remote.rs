@@ -62,6 +62,13 @@ pub trait RemoteMail: Send + Sync {
         &self,
         config: &AccountConfigDto,
     ) -> Result<Vec<mail_engine::DiscoveredFolder>, IpcError>;
+    /// Best-effort RFC 2087 storage quota; `Ok(None)` when the server omits `QUOTA`.
+    async fn fetch_quota(
+        &self,
+        _config: &AccountConfigDto,
+    ) -> Result<Option<mail_engine::AccountStorageQuota>, IpcError> {
+        Ok(None)
+    }
     async fn test_connection(
         &self,
         _config: &AccountConfigDto,
@@ -227,6 +234,20 @@ impl RemoteMail for NativeRemoteMail {
     ) -> Result<Vec<mail_engine::DiscoveredFolder>, IpcError> {
         let (mut session, _) = self.session(config).await?;
         session.discover_folders().await.map_err(remote_error)
+    }
+
+    async fn fetch_quota(
+        &self,
+        config: &AccountConfigDto,
+    ) -> Result<Option<mail_engine::AccountStorageQuota>, IpcError> {
+        let (mut session, caps) = self.session(config).await?;
+        if !caps.quota {
+            return Ok(None);
+        }
+        session
+            .fetch_storage_quota("INBOX")
+            .await
+            .map_err(remote_error)
     }
 
     async fn test_connection(

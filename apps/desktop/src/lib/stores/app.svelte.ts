@@ -2,6 +2,7 @@ import { i18n, type SupportedLocale } from '$lib/i18n/index.svelte';
 import { INBOX_FIXTURES } from '$lib/inbox/inbox.fixtures';
 import { nativeAvailable, nativeTransport } from '$lib/inbox/transport';
 import type { InboxTransport } from '$lib/inbox/types';
+import type { AccountSubscription } from '$lib/onboarding/subscriptions';
 import { nativeAccountTransport } from '$lib/onboarding/transport';
 import type { AccountConfig, AccountTransport } from '$lib/onboarding/types';
 import { createDueDateFixtures } from '$lib/reminders/due-dates.seed';
@@ -32,7 +33,7 @@ const THEME_STORAGE_KEY = 'triage_mail_theme';
 
 export interface NativeShellHydrationDeps {
 	isNative?: () => boolean;
-	accountTransport?: Pick<AccountTransport, 'list'>;
+	accountTransport?: Pick<AccountTransport, 'list' | 'subscriptions'>;
 	inboxTransport?: Pick<InboxTransport, 'listFolders' | 'search' | 'savedViews'>;
 	remindersTransport?: Pick<RemindersTransport, 'listDueDates'>;
 }
@@ -120,6 +121,20 @@ class AppStore {
 	accounts = $state<MailAccount[]>(
 		nativeAvailable() ? [] : structuredClone(SHELL_ACCOUNT_FIXTURES)
 	);
+	private async loadAccountSubscriptions(
+		transport: Pick<AccountTransport, "subscriptions">,
+		generation: number
+	): Promise<void> {
+		if (!transport.subscriptions) return;
+		try {
+			const subscriptions = await transport.subscriptions();
+			if (generation === this.hydrationGeneration) this.accountSubscriptions = subscriptions;
+		} catch {
+			// Best-effort: badges are decorative.
+		}
+	}
+
+	accountSubscriptions = $state<Record<string, AccountSubscription>>({});
 	savedViews = $state<SavedView[]>(
 		nativeAvailable() ? [] : structuredClone(SHELL_SAVED_VIEW_FIXTURES)
 	);
@@ -281,6 +296,7 @@ class AppStore {
 
 		this.vaultUnlocked = true;
 		this.accounts = accountConfigs.map(mapAccountToShellAccount);
+		void this.loadAccountSubscriptions(accountTransport, generation);
 
 		if (accountConfigs.length === 0) {
 			this.loadedCount = 0;

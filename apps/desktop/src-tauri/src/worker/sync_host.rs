@@ -28,7 +28,9 @@ impl SyncHost for DesktopSyncHost<'_> {
     }
 
     async fn discover_folders(&self) -> Result<Vec<DiscoveredFolder>, IpcError> {
-        self.service.remote.discover_folders(self.config).await
+        let folders = self.service.remote.discover_folders(self.config).await?;
+        self.service.refresh_account_quota(self.config).await;
+        Ok(folders)
     }
 
     async fn save_catalog(&self, folders: &[DiscoveredFolder]) -> Result<(), IpcError> {

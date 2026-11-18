@@ -767,6 +767,26 @@ pub async fn cmd_account_diagnostics(
 }
 
 #[tauri::command]
+pub async fn cmd_account_subscriptions(
+    state: State<'_, RuntimeState>,
+) -> Result<HashMap<String, crate::subscriptions::AccountSubscriptionDto>, IpcError> {
+    state.initialize(None).await?.account_subscriptions().await
+}
+
+#[tauri::command]
+pub async fn cmd_set_account_badge(
+    state: State<'_, RuntimeState>,
+    account_id: String,
+    override_mode: mail_engine::AccountBadgeOverride,
+) -> Result<crate::subscriptions::AccountSubscriptionDto, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .set_account_badge(account_id, override_mode)
+        .await
+}
+
+#[tauri::command]
 pub async fn cmd_get_settings(
     state: State<'_, RuntimeState>,
 ) -> Result<crate::settings::SettingsDto, IpcError> {
@@ -1064,6 +1084,8 @@ pub fn run() {
             cmd_reauthorize_account,
             cmd_cancel_authorization,
             cmd_account_diagnostics,
+            cmd_account_subscriptions,
+            cmd_set_account_badge,
             cmd_search_messages,
             cmd_triage_action,
             cmd_get_message_body,
@@ -1270,6 +1292,8 @@ mod tests {
                 cmd_import_local_archive,
                 cmd_reauthorize_account,
                 cmd_account_diagnostics,
+                cmd_account_subscriptions,
+                cmd_set_account_badge,
                 cmd_search_messages,
                 cmd_get_message_body,
                 cmd_triage_action,

@@ -7,6 +7,7 @@ use std::str;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::provider::{classify_folder, ServerCapabilities, SpecialFolderRole};
+use crate::quota::{parse_quota_line, AccountStorageQuota};
 use crate::EngineError;
 
 /// Metadata for a discovered mailbox returned by IMAP `LIST`.
@@ -416,6 +417,22 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> ImapSession<S> {
         }
 
         Ok(ServerCapabilities::default())
+    }
+
+    /// Best-effort RFC 2087 `GETQUOTAROOT` for `mailbox`; `None` when no STORAGE quota is reported.
+    pub async fn fetch_storage_quota(
+        &mut self,
+        mailbox: &str,
+    ) -> Result<Option<AccountStorageQuota>, EngineError> {
+        let cmd = format!("GETQUOTAROOT \"{}\"", escape_imap_string(mailbox));
+        let res = self.execute_command(&cmd).await?;
+        if res.status != TaggedStatus::Ok {
+            return Err(EngineError::ImapProtocol(format!(
+                "GETQUOTAROOT failed: {}",
+                res.message
+            )));
+        }
+        Ok(res.untagged_lines.iter().find_map(|l| parse_quota_line(l)))
     }
 
     /// Authenticates using standard IMAP `LOGIN`.
@@ -1142,6 +1159,22 @@ mod tests {
 
         let res = session.login("user@example.com", "pass123").await;
         assert!(res.is_ok());
+    }
+
+    #[tokio::test]
+    async fn fetches_storage_quota_via_getquotaroot() {
+        let (client_stream, mut server_stream) = duplex(4096);
+        let mut session = ImapSession::new(client_stream);
+        tokio::spawn(async move {
+            let mut buf = [0u8; 1024];
+            let n = server_stream.read(&mut buf).await.unwrap();
+            assert!(String::from_utf8_lossy(&buf[..n]).contains("GETQUOTAROOT \"INBOX\""));
+            let resp = "* QUOTAROOT \"INBOX\" \"\"\r\n* QUOTA \"\" (STORAGE 100 2048)\r\nA0001 OK done\r\n";
+            server_stream.write_all(resp.as_bytes()).await.unwrap();
+        });
+        let quota = session.fetch_storage_quota("INBOX").await.unwrap().unwrap();
+        assert_eq!(quota.used_bytes, 100 * 1024);
+        assert_eq!(quota.limit_bytes, 2048 * 1024);
     }
 
     #[tokio::test]

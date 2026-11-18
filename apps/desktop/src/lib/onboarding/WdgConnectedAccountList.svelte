@@ -24,6 +24,9 @@
 	import { oauthDefaultsForHost } from './presets';
 	import type { AccountConfig, Reauthorization } from './types';
 	import WdgAccountAvatar from './WdgAccountAvatar.svelte';
+	import WdgAccountPlanBadge from './WdgAccountPlanBadge.svelte';
+	import WdgAccountPlanControl from './WdgAccountPlanControl.svelte';
+	import type { AccountSubscription, BadgeOverride } from './subscriptions';
 
 	interface Props {
 		accounts?: AccountConfig[];
@@ -33,6 +36,9 @@
 		authorizing?: boolean;
 		reauthorizingAccountId?: string | null;
 		accountDiagnostics?: Record<string, ConnectionDiagnosticCode>;
+		subscriptions?: Record<string, AccountSubscription>;
+		badgeError?: boolean;
+		onSetBadge?: (accountId: string, override: BadgeOverride) => Promise<void>;
 		diagnostic?: ConnectionDiagnosticCode | null;
 		error?: string;
 		avatarTransport?: AvatarTransport;
@@ -53,6 +59,9 @@
 		authorizing = false,
 		reauthorizingAccountId = null,
 		accountDiagnostics = {},
+		subscriptions = {},
+		badgeError = false,
+		onSetBadge,
 		diagnostic = null,
 		error = '',
 		avatarTransport,
@@ -462,6 +471,7 @@
 				{@const expanded = Boolean(expandedIds[account.account_id])}
 				{@const catalog = folderCatalogs[account.account_id]}
 				{@const accountDiag = accountDiagnostics[account.account_id]}
+				{@const subscription = subscriptions[account.account_id]}
 				{@const reauthOpen = reauthTargetId === account.account_id}
 				<article class="rounded-lg border border-separator bg-surface">
 					<div class="flex flex-wrap items-center justify-between gap-4 p-4">
@@ -475,6 +485,10 @@
 										class="rounded border border-separator bg-field px-1.5 py-0.5 font-mono text-[11px] font-medium text-foreground"
 										>{authLabel(account.auth_method)}</span
 									>
+									<WdgAccountPlanBadge
+										label={subscription?.effective_badge ?? null}
+										quota={subscription?.quota}
+									/>
 								</div>
 								<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-secondary">
 									<span class="font-mono text-foreground">{account.account_id}</span>
@@ -535,6 +549,14 @@
 							</button>
 						</div>
 					</div>
+
+					{#if onSetBadge && subscription && account.auth_method !== 'LocalArchive'}
+						<WdgAccountPlanControl
+							{subscription}
+							failed={badgeError}
+							onSetBadge={(override) => onSetBadge(account.account_id, override)}
+						/>
+					{/if}
 
 					{#if accountDiag}
 						{@const guidance = formT.diagnostics[accountDiag]}

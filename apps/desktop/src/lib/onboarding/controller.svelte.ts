@@ -1,4 +1,5 @@
 import { i18n } from '../i18n/index.svelte';
+import type { AccountSubscription, BadgeOverride } from './subscriptions';
 import type {
 	AccountConfig,
 	AccountSubmission,
@@ -43,6 +44,8 @@ export class AccountController {
 	testResult = $state<ConnectionTestResult | null>(null);
 	diagnostic = $state<ConnectionDiagnosticCode | null>(null);
 	accountDiagnostics = $state<Record<string, ConnectionDiagnosticCode>>({});
+	subscriptions = $state<Record<string, AccountSubscription>>({});
+	badgeError = $state(false);
 	importProgress = $state<{ importedCount: number; active: boolean }>({
 		importedCount: 0,
 		active: false
@@ -67,6 +70,27 @@ export class AccountController {
 			// Best-effort diagnostics polling; never disrupt account directory loading.
 		}
 	}
+	async loadSubscriptions() {
+		if (!this.active || !this.transport.subscriptions) return;
+		const revision = this.revision;
+		try {
+			const subscriptions = await this.transport.subscriptions();
+			if (!this.active || revision !== this.revision) return;
+			this.subscriptions = subscriptions;
+		} catch {
+			// Best-effort: badges are decorative and must never disrupt account loading.
+		}
+	}
+	async setBadge(accountId: string, override: BadgeOverride) {
+		if (!this.active || !this.transport.setBadge) return;
+		this.badgeError = false;
+		try {
+			const updated = await this.transport.setBadge(accountId, override);
+			if (this.active) this.subscriptions = { ...this.subscriptions, [accountId]: updated };
+		} catch {
+			if (this.active) this.badgeError = true;
+		}
+	}
 	async load(native = true) {
 		if (!this.active) return;
 		const revision = ++this.revision;
@@ -83,6 +107,7 @@ export class AccountController {
 			if (this.transport.diagnostics) {
 				void this.loadDiagnostics();
 			}
+			void this.loadSubscriptions();
 		} catch (error: unknown) {
 			if (!this.active || revision !== this.revision) return;
 			this.phase = error === 'VaultUnavailable' ? 'locked' : 'error';

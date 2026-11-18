@@ -25,10 +25,17 @@ struct FakeRemote {
     fail_message: Option<String>,
     sync_result: Mutex<Option<IncrementalSyncResult>>,
     test_connection_error: Mutex<Option<IpcError>>,
+    quota: Mutex<Option<mail_engine::AccountStorageQuota>>,
 }
 
 #[async_trait]
 impl RemoteMail for FakeRemote {
+    async fn fetch_quota(
+        &self,
+        _: &AccountConfigDto,
+    ) -> Result<Option<mail_engine::AccountStorageQuota>, IpcError> {
+        Ok(*self.quota.lock().unwrap())
+    }
     async fn fetch_attachment(
         &self,
         _: &AccountConfigDto,
@@ -2404,4 +2411,58 @@ async fn worker_failure_emits_diagnostic_and_update_auth_clears_it_preserving_ma
     }
     assert!(store.get_message_by_id("msg-keep").unwrap().is_some());
     assert!(service.account_diagnostics().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn quota_refresh_infers_badge_and_manual_override_persists_additively() {
+    use mail_engine::{AccountBadgeOverride, AccountPlanBadge, AccountStorageQuota};
+    let remote = Arc::new(FakeRemote::default());
+    let (service, _store, _vault) = setup(remote.clone());
+    let mut cfg = config("acct-google");
+    cfg.imap_host = "imap.gmail.com".into();
+    service
+        .add_account(cfg.clone(), credentials())
+        .await
+        .unwrap();
+    let id = "acct-google".to_string();
+
+    // No quota yet: no badge, Auto override.
+    let subs = service.account_subscriptions().await.unwrap();
+    assert_eq!(subs[&id].effective_badge, None);
+    assert_eq!(subs[&id].badge_override, AccountBadgeOverride::Auto);
+
+    *remote.quota.lock().unwrap() = Some(AccountStorageQuota {
+        used_bytes: 1024,
+        limit_bytes: 2048 * 1024 * 1024 * 1024,
+    });
+    service.refresh_account_quota(&cfg).await;
+    let subs = service.account_subscriptions().await.unwrap();
+    assert_eq!(subs[&id].inferred_badge, Some(AccountPlanBadge::Pro));
+    assert_eq!(subs[&id].effective_badge.as_deref(), Some("PRO"));
+    assert_eq!(subs[&id].quota.unwrap().used_bytes, 1024);
+
+    let hidden = service
+        .set_account_badge(id.clone(), AccountBadgeOverride::Hidden)
+        .await
+        .unwrap();
+    assert_eq!(hidden.effective_badge, None);
+    let custom = service
+        .set_account_badge(id.clone(), AccountBadgeOverride::Custom(" Work ".into()))
+        .await
+        .unwrap();
+    assert_eq!(custom.effective_badge.as_deref(), Some("Work"));
+    assert_eq!(
+        service
+            .set_account_badge(id.clone(), AccountBadgeOverride::Custom("  ".into()))
+            .await,
+        Err(IpcError::InvalidRequest)
+    );
+    assert_eq!(
+        service
+            .set_account_badge("missing".into(), AccountBadgeOverride::Auto)
+            .await,
+        Err(IpcError::NotFound)
+    );
+    // Extras are additive: the account config still deserializes unchanged.
+    assert_eq!(service.list_accounts().await.unwrap(), vec![cfg]);
 }

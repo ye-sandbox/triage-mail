@@ -23,6 +23,7 @@ pub mod saved_views;
 pub mod sender_review;
 pub mod service;
 pub mod settings;
+pub mod subscriptions;
 pub mod worker;
 pub use dto::*;
 pub use service::{DesktopService, IpcError};
