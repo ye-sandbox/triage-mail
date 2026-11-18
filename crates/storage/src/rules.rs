@@ -81,47 +81,89 @@ impl SqliteMailStore {
         if !rule.validate() {
             return Err(invalid());
         }
-        self.transaction(|tx| {
-            // INVARIANT: A deleted ID cannot reuse an old revision (ABA stale-write race).
-            let deleted: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM rule_deleted_ids WHERE id=?1)", [&rule.id], |r| r.get(0)).map_err(error)?;
-            if deleted { return Err(invalid()); }
-            let current: Option<u32> = tx.query_row("SELECT revision FROM local_rules WHERE id=?1", [&rule.id], |r| r.get(0)).optional().map_err(error)?;
-            if current.unwrap_or(0) != rule.revision { return Err(invalid()); }
-            if current.is_none() && read_rules(tx)?.len() >= MAX_RULES { return Err(invalid()); }
-            for c in rule.all.iter().chain(&rule.any).chain(&rule.except) {
-                if let Condition::Account(id) = c {
-                    let exists: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?1)",[id],|r| r.get(0)).map_err(error)?;
-                    if !exists { return Err(invalid()); }
+        self.write_transaction(
+            |tx| {
+                // INVARIANT: A deleted ID cannot reuse an old revision (ABA stale-write race).
+                let deleted: bool = tx
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM rule_deleted_ids WHERE id=?1)",
+                        [&rule.id],
+                        |r| r.get(0),
+                    )
+                    .map_err(error)?;
+                if deleted {
+                    return Err(invalid());
                 }
-            }
-            for action in &rule.actions {
-                if let RuleAction::Alert(id) | RuleAction::UrgentAlert(id) = action {
-                    if !crate::alerts::destinations(tx)?.iter().any(|d| d.id == *id) { return Err(invalid()); }
+                let current: Option<u32> = tx
+                    .query_row(
+                        "SELECT revision FROM local_rules WHERE id=?1",
+                        [&rule.id],
+                        |r| r.get(0),
+                    )
+                    .optional()
+                    .map_err(error)?;
+                if current.unwrap_or(0) != rule.revision {
+                    return Err(invalid());
                 }
-            }
-            rule.revision += 1;
-            let json = serde_json::to_string(&rule).map_err(error)?;
-            tx.execute("INSERT INTO local_rules VALUES (?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,position=excluded.position,definition_json=excluded.definition_json",params![rule.id,rule.revision,rule.position,json]).map_err(error)?;
-            Ok(rule)
-        })
+                if current.is_none() && read_rules(tx)?.len() >= MAX_RULES {
+                    return Err(invalid());
+                }
+                for c in rule.all.iter().chain(&rule.any).chain(&rule.except) {
+                    if let Condition::Account(id) = c {
+                        let exists: bool = tx
+                            .query_row(
+                                "SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?1)",
+                                [id],
+                                |r| r.get(0),
+                            )
+                            .map_err(error)?;
+                        if !exists {
+                            return Err(invalid());
+                        }
+                    }
+                }
+                for action in &rule.actions {
+                    if let RuleAction::Alert(id) | RuleAction::UrgentAlert(id) = action {
+                        if !crate::alerts::destinations(tx)?
+                            .iter()
+                            .any(|d| d.id == *id)
+                        {
+                            return Err(invalid());
+                        }
+                    }
+                }
+                rule.revision += 1;
+                let json = serde_json::to_string(&rule).map_err(error)?;
+                tx.execute(
+                    "INSERT INTO local_rules VALUES (?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,position=excluded.position,definition_json=excluded.definition_json",
+                    params![rule.id, rule.revision, rule.position, json],
+                )
+                .map_err(error)?;
+                Ok(rule)
+            },
+            |_, _, _| Ok(()),
+        )
     }
 
     pub fn delete_rule(&self, id: &str, revision: u32) -> Result<(), StorageError> {
-        self.transaction(|tx| {
-            if tx
-                .execute(
-                    "DELETE FROM local_rules WHERE id=?1 AND revision=?2",
-                    params![id, revision],
-                )
-                .map_err(error)?
-                != 1
-            {
-                return Err(invalid());
-            }
-            tx.execute("INSERT INTO rule_deleted_ids VALUES (?1)", [id])
-                .map_err(error)?;
-            Ok(())
-        })
+        self.write_transaction(
+            |tx| {
+                if tx
+                    .execute(
+                        "DELETE FROM local_rules WHERE id=?1 AND revision=?2",
+                        params![id, revision],
+                    )
+                    .map_err(error)?
+                    != 1
+                {
+                    return Err(invalid());
+                }
+                tx.execute("INSERT INTO rule_deleted_ids VALUES (?1)", [id])
+                    .map_err(error)?;
+                Ok(())
+            },
+            |_, _, _| Ok(()),
+        )
     }
 
     /// Reorder is atomic and rejects a stale/incomplete list of rule revisions.
@@ -129,38 +171,41 @@ impl SqliteMailStore {
         if revisions.len() > MAX_RULES {
             return Err(invalid());
         }
-        self.transaction(|tx| {
-            let mut rules = read_rules(tx)?;
-            if rules.len() != revisions.len() {
-                return Err(invalid());
-            }
-            let mut seen = std::collections::HashSet::new();
-            for (position, (id, revision)) in revisions.iter().enumerate() {
-                if !seen.insert(id) {
+        self.write_transaction(
+            |tx| {
+                let mut rules = read_rules(tx)?;
+                if rules.len() != revisions.len() {
                     return Err(invalid());
                 }
-                let rule = rules
-                    .iter_mut()
-                    .find(|r| r.id == *id && r.revision == *revision)
-                    .ok_or_else(invalid)?;
-                if rule.revision >= i32::MAX as u32 - 1 {
-                    return Err(invalid());
+                let mut seen = std::collections::HashSet::new();
+                for (position, (id, revision)) in revisions.iter().enumerate() {
+                    if !seen.insert(id) {
+                        return Err(invalid());
+                    }
+                    let rule = rules
+                        .iter_mut()
+                        .find(|r| r.id == *id && r.revision == *revision)
+                        .ok_or_else(invalid)?;
+                    if rule.revision >= i32::MAX as u32 - 1 {
+                        return Err(invalid());
+                    }
+                    rule.position = position as u32;
+                    rule.revision += 1;
+                    tx.execute(
+                        "UPDATE local_rules SET revision=?1,position=?2,definition_json=?3 WHERE id=?4",
+                        params![
+                            rule.revision,
+                            rule.position,
+                            serde_json::to_string(rule).map_err(error)?,
+                            id
+                        ],
+                    )
+                    .map_err(error)?;
                 }
-                rule.position = position as u32;
-                rule.revision += 1;
-                tx.execute(
-                    "UPDATE local_rules SET revision=?1,position=?2,definition_json=?3 WHERE id=?4",
-                    params![
-                        rule.revision,
-                        rule.position,
-                        serde_json::to_string(rule).map_err(error)?,
-                        id
-                    ],
-                )
-                .map_err(error)?;
-            }
-            Ok(())
-        })
+                Ok(())
+            },
+            |_, _, _| Ok(()),
+        )
     }
 
     /// A candidate draft can replace its saved rule for preview; never persisted.
@@ -218,10 +263,13 @@ impl SqliteMailStore {
         validity: u32,
         server_uidnext: u32,
     ) -> Result<(), StorageError> {
-        self.transaction(|tx| {
-            tx.execute("INSERT INTO rule_baselines VALUES (?1,?2,?3,?4) ON CONFLICT(account_id,folder) DO UPDATE SET uidvalidity=excluded.uidvalidity,frontier=excluded.frontier WHERE rule_baselines.uidvalidity!=excluded.uidvalidity",params![account,folder,validity,if server_uidnext == 0 {u32::MAX} else {server_uidnext.saturating_sub(1)}]).map_err(error)?;
-            Ok(())
-        })
+        self.write_transaction(
+            |tx| {
+                tx.execute("INSERT INTO rule_baselines VALUES (?1,?2,?3,?4) ON CONFLICT(account_id,folder) DO UPDATE SET uidvalidity=excluded.uidvalidity,frontier=excluded.frontier WHERE rule_baselines.uidvalidity!=excluded.uidvalidity",params![account,folder,validity,if server_uidnext == 0 {u32::MAX} else {server_uidnext.saturating_sub(1)}]).map_err(error)?;
+                Ok(())
+            },
+            |_, _, _| Ok(()),
+        )
     }
 
     /// Headless adapter supplies only the existing remote payload serialization.
@@ -232,31 +280,61 @@ impl SqliteMailStore {
         limit: usize,
         remote: impl Fn(&str, &str, &str, u32, u32, &RuleAction) -> Result<String, StorageError>,
     ) -> Result<Vec<String>, StorageError> {
-        self.transaction(|tx| {
-            let mut stmt = tx.prepare(
-                "SELECT message_id,rules_json FROM rule_jobs WHERE processed=0 ORDER BY message_id LIMIT ?1"
-            ).map_err(error)?;
-            let jobs = stmt.query_map([limit.min(100) as i64], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-            }).map_err(error)?.collect::<Result<Vec<_>, _>>().map_err(error)?;
-            let current = read_rules(tx)?;
-            let mut changed = Vec::new();
-            for (id, json) in jobs {
-                let scheduled: Vec<Rule> = serde_json::from_str(&json).map_err(error)?;
-                // INVARIANT: Edits invalidate pending revisions and never replay old mail.
-                let active: Vec<_> = scheduled.into_iter().filter(|r| {
-                    current.iter().any(|c| c.id == r.id && c.revision == r.revision && c.enabled)
-                }).collect();
-                let message_facts = facts(tx, &id)?;
-                let plan = evaluate(&active, &message_facts);
-                apply_plan(tx, &id, &plan, &remote)?;
-                tx.execute("UPDATE rule_jobs SET processed=1,rules_json='[]' WHERE message_id=?1", [&id]).map_err(error)?;
-                if !plan.actions.is_empty() && !changed.contains(&message_facts.account_id) {
-                    changed.push(message_facts.account_id);
+        self.write_transaction(
+            |tx| {
+                let mut stmt = tx
+                    .prepare(
+                        "SELECT message_id,rules_json FROM rule_jobs WHERE processed=0 ORDER BY message_id LIMIT ?1",
+                    )
+                    .map_err(error)?;
+                let jobs = stmt
+                    .query_map([limit.min(100) as i64], |r| {
+                        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                    })
+                    .map_err(error)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(error)?;
+                let current = read_rules(tx)?;
+                let mut changed = Vec::new();
+                let mut modified_ids = Vec::new();
+                for (id, json) in jobs {
+                    let scheduled: Vec<Rule> = serde_json::from_str(&json).map_err(error)?;
+                    // INVARIANT: Edits invalidate pending revisions and never replay old mail.
+                    let active: Vec<_> = scheduled
+                        .into_iter()
+                        .filter(|r| {
+                            current
+                                .iter()
+                                .any(|c| c.id == r.id && c.revision == r.revision && c.enabled)
+                        })
+                        .collect();
+                    let message_facts = facts(tx, &id)?;
+                    let plan = evaluate(&active, &message_facts);
+                    apply_plan(tx, &id, &plan, &remote)?;
+                    tx.execute(
+                        "UPDATE rule_jobs SET processed=1,rules_json='[]' WHERE message_id=?1",
+                        [&id],
+                    )
+                    .map_err(error)?;
+                    if !plan.actions.is_empty() {
+                        modified_ids.push(id);
+                        if !changed.contains(&message_facts.account_id) {
+                            changed.push(message_facts.account_id);
+                        }
+                    }
                 }
-            }
-            Ok(changed)
-        })
+                Ok((changed, modified_ids))
+            },
+            |idx, conn, (_, modified_ids)| {
+                for id in modified_ids {
+                    if idx.contains_id(id) {
+                        crate::ram_vector_index::refresh_slot_from_conn(idx, conn, id)?;
+                    }
+                }
+                Ok(())
+            },
+        )
+        .map(|(changed, _)| changed)
     }
 }
 

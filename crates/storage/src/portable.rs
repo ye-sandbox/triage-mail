@@ -173,63 +173,66 @@ impl SqliteMailStore {
             return Err(invalid());
         }
         remap(&mut bundle.rules, &mut bundle.views, &mapping)?;
-        self.transaction(|tx| {
-            for account in mapping.accounts.values() {
-                if !tx
-                    .query_row(
-                        "SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?1)",
-                        [account],
-                        |r| r.get::<_, bool>(0),
-                    )
-                    .map_err(|_| invalid())?
+        self.write_transaction(
+            |tx| {
+                for account in mapping.accounts.values() {
+                    if !tx
+                        .query_row(
+                            "SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?1)",
+                            [account],
+                            |r| r.get::<_, bool>(0),
+                        )
+                        .map_err(|_| invalid())?
+                    {
+                        return Err(invalid());
+                    }
+                }
+                let destinations = crate::alerts::destinations(tx)?;
+                if mapping
+                    .destinations
+                    .values()
+                    .any(|id| !destinations.iter().any(|d| &d.id == id))
                 {
                     return Err(invalid());
                 }
-            }
-            let destinations = crate::alerts::destinations(tx)?;
-            if mapping
-                .destinations
-                .values()
-                .any(|id| !destinations.iter().any(|d| &d.id == id))
-            {
-                return Err(invalid());
-            }
-            let existing = crate::rules::read_rules(tx)?.len();
-            if existing + bundle.rules.len() > MAX_RULES
-                || read_views(tx)?.len() + bundle.views.len() > 200
-            {
-                return Err(invalid());
-            }
-            for (i, mut rule) in bundle.rules.into_iter().enumerate() {
-                rule.id = vault::backup::random_id()?;
-                rule.revision = 1;
-                rule.position = (existing + i) as u32;
-                if !rule.validate() {
+                let existing = crate::rules::read_rules(tx)?.len();
+                if existing + bundle.rules.len() > MAX_RULES
+                    || read_views(tx)?.len() + bundle.views.len() > 200
+                {
                     return Err(invalid());
                 }
-                let definition = serde_json::to_string(&rule).map_err(|_| invalid())?;
-                tx.execute(
-                    "INSERT INTO local_rules VALUES (?1,1,?2,?3)",
-                    params![rule.id, rule.position, definition],
-                )
-                .map_err(|_| invalid())?;
-            }
-            for mut view in bundle.views {
-                view.id = vault::backup::random_id()?;
-                view.revision = 1;
-                if !view.validate() {
-                    return Err(invalid());
+                for (i, mut rule) in bundle.rules.into_iter().enumerate() {
+                    rule.id = vault::backup::random_id()?;
+                    rule.revision = 1;
+                    rule.position = (existing + i) as u32;
+                    if !rule.validate() {
+                        return Err(invalid());
+                    }
+                    let definition = serde_json::to_string(&rule).map_err(|_| invalid())?;
+                    tx.execute(
+                        "INSERT INTO local_rules VALUES (?1,1,?2,?3)",
+                        params![rule.id, rule.position, definition],
+                    )
+                    .map_err(|_| invalid())?;
                 }
-                crate::saved_views::validate_accounts(tx, &view)?;
-                let definition = serde_json::to_string(&view).map_err(|_| invalid())?;
-                tx.execute(
-                    "INSERT INTO saved_views VALUES (?1,1,?2)",
-                    params![view.id, definition],
-                )
-                .map_err(|_| invalid())?;
-            }
-            Ok(())
-        })
+                for mut view in bundle.views {
+                    view.id = vault::backup::random_id()?;
+                    view.revision = 1;
+                    if !view.validate() {
+                        return Err(invalid());
+                    }
+                    crate::saved_views::validate_accounts(tx, &view)?;
+                    let definition = serde_json::to_string(&view).map_err(|_| invalid())?;
+                    tx.execute(
+                        "INSERT INTO saved_views VALUES (?1,1,?2)",
+                        params![view.id, definition],
+                    )
+                    .map_err(|_| invalid())?;
+                }
+                Ok(())
+            },
+            |_, _, _| Ok(()),
+        )
     }
 }
 

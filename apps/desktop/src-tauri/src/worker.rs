@@ -40,8 +40,17 @@ impl WorkerSupervisor {
             let service = self.service.clone();
             let mut stop = self.shutdown.subscribe();
             *outbox = Some(tokio::spawn(async move {
+                let hydrate_service = service.clone();
                 let work = async {
                     tokio::join!(
+                        async move {
+                            // INVARIANT: Hydrate in the background without blocking startup or search;
+                            // search paths fall back transparently to SQLite vec0 until Ready.
+                            let _ = tokio::task::spawn_blocking(move || {
+                                let _ = hydrate_service.store.hydrate_ram_index();
+                            })
+                            .await;
+                        },
                         outbox_loop(service.clone()),
                         category_loop(service.clone()),
                         embedding_loop(service)
@@ -90,6 +99,7 @@ impl WorkerSupervisor {
 
     pub fn shutdown(&self) {
         self.shutdown.send_replace(true);
+        self.service.store.clear_ram_index();
     }
 }
 

@@ -3,6 +3,9 @@ use std::collections::HashMap;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
+use crate::ram_vector_index::{
+    scope_to_ram_filter, RamQueryFilter, RamVectorIndex, RamVectorState, RAM_VECTOR_DIM,
+};
 use crate::{
     HybridQuery, MessageRowSummary, SearchEngine, SearchMode, SqliteMailStore, StorageError,
 };
@@ -67,6 +70,27 @@ impl SqliteMailStore {
         } else {
             eligibility(view).to_string()
         };
+        let ram_guard = if query.mode != SearchMode::Lexical && query.query_embedding_int8.is_some()
+        {
+            self.fresh_ram_guard(&tx)?
+        } else {
+            None
+        };
+        let ram_index = ram_guard.as_deref().and_then(|state| match state {
+            RamVectorState::Ready(ready) => Some(&ready.index),
+            _ => None,
+        });
+        let ram_filter = ram_index.map(|_| RamQueryFilter {
+            account_id: Some(account_id.as_str()),
+            scope: Some(scope_to_ram_filter(
+                view,
+                &folder,
+                now,
+                matches!(view, MailboxView::Inbox),
+            )),
+            category: None,
+            review_state: None,
+        });
         let search = ScopedSearch {
             conn: &tx,
             account_id,
@@ -74,8 +98,11 @@ impl SqliteMailStore {
             eligibility: &predicate,
             messages: messages_source(&tx, account_id, view, now)?,
             now,
+            ram_index,
+            ram_filter,
         };
         let ids = search.execute(query)?;
+        drop(ram_guard);
         let rows = crate::search::load_summaries(&tx, &ids)?;
         tx.commit().map_err(query_error)?;
         Ok(rows)
@@ -177,6 +204,8 @@ pub(crate) struct ScopedSearch<'connection> {
     pub(crate) eligibility: &'connection str,
     pub(crate) messages: &'static str,
     pub(crate) now: i64,
+    pub(crate) ram_index: Option<&'connection RamVectorIndex>,
+    pub(crate) ram_filter: Option<RamQueryFilter<'connection>>,
 }
 
 impl ScopedSearch<'_> {
@@ -197,10 +226,34 @@ impl ScopedSearch<'_> {
             ..query.clone()
         };
         let mut scores: HashMap<String, f64> = HashMap::new();
-        for ids in [
-            self.branch(&candidates, false)?,
-            self.branch(&candidates, true)?,
-        ] {
+        let (lex_ids, sem_ids) = if let (Some(ram), Some(filter), Some(emb)) = (
+            self.ram_index,
+            self.ram_filter,
+            candidates
+                .query_embedding_int8
+                .as_deref()
+                .filter(|e| e.len() == RAM_VECTOR_DIM),
+        ) {
+            let cand_limit = candidates.limit;
+            let (lex_res, sem_res) = std::thread::scope(|scope| {
+                let sem_handle =
+                    scope.spawn(move || ram.rank_filtered(emb, &filter, 0, cand_limit));
+                let lex_res = self.branch(&candidates, false);
+                let sem_res = sem_handle.join().unwrap_or_else(|_| {
+                    Err(StorageError::Query(
+                        "ram scoped semantic search panicked".into(),
+                    ))
+                });
+                (lex_res, sem_res)
+            });
+            (lex_res?, sem_res?)
+        } else {
+            (
+                self.branch(&candidates, false)?,
+                self.branch(&candidates, true)?,
+            )
+        };
+        for ids in [lex_ids, sem_ids] {
             for (rank, id) in ids.into_iter().enumerate() {
                 *scores.entry(id).or_default() += 1.0 / (60.0 + rank as f64 + 1.0);
             }
@@ -252,7 +305,48 @@ impl ScopedSearch<'_> {
             .replace("{messages}", self.messages)
     }
 
+    fn eligible_rowids_sql(&self) -> String {
+        "SELECT m.rowid FROM {messages} WHERE {account} AND ({eligibility})"
+            .replace(
+                "{account}",
+                if self.account_id.is_empty() {
+                    "1"
+                } else {
+                    "m.account_id=?1"
+                },
+            )
+            .replace("{eligibility}", self.eligibility)
+            .replace("{messages}", self.messages)
+    }
+
     fn branch(&self, query: &HybridQuery, semantic: bool) -> Result<Vec<String>, StorageError> {
+        if semantic {
+            if let (Some(ram), Some(emb)) = (
+                self.ram_index,
+                query
+                    .query_embedding_int8
+                    .as_deref()
+                    .filter(|e| e.len() == RAM_VECTOR_DIM),
+            ) {
+                if let Some(filter) = self.ram_filter {
+                    return ram.rank_filtered(emb, &filter, query.offset, query.limit);
+                }
+                let rowid_sql = self.eligible_rowids_sql();
+                let mut stmt = self.conn.prepare_cached(&rowid_sql).map_err(query_error)?;
+                let all_params: [&dyn rusqlite::ToSql; 3] =
+                    [&self.account_id, &self.folder, &self.now];
+                let param_count = stmt.parameter_count().min(all_params.len());
+                let rowids = stmt
+                    .query_map(
+                        rusqlite::params_from_iter(all_params[..param_count].iter().copied()),
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .map_err(query_error)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(query_error)?;
+                return ram.rank_rowids(emb, &rowids, query.offset, query.limit);
+            }
+        }
         let sql = self.sql(query, semantic);
         let expression = format!("\"{}\"", query.query_text.trim().replace('"', "\"\""));
         let bytes = query
@@ -318,6 +412,8 @@ mod plan_tests {
             eligibility: eligibility(view),
             messages: messages_source(conn, "a", view, 1000).unwrap(),
             now: 1000,
+            ram_index: None,
+            ram_filter: None,
         }
     }
 

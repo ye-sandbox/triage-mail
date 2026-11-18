@@ -60,11 +60,14 @@ impl SqliteMailStore {
     }
     /// Register intent BEFORE vault write; unreferenced revisions remain discoverable after crashes.
     pub fn register_alert_secret(&self, key: &str) -> Result<(), StorageError> {
-        self.transaction(|tx| {
-            tx.execute("INSERT INTO alert_secret_intents VALUES (?1)", [key])
-                .map_err(error)?;
-            Ok(())
-        })
+        self.write_transaction(
+            |tx| {
+                tx.execute("INSERT INTO alert_secret_intents VALUES (?1)", [key])
+                    .map_err(error)?;
+                Ok(())
+            },
+            |_, _, _| Ok(()),
+        )
     }
     pub fn orphan_alert_secrets(&self) -> Result<Vec<String>, StorageError> {
         self.transaction(|tx| {
@@ -73,14 +76,17 @@ impl SqliteMailStore {
         })
     }
     pub fn forget_alert_secret(&self, key: &str) -> Result<(), StorageError> {
-        self.transaction(|tx| {
-            tx.execute(
-                "DELETE FROM alert_secret_intents WHERE secret_key=?1",
-                [key],
-            )
-            .map_err(error)?;
-            Ok(())
-        })
+        self.write_transaction(
+            |tx| {
+                tx.execute(
+                    "DELETE FROM alert_secret_intents WHERE secret_key=?1",
+                    [key],
+                )
+                .map_err(error)?;
+                Ok(())
+            },
+            |_, _, _| Ok(()),
+        )
     }
     pub fn save_alert_destination(
         &self,
@@ -91,32 +97,38 @@ impl SqliteMailStore {
         if !d.validate() {
             return Err(error("invalid"));
         }
-        self.transaction(|tx| {
-            let deleted:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM alert_deleted_ids WHERE id=?1)",[&d.id],|r|r.get(0)).map_err(error)?;
-            let current:Option<u32>=tx.query_row("SELECT revision FROM alert_destinations WHERE id=?1",[&d.id],|r|r.get(0)).optional().map_err(error)?;
-            if deleted || current.unwrap_or(0)!=d.revision { return Err(error("stale")); }
-            d.revision+=1;
-            tx.execute("INSERT INTO alert_destinations(id,revision,definition_json,secret_key) VALUES (?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,definition_json=excluded.definition_json,secret_key=excluded.secret_key",params![d.id,d.revision,serde_json::to_string(&d).map_err(error)?,key]).map_err(error)?;
-            tx.execute("UPDATE alert_jobs SET status='Canceled',payload='',lease_until=0,finished=?2 WHERE destination_id=?1 AND status='Pending'",params![d.id,now]).map_err(error)?;
-            Ok(d)
-        })
+        self.write_transaction(
+            |tx| {
+                let deleted:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM alert_deleted_ids WHERE id=?1)",[&d.id],|r|r.get(0)).map_err(error)?;
+                let current:Option<u32>=tx.query_row("SELECT revision FROM alert_destinations WHERE id=?1",[&d.id],|r|r.get(0)).optional().map_err(error)?;
+                if deleted || current.unwrap_or(0)!=d.revision { return Err(error("stale")); }
+                d.revision+=1;
+                tx.execute("INSERT INTO alert_destinations(id,revision,definition_json,secret_key) VALUES (?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,definition_json=excluded.definition_json,secret_key=excluded.secret_key",params![d.id,d.revision,serde_json::to_string(&d).map_err(error)?,key]).map_err(error)?;
+                tx.execute("UPDATE alert_jobs SET status='Canceled',payload='',lease_until=0,finished=?2 WHERE destination_id=?1 AND status='Pending'",params![d.id,now]).map_err(error)?;
+                Ok(d)
+            },
+            |_, _, _| Ok(()),
+        )
     }
     pub fn delete_alert_destination(&self, id: &str, revision: u32) -> Result<(), StorageError> {
-        self.transaction(|tx| {
-            if tx
-                .execute(
-                    "DELETE FROM alert_destinations WHERE id=?1 AND revision=?2",
-                    params![id, revision],
-                )
-                .map_err(error)?
-                != 1
-            {
-                return Err(error("stale"));
-            }
-            tx.execute("INSERT INTO alert_deleted_ids VALUES (?1)", [id])
-                .map_err(error)?;
-            Ok(())
-        })
+        self.write_transaction(
+            |tx| {
+                if tx
+                    .execute(
+                        "DELETE FROM alert_destinations WHERE id=?1 AND revision=?2",
+                        params![id, revision],
+                    )
+                    .map_err(error)?
+                    != 1
+                {
+                    return Err(error("stale"));
+                }
+                tx.execute("INSERT INTO alert_deleted_ids VALUES (?1)", [id])
+                    .map_err(error)?;
+                Ok(())
+            },
+            |_, _, _| Ok(()),
+        )
     }
     pub fn enqueue_alert_test(
         &self,
@@ -124,11 +136,14 @@ impl SqliteMailStore {
         event: &str,
         now: i64,
     ) -> Result<(), StorageError> {
-        self.transaction(|tx| {
-            let d=destinations(tx)?.into_iter().find(|d| d.id==destination && d.enabled).ok_or_else(||error("disabled"))?;
-            let payload=serde_json::json!({"schema_version":1,"event_id":event,"timestamp_epoch_ms":now,"test":true}).to_string();
-            insert_job(tx,&d,event,None,None,&payload,now)
-        })
+        self.write_transaction(
+            |tx| {
+                let d=destinations(tx)?.into_iter().find(|d| d.id==destination && d.enabled).ok_or_else(||error("disabled"))?;
+                let payload=serde_json::json!({"schema_version":1,"event_id":event,"timestamp_epoch_ms":now,"test":true}).to_string();
+                insert_job(tx,&d,event,None,None,&payload,now)
+            },
+            |_, _, _| Ok(()),
+        )
     }
     /// Replay does not evaluate mutation actions or modify automatic eligibility/deduplication.
     pub fn replay_alerts(
@@ -141,27 +156,30 @@ impl SqliteMailStore {
         if ids.is_empty() || ids.len() > 100 {
             return Err(error("selection"));
         }
-        self.transaction(|tx| {
-            let d = destinations(tx)?
-                .into_iter()
-                .find(|d| d.id == destination && d.enabled)
-                .ok_or_else(|| error("disabled"))?;
-            for (index, id) in ids.iter().enumerate() {
-                let facts = crate::rules::facts(tx, id)?;
-                let event = format!("{replay}-{index}");
-                let payload = triage_ai::alerts::payload(&event, now, &d.fields, &facts);
-                insert_job(
-                    tx,
-                    &d,
-                    &event,
-                    Some(&facts.account_id),
-                    Some(id),
-                    &payload,
-                    now,
-                )?;
-            }
-            Ok(())
-        })
+        self.write_transaction(
+            |tx| {
+                let d = destinations(tx)?
+                    .into_iter()
+                    .find(|d| d.id == destination && d.enabled)
+                    .ok_or_else(|| error("disabled"))?;
+                for (index, id) in ids.iter().enumerate() {
+                    let facts = crate::rules::facts(tx, id)?;
+                    let event = format!("{replay}-{index}");
+                    let payload = triage_ai::alerts::payload(&event, now, &d.fields, &facts);
+                    insert_job(
+                        tx,
+                        &d,
+                        &event,
+                        Some(&facts.account_id),
+                        Some(id),
+                        &payload,
+                        now,
+                    )?;
+                }
+                Ok(())
+            },
+            |_, _, _| Ok(()),
+        )
     }
     pub fn alert_history(&self) -> Result<Vec<DeliveryHistory>, StorageError> {
         self.transaction(|tx| {
@@ -178,18 +196,21 @@ impl SqliteMailStore {
         now: i64,
         calendar: &dyn triage_ai::alerts::schedule::ScheduleCalendar,
     ) -> Result<Option<DeliveryJob>, StorageError> {
-        self.transaction(|tx| {
-            tx.execute("UPDATE alert_jobs SET status='Expired',payload='',finished=?1,lease_until=0 WHERE status='Pending' AND (created<=?2 OR (attempts>=8 AND lease_until<=?1))",params![now,now.saturating_sub(MAX_AGE_MS)]).map_err(error)?;
-            prune(tx,now)?;
-            let id = eligible_job(tx, now, calendar)?;
-            let Some(id)=id else {return Ok(None)};
-            let (json,key,payload,attempts,created):(String,Option<String>,String,u32,i64)=tx.query_row("SELECT d.definition_json,d.secret_key,j.payload,j.attempts,j.created FROM alert_jobs j JOIN alert_destinations d ON d.id=j.destination_id WHERE j.id=?1",[&id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).map_err(error)?;
-            let destination:Destination=serde_json::from_str(&json).map_err(error)?;
-            if !destination.enabled {return Ok(None);}
-            tx.execute("UPDATE alert_jobs SET attempts=attempts+1,lease_until=?2 WHERE id=?1",params![id,now+30_000]).map_err(error)?;
-            tx.execute("UPDATE alert_destinations SET next_start=?2 WHERE id=?1",params![destination.id,now+10_000]).map_err(error)?;
-            Ok(Some(DeliveryJob {id,destination,secret_key:key,payload,attempts:attempts+1,created}))
-        })
+        self.write_transaction(
+            |tx| {
+                tx.execute("UPDATE alert_jobs SET status='Expired',payload='',finished=?1,lease_until=0 WHERE status='Pending' AND (created<=?2 OR (attempts>=8 AND lease_until<=?1))",params![now,now.saturating_sub(MAX_AGE_MS)]).map_err(error)?;
+                prune(tx,now)?;
+                let id = eligible_job(tx, now, calendar)?;
+                let Some(id)=id else {return Ok(None)};
+                let (json,key,payload,attempts,created):(String,Option<String>,String,u32,i64)=tx.query_row("SELECT d.definition_json,d.secret_key,j.payload,j.attempts,j.created FROM alert_jobs j JOIN alert_destinations d ON d.id=j.destination_id WHERE j.id=?1",[&id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).map_err(error)?;
+                let destination:Destination=serde_json::from_str(&json).map_err(error)?;
+                if !destination.enabled {return Ok(None);}
+                tx.execute("UPDATE alert_jobs SET attempts=attempts+1,lease_until=?2 WHERE id=?1",params![id,now+30_000]).map_err(error)?;
+                tx.execute("UPDATE alert_destinations SET next_start=?2 WHERE id=?1",params![destination.id,now+10_000]).map_err(error)?;
+                Ok(Some(DeliveryJob {id,destination,secret_key:key,payload,attempts:attempts+1,created}))
+            },
+            |_, _, _| Ok(()),
+        )
     }
     pub fn finish_alert(
         &self,
@@ -199,22 +220,25 @@ impl SqliteMailStore {
         jitter_ms: i64,
         now: i64,
     ) -> Result<(), StorageError> {
-        self.transaction(|tx| {
-            let retry=outcome==DeliveryOutcome::Retry && job.attempts<8 && now<job.created.saturating_add(MAX_AGE_MS);
-            let backoff=(30_000i64 * (1i64 << job.attempts.saturating_sub(1).min(7))).min(3_600_000);
-            let due=now.saturating_add((backoff+jitter_ms.clamp(0,5000)).max(retry_after_ms.clamp(0,3_600_000)));
-            let status=if retry {"Pending"} else {match outcome {DeliveryOutcome::Accepted=>"Accepted",DeliveryOutcome::Unavailable=>"Unavailable",_=>"Failed"}};
-            // INVARIANT: A stale lease completion cannot revive canceled or superseded work.
-            let changed = tx.execute("UPDATE alert_jobs SET status=?2,due=?3,lease_until=0,payload=CASE WHEN ?2='Pending' THEN payload ELSE '' END,finished=CASE WHEN ?2='Pending' THEN NULL ELSE ?4 END WHERE id=?1 AND attempts=?5 AND revision=?6 AND status='Pending'",params![job.id,status,due,now,job.attempts,job.destination.revision]).map_err(error)?;
-            // INVARIANT: Provider rate limits can cover shared bots/webhooks across destinations.
-            // Conservatively pause the entire provider kind, without storing a secret fingerprint.
-            if changed == 1 && outcome == DeliveryOutcome::Retry && matches!(job.destination.kind,
-                triage_ai::alerts::DestinationKind::Telegram | triage_ai::alerts::DestinationKind::Discord) {
-                tx.execute("UPDATE alert_destinations SET next_start=max(next_start,?2) WHERE json_extract(definition_json,'$.kind')=?1",
-                    params![match job.destination.kind {triage_ai::alerts::DestinationKind::Telegram=>"Telegram",_=>"Discord"},due]).map_err(error)?;
-            }
-            Ok(())
-        })
+        self.write_transaction(
+            |tx| {
+                let retry=outcome==DeliveryOutcome::Retry && job.attempts<8 && now<job.created.saturating_add(MAX_AGE_MS);
+                let backoff=(30_000i64 * (1i64 << job.attempts.saturating_sub(1).min(7))).min(3_600_000);
+                let due=now.saturating_add((backoff+jitter_ms.clamp(0,5000)).max(retry_after_ms.clamp(0,3_600_000)));
+                let status=if retry {"Pending"} else {match outcome {DeliveryOutcome::Accepted=>"Accepted",DeliveryOutcome::Unavailable=>"Unavailable",_=>"Failed"}};
+                // INVARIANT: A stale lease completion cannot revive canceled or superseded work.
+                let changed = tx.execute("UPDATE alert_jobs SET status=?2,due=?3,lease_until=0,payload=CASE WHEN ?2='Pending' THEN payload ELSE '' END,finished=CASE WHEN ?2='Pending' THEN NULL ELSE ?4 END WHERE id=?1 AND attempts=?5 AND revision=?6 AND status='Pending'",params![job.id,status,due,now,job.attempts,job.destination.revision]).map_err(error)?;
+                // INVARIANT: Provider rate limits can cover shared bots/webhooks across destinations.
+                // Conservatively pause the entire provider kind, without storing a secret fingerprint.
+                if changed == 1 && outcome == DeliveryOutcome::Retry && matches!(job.destination.kind,
+                    triage_ai::alerts::DestinationKind::Telegram | triage_ai::alerts::DestinationKind::Discord) {
+                    tx.execute("UPDATE alert_destinations SET next_start=max(next_start,?2) WHERE json_extract(definition_json,'$.kind')=?1",
+                        params![match job.destination.kind {triage_ai::alerts::DestinationKind::Telegram=>"Telegram",_=>"Discord"},due]).map_err(error)?;
+                }
+                Ok(())
+            },
+            |_, _, _| Ok(()),
+        )
     }
 }
 // INVARIANT: Gate the actual lease candidate even if a bounded scheduling batch

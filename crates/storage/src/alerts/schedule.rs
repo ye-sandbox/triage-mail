@@ -115,15 +115,18 @@ impl SqliteMailStore {
         if !policy.validate() || (policy.urgent_bypass && !consent) {
             return Err(error("invalid"));
         }
-        self.transaction(|tx| {
-            let d = destinations(tx)?.into_iter().find(|d| d.id == policy.destination_id && d.revision == policy.destination_revision).ok_or_else(|| error("stale"))?;
-            if read_policy(tx,&d)?.revision != policy.revision { return Err(error("stale")); }
-            policy.revision += 1;
-            tx.execute("UPDATE alert_jobs SET status='Canceled',payload='',lease_until=0,finished=?2 WHERE destination_id=?1 AND status='Pending' AND schedule_revision IS NOT NULL", params![d.id,now]).map_err(error)?;
-            tx.execute("DELETE FROM alert_schedule_items WHERE destination_id=?1", [&d.id]).map_err(error)?;
-            tx.execute("INSERT INTO alert_schedule_policies(destination_id,revision,definition_json) VALUES (?1,?2,?3) ON CONFLICT(destination_id) DO UPDATE SET revision=excluded.revision,definition_json=excluded.definition_json,last_slot=NULL", params![d.id,policy.revision,serde_json::to_string(&policy).map_err(error)?]).map_err(error)?;
-            Ok(policy)
-        })
+        self.write_transaction(
+            |tx| {
+                let d = destinations(tx)?.into_iter().find(|d| d.id == policy.destination_id && d.revision == policy.destination_revision).ok_or_else(|| error("stale"))?;
+                if read_policy(tx,&d)?.revision != policy.revision { return Err(error("stale")); }
+                policy.revision += 1;
+                tx.execute("UPDATE alert_jobs SET status='Canceled',payload='',lease_until=0,finished=?2 WHERE destination_id=?1 AND status='Pending' AND schedule_revision IS NOT NULL", params![d.id,now]).map_err(error)?;
+                tx.execute("DELETE FROM alert_schedule_items WHERE destination_id=?1", [&d.id]).map_err(error)?;
+                tx.execute("INSERT INTO alert_schedule_policies(destination_id,revision,definition_json) VALUES (?1,?2,?3) ON CONFLICT(destination_id) DO UPDATE SET revision=excluded.revision,definition_json=excluded.definition_json,last_slot=NULL", params![d.id,policy.revision,serde_json::to_string(&policy).map_err(error)?]).map_err(error)?;
+                Ok(policy)
+            },
+            |_, _, _| Ok(()),
+        )
     }
     /// Bound work per destination; all missed slots become one immutable delivery.
     pub fn process_alert_schedules(
@@ -131,22 +134,25 @@ impl SqliteMailStore {
         now: i64,
         calendar: &dyn ScheduleCalendar,
     ) -> Result<(), StorageError> {
-        self.transaction(|tx| {
-            for d in scheduled_destinations(tx)? {
-                tx.execute("UPDATE alert_schedule_cursor SET destination_id=?1 WHERE singleton=1", [&d.id]).map_err(error)?;
-                let policy = read_policy(tx,&d)?;
-                let last: Option<i64> = tx.query_row("SELECT last_slot FROM alert_schedule_policies WHERE destination_id=?1", [&d.id], |r| r.get(0)).optional().map_err(error)?.flatten();
-                expire(tx,&d.id,now)?;
-                // INVARIANT: Quiet hours also gate retries and previously sealed routine jobs.
-                let end = quiet_end(&policy,now,calendar).ok_or_else(|| error("calendar"))?;
-                if end > now {
-                    tx.execute("UPDATE alert_jobs SET due=max(due,?2) WHERE destination_id=?1 AND status='Pending' AND urgent=0 AND schedule_revision IS NOT NULL", params![d.id,end]).map_err(error)?;
-                    continue;
+        self.write_transaction(
+            |tx| {
+                for d in scheduled_destinations(tx)? {
+                    tx.execute("UPDATE alert_schedule_cursor SET destination_id=?1 WHERE singleton=1", [&d.id]).map_err(error)?;
+                    let policy = read_policy(tx,&d)?;
+                    let last: Option<i64> = tx.query_row("SELECT last_slot FROM alert_schedule_policies WHERE destination_id=?1", [&d.id], |r| r.get(0)).optional().map_err(error)?.flatten();
+                    expire(tx,&d.id,now)?;
+                    // INVARIANT: Quiet hours also gate retries and previously sealed routine jobs.
+                    let end = quiet_end(&policy,now,calendar).ok_or_else(|| error("calendar"))?;
+                    if end > now {
+                        tx.execute("UPDATE alert_jobs SET due=max(due,?2) WHERE destination_id=?1 AND status='Pending' AND urgent=0 AND schedule_revision IS NOT NULL", params![d.id,end]).map_err(error)?;
+                        continue;
+                    }
+                    seal(tx,&d,&policy,last,now,calendar)?;
                 }
-                seal(tx,&d,&policy,last,now,calendar)?;
-            }
-            Ok(())
-        })
+                Ok(())
+            },
+            |_, _, _| Ok(()),
+        )
     }
 }
 // INVARIANT: Persisted round-robin selection bounds each worker tick without starving

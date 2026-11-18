@@ -25,7 +25,10 @@ pub fn execute_lexical_search(
     load_summaries(conn, &lexical_ids(conn, query)?)
 }
 
-fn lexical_ids(conn: &Connection, query: &HybridQuery) -> Result<Vec<String>, StorageError> {
+pub(crate) fn lexical_ids(
+    conn: &Connection,
+    query: &HybridQuery,
+) -> Result<Vec<String>, StorageError> {
     if query.query_text.trim().is_empty() {
         return if let Some(account) = query.account_filter.as_deref() {
             let mut stmt = conn
@@ -122,6 +125,9 @@ fn semantic_ids(conn: &Connection, query: &HybridQuery) -> Result<Vec<String>, S
     let mut k = end + 1;
     loop {
         let mut rows = knn_candidates(conn, &bytes, k, query.account_filter.as_deref())?;
+        if rows.iter().any(|(_, d)| !d.is_finite()) {
+            return exact_semantic_ids(conn, query, &bytes);
+        }
         rows.sort_by(|a, b| a.1.total_cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
         let complete = rows.len() < k || rows[end - 1].1 < rows[k - 1].1;
         if complete {
@@ -166,7 +172,10 @@ fn knn_candidates(
             .map_err(query_error)?;
         let rows = stmt
             .query_map(rusqlite::params![bytes, k as i64, account_id], |row| {
-                Ok((row.get(0)?, row.get(1)?))
+                Ok((
+                    row.get(0)?,
+                    row.get::<_, Option<f64>>(1)?.unwrap_or(f64::NEG_INFINITY),
+                ))
             })
             .map_err(query_error)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
@@ -179,7 +188,10 @@ fn knn_candidates(
             .map_err(query_error)?;
         let rows = stmt
             .query_map(rusqlite::params![bytes, k as i64], |row| {
-                Ok((row.get(0)?, row.get(1)?))
+                Ok((
+                    row.get(0)?,
+                    row.get::<_, Option<f64>>(1)?.unwrap_or(f64::NEG_INFINITY),
+                ))
             })
             .map_err(query_error)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
@@ -208,7 +220,8 @@ fn exact_semantic_ids(
             .map_err(query_error)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
     } else {
-        let sql = "SELECT v.message_id FROM vec_messages v JOIN messages m ON m.id=v.message_id
+        let sql =
+            "SELECT v.message_id FROM vec_messages v CROSS JOIN messages m ON m.id=v.message_id
          ORDER BY vec_distance_cosine(v.embedding_int8, vec_int8(?1)), v.message_id
          LIMIT ?2 OFFSET ?3";
         let mut stmt = conn.prepare_cached(sql).map_err(query_error)?;
@@ -220,6 +233,30 @@ fn exact_semantic_ids(
             .map_err(query_error)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(query_error)
     }
+}
+
+pub(crate) fn rrf_fuse_and_load(
+    conn: &Connection,
+    lex_ids: Vec<String>,
+    sem_ids: Vec<String>,
+    query: &HybridQuery,
+) -> Result<Vec<MessageRowSummary>, StorageError> {
+    let mut scores: HashMap<String, f64> = HashMap::with_capacity(lex_ids.len() + sem_ids.len());
+    for ids in [lex_ids, sem_ids] {
+        for (rank, id) in ids.into_iter().enumerate() {
+            *scores.entry(id).or_default() += 1.0 / (60.0 + rank as f64 + 1.0);
+        }
+    }
+    let mut ranked: Vec<_> = scores.into_iter().collect();
+    // INVARIANT: HashMap iteration must never decide equal-score page membership.
+    ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    let ids: Vec<_> = ranked
+        .into_iter()
+        .skip(query.offset)
+        .take(query.limit)
+        .map(|(id, _)| id)
+        .collect();
+    load_summaries(conn, &ids)
 }
 
 /// Combines lexical and semantic candidates with Reciprocal Rank Fusion.
@@ -240,25 +277,9 @@ pub fn execute_hybrid_search(
                 offset: 0,
                 ..query.clone()
             };
-            let mut scores: HashMap<String, f64> = HashMap::with_capacity(candidates.limit * 2);
-            for ids in [
-                lexical_ids(conn, &candidates)?,
-                semantic_ids(conn, &candidates)?,
-            ] {
-                for (rank, id) in ids.into_iter().enumerate() {
-                    *scores.entry(id).or_default() += 1.0 / (60.0 + rank as f64 + 1.0);
-                }
-            }
-            let mut ranked: Vec<_> = scores.into_iter().collect();
-            // INVARIANT: HashMap iteration must never decide equal-score page membership.
-            ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-            let ids: Vec<_> = ranked
-                .into_iter()
-                .skip(query.offset)
-                .take(query.limit)
-                .map(|(id, _)| id)
-                .collect();
-            load_summaries(conn, &ids)
+            let lex_ids = lexical_ids(conn, &candidates)?;
+            let sem_ids = semantic_ids(conn, &candidates)?;
+            rrf_fuse_and_load(conn, lex_ids, sem_ids, query)
         }
     }
 }
@@ -293,21 +314,7 @@ pub fn execute_hybrid_search_parallel(
                 });
                 (lex_res, sem_res)
             });
-            let mut scores: HashMap<String, f64> = HashMap::with_capacity(candidates.limit * 2);
-            for ids in [lex_res?, sem_res?] {
-                for (rank, id) in ids.into_iter().enumerate() {
-                    *scores.entry(id).or_default() += 1.0 / (60.0 + rank as f64 + 1.0);
-                }
-            }
-            let mut ranked: Vec<_> = scores.into_iter().collect();
-            ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-            let ids: Vec<_> = ranked
-                .into_iter()
-                .skip(query.offset)
-                .take(query.limit)
-                .map(|(id, _)| id)
-                .collect();
-            load_summaries(conn_lex, &ids)
+            rrf_fuse_and_load(conn_lex, lex_res?, sem_res?, query)
         }
     }
 }

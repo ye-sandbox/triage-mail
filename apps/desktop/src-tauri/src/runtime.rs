@@ -167,6 +167,9 @@ pub(crate) fn request_quit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     if let Some(workers) = state.workers.get() {
         workers.shutdown();
     }
+    if let Some(service) = state.service.get() {
+        service.store.clear_ram_index();
+    }
     app.exit(0);
 }
 
@@ -1270,6 +1273,9 @@ pub fn run() {
             }
             if let Some(workers) = state.workers.get() {
                 workers.shutdown();
+            }
+            if let Some(service) = state.service.get() {
+                service.store.clear_ram_index();
             }
         }
     });

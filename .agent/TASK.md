@@ -7,18 +7,27 @@
 
 ## Active Task
 
-### Task [90.6]: Zeroized In-Memory Exact `int8` Vector & Eligibility Accelerator (`100k+` Scale)
-
-- **Status:** READY FOR PLANNING
-- **Priority:** 2 of 2 (Lazy Attachment UX & 100k+ Exact RAM Search — 2026-11-18)
-- **Systems Involved:** `crates/storage`, `apps/desktop/src-tauri`, `docs/performance`, `.agent/NOTES.md`.
-- **Scope Summary:**
-  1. `[90.6.1]` `[BATCH: B1]` **Zeroized-on-Drop Contiguous `int8[384]` Arena & Exact Scoped Cosine Ranker (`crates/storage`):** Implement a 100% safe Rust (`#![deny(unsafe_code)]`), auto-vectorized contiguous RAM index (`RamVectorIndex`, ~38.8 MiB for 100k messages) with `Zeroize` wipe on drop/lock, generation-synchronized with SQLite vector writes/rebuilds, resolving the scoped vector latency bottleneck (`106–390ms` in `sqlite-vec` `vec0` over SQLCipher) without the recall loss proven in `docs/performance/binary-quantization.md` (`k-023`).
-  2. `[90.6.2]` `[BATCH: B2]` **Read-Pool Integration, 100k Benchmark & Exact Oracle Parity Proof (`crates/storage`, `apps/desktop/src-tauri`, `docs/performance`):** Integrate `RamVectorIndex` transparently into `SqliteMailStore` semantic/hybrid search with graceful `vec0` fallback during hydration, add a 100k-message benchmark + exact ordered-page parity test proving 100% recall equivalence and `< 5ms` p95 vector ranking across Global, Inbox, Category, and Sender Review scopes, and record empirical metrics in `docs/performance/`.
+No prioritized active task. Both tasks in the 2026-11-18 Lazy Attachment UX & 100k+ Exact RAM Search initiative (`[04.23]`, `[90.6]`) are complete; awaiting user selection for the next milestone.
 
 ---
 
 ## Latest Completed Task
+
+### Task [90.6]: Zeroized In-Memory Exact `int8` Vector & Eligibility Accelerator (`100k+` Scale)
+
+- **Status:** DONE
+- **Priority:** 2 of 2 (Lazy Attachment UX & 100k+ Exact RAM Search — 2026-11-18)
+- **Systems Involved:** `crates/storage`, `apps/desktop/src-tauri`, `docs/performance`, `.agent/NOTES.md`.
+- **Delivered:**
+  1. `[90.6.1]` Added `zeroize = "1.9.1"` to `crates/storage/Cargo.toml` under `#![deny(unsafe_code)]` while keeping `CURRENT_SCHEMA_VERSION = 11` unchanged. Created `crates/storage/src/ram_vector_index.rs` (`RamVectorIndex`, `RamVectorState`, `ReadyRamIndex`, `RamQueryFilter`, `RamScopeFilter`): contiguous SoA `int8[384]` arena (`vectors`, `norm_sq`, `rowids`, `message_ids`, `account_idx`, `id_to_slot`, `rowid_to_slot`), compact per-slot scoped eligibility columns (`is_starred`, `snooze_until`, resolved `TriageCategory`, active `ReviewState` + `inbox_hidden`, and interned effective folder `u64` bitmasks + overflow map), explicit `Zeroize::zeroize()` on `Drop`, `clear()`, tail swap-remove, and reallocation, and exact 8-lane unrolled `i32` dot + `f32`-rounded cosine parity (`k-021` `f64::NEG_INFINITY` zero-norm ordering, `message_id` ASC ties) with parallel `BinaryHeap` top-`offset + limit` selection.
+  2. `[90.6.2]` Integrated `Arc<RwLock<RamVectorState>>` across `SqliteMailStore` (`repository.rs`, `search.rs`, `scoped_search.rs`, `categories.rs`, `sender_review.rs`, `saved_views.rs`, `conversations/search.rs`, `embeddings.rs`, `backup.rs`) with transparent `vec0` fallback during `Uninitialized | Hydrating` (fixing `k-021` NULL-first handling and `CROSS JOIN messages` for deep global fallback in `search.rs`), intra-store write transaction sync (`write_transaction`), out-of-band `sqlite3_total_changes` / `PRAGMA data_version` invalidation (`fresh_ram_guard`), non-blocking desktop background hydration (`WorkerSupervisor::start`), and explicit quit/shutdown/restore/rebuild wipe (`worker.rs`, `runtime.rs`). Added comprehensive parity/sync/zeroize tests (`ram_vector_index_tests.rs`) and 100k benchmark (`crates/storage/examples/ram_vector_performance.rs`, `docs/performance/ram-vector-index.md`, `docs/performance/ram-vector-index.csv`).
+- **Validation:** `cargo fmt --all -- --check`, `cargo check --workspace`, `cargo check --no-default-features -p triage-mail-desktop`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` (`storage` 89 unit + 17 integration, `triage-mail-desktop` 52 unit + 35 integration) all exited 0; `pnpm --filter desktop check` (0 errors/warnings), `pnpm --filter desktop test` (31 files, 196 tests), and `pnpm --filter desktop build` exited 0; `! grep -rn "export let" apps/desktop/src/`, `node scripts/ci-guard.mjs` (0 findings), `node --test scripts/ci-guard.test.mjs` (5 passed), and `git diff --check` clean; 100k benchmark (`ram_vector_performance`) achieved 100% exact ordered-page parity across all 16 workloads (`48.74 MiB` total heap, `992.1ms` hydration, `1.71–4.78 ms` p50 kernel ranking, `7.78–16.80 ms` p95 end-to-end semantic across Global/Inbox/Category/Review).
+- **Contracts:** `.agent/NOTES.md` (`Zeroized In-Memory Exact int8 Vector Index ([90.6])`) and `docs/performance/ram-vector-index.md`.
+- **Next:** Awaiting user selection for the next milestone.
+
+---
+
+## Previous Completed Tasks
 
 ### Task [04.23]: Streaming Save-As & Safe Ephemeral Attachment Preview (`BODY.PEEK`)
 
@@ -34,8 +43,6 @@
 - **Next:** Promoted `[90.6]` (`READY FOR PLANNING`).
 
 ---
-
-## Previous Completed Tasks
 
 ### Task [04.22]: System Tray, Background Sync Lifecycle & Actionable Desktop Notifications
 

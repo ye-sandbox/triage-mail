@@ -69,17 +69,42 @@ impl SqliteMailStore {
         if generation.is_empty() || generation.len() > 200 {
             return Err(error("generation"));
         }
-        self.transaction(|tx| {
-            let current: Option<String> = tx.query_row("SELECT generation FROM embedding_generation WHERE singleton=1", [], |r| r.get(0)).optional().map_err(error)?;
-            if rebuild || current.as_deref() != Some(generation) {
-                // INVARIANT: Unversioned/projection vectors can never join the learned generation.
-                tx.execute("DELETE FROM vec_messages", []).map_err(error)?;
-                tx.execute("UPDATE embedding_work SET indexed_epoch=NULL,failed_epoch=NULL", []).map_err(error)?;
-                tx.execute("INSERT INTO embedding_generation VALUES(1,?1,lower(hex(randomblob(16)))) ON CONFLICT(singleton) DO UPDATE SET generation=excluded.generation,epoch=excluded.epoch", [generation]).map_err(error)?;
-                tx.execute("UPDATE conversation_epoch SET generation=lower(hex(randomblob(16)))", []).map_err(error)?;
-            }
-            Ok(())
-        })
+        self.write_transaction(
+            |tx| {
+                let current: Option<String> = tx
+                    .query_row(
+                        "SELECT generation FROM embedding_generation WHERE singleton=1",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .optional()
+                    .map_err(error)?;
+                let rebuilt = rebuild || current.as_deref() != Some(generation);
+                if rebuilt {
+                    // INVARIANT: Unversioned/projection vectors can never join the learned generation.
+                    tx.execute("DELETE FROM vec_messages", []).map_err(error)?;
+                    tx.execute(
+                        "UPDATE embedding_work SET indexed_epoch=NULL,failed_epoch=NULL",
+                        [],
+                    )
+                    .map_err(error)?;
+                    tx.execute("INSERT INTO embedding_generation VALUES(1,?1,lower(hex(randomblob(16)))) ON CONFLICT(singleton) DO UPDATE SET generation=excluded.generation,epoch=excluded.epoch", [generation]).map_err(error)?;
+                    tx.execute(
+                        "UPDATE conversation_epoch SET generation=lower(hex(randomblob(16)))",
+                        [],
+                    )
+                    .map_err(error)?;
+                }
+                Ok(rebuilt)
+            },
+            |idx, _, &rebuilt| {
+                if rebuilt {
+                    idx.clear();
+                }
+                Ok(())
+            },
+        )
+        .map(|_| ())
     }
     pub fn embedding_progress(&self) -> Result<EmbeddingProgress, StorageError> {
         self.transaction(|tx| progress(tx))
@@ -108,18 +133,52 @@ impl SqliteMailStore {
         if vector.is_some_and(|v| v.len() != 384 || v.iter().all(|x| *x == 0)) {
             return Err(error("vector"));
         }
-        self.transaction(|tx| {
-            let valid: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM embedding_work w JOIN embedding_generation g ON g.generation=?1 AND g.epoch=?2 WHERE w.message_id=?3 AND w.version=?4 AND w.indexed_epoch IS NOT g.epoch)",params![generation,work.epoch,work.message_id,work.version], |r| r.get(0)).map_err(error)?;
-            if !valid { return Ok(false); }
-            if let Some(vector) = vector {
-                tx.execute("DELETE FROM vec_messages WHERE message_id=?1", [&work.message_id]).map_err(error)?;
-                tx.execute("INSERT INTO vec_messages(message_id,account_id,embedding_int8) SELECT id,account_id,vec_int8(?2) FROM messages WHERE id=?1", params![work.message_id,crate::search::int8_slice_to_bytes(vector)]).map_err(error)?;
-                tx.execute("UPDATE embedding_work SET indexed_epoch=?2,failed_epoch=NULL WHERE message_id=?1",params![work.message_id,work.epoch]).map_err(error)?;
-                tx.execute("UPDATE conversation_epoch SET generation=lower(hex(randomblob(16)))", []).map_err(error)?;
-            } else {
-                tx.execute("UPDATE embedding_work SET failed_epoch=?2 WHERE message_id=?1",params![work.message_id,work.epoch]).map_err(error)?;
-            }
-            Ok(true)
-        })
+        self.write_transaction(
+            |tx| {
+                let valid: bool = tx
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM embedding_work w JOIN embedding_generation g ON g.generation=?1 AND g.epoch=?2 WHERE w.message_id=?3 AND w.version=?4 AND w.indexed_epoch IS NOT g.epoch)",
+                        params![generation, work.epoch, work.message_id, work.version],
+                        |r| r.get(0),
+                    )
+                    .map_err(error)?;
+                if !valid {
+                    return Ok(false);
+                }
+                if let Some(vector) = vector {
+                    tx.execute("DELETE FROM vec_messages WHERE message_id=?1", [&work.message_id])
+                        .map_err(error)?;
+                    tx.execute(
+                        "INSERT INTO vec_messages(message_id,account_id,embedding_int8) SELECT id,account_id,vec_int8(?2) FROM messages WHERE id=?1",
+                        params![work.message_id, crate::search::int8_slice_to_bytes(vector)],
+                    )
+                    .map_err(error)?;
+                    tx.execute(
+                        "UPDATE embedding_work SET indexed_epoch=?2,failed_epoch=NULL WHERE message_id=?1",
+                        params![work.message_id, work.epoch],
+                    )
+                    .map_err(error)?;
+                    tx.execute(
+                        "UPDATE conversation_epoch SET generation=lower(hex(randomblob(16)))",
+                        [],
+                    )
+                    .map_err(error)?;
+                    Ok(true)
+                } else {
+                    tx.execute(
+                        "UPDATE embedding_work SET failed_epoch=?2 WHERE message_id=?1",
+                        params![work.message_id, work.epoch],
+                    )
+                    .map_err(error)?;
+                    Ok(true)
+                }
+            },
+            |idx, conn, &committed| {
+                if committed && vector.is_some() {
+                    crate::ram_vector_index::refresh_slot_from_conn(idx, conn, &work.message_id)?;
+                }
+                Ok(())
+            },
+        )
     }
 }

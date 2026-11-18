@@ -1,0 +1,25 @@
+# rows=100000, hydration_ms=992.144, vec_bytes=38400000 (36.62 MiB), meta_bytes=12705024 (12.12 MiB), total_mib=48.74
+# Pure RAM rank_filtered kernel (100k vectors, excluding SQLite summary hydration):
+kernel_scope,offset,k_p50_ms,k_p95_ms,k_max_ms
+Global,0,3.153,7.945,7.999
+Global-deep,4000,4.780,8.943,10.797
+Inbox(account-2),0,1.710,3.988,4.350
+Category(Financial),0,2.529,4.116,5.794
+Review(All-Pending),0,3.420,5.112,8.006
+scope,mode,offset,eligible,vec0_p50_ms,vec0_p95_ms,vec0_max_ms,ram_p50_ms,ram_p95_ms,ram_max_ms,speedup_p95,exact_parity
+Global,Semantic,0,100000,132.208,137.648,137.648,10.309,12.126,13.273,11.4x,true
+Global,Semantic,4000,100000,35697.017,35697.017,35697.017,9.959,12.484,12.662,2859.3x,true
+Global,Hybrid,0,100000,167.022,592.735,592.735,43.515,46.805,47.140,12.7x,true
+Inbox,Semantic,0,17500,7267.193,7267.193,7267.193,13.569,16.797,16.934,432.6x,true
+Inbox,Semantic,4000,17500,7305.030,7305.030,7305.030,14.730,15.599,16.464,468.3x,true
+Inbox,Hybrid,0,17500,8028.768,8028.768,8028.768,749.714,790.402,811.172,10.2x,true
+Starred,Semantic,0,31,5.741,5.804,5.804,3.398,4.214,4.233,1.4x,true
+Snoozed,Semantic,0,2500,975.422,993.624,993.624,14.583,15.828,16.169,62.8x,true
+Archive,Semantic,0,5000,3054.118,3147.045,3147.045,9.355,11.007,11.804,285.9x,true
+Category(Financial),Semantic,0,25001,10871.695,10871.695,10871.695,8.217,9.746,10.921,1115.5x,true
+Category(Financial),Hybrid,0,25001,13198.708,13198.708,13198.708,1189.539,1280.929,1291.715,10.3x,true
+Category+Starred,Semantic,0,32,44.946,49.438,49.438,35.824,37.932,38.401,1.3x,true
+Review(All-Pending),Semantic,0,75000,28616.412,28616.412,28616.412,8.956,11.185,12.430,2558.5x,true
+Review(All-Pending),Hybrid,0,75000,29405.378,29405.378,29405.378,984.773,1035.140,1090.137,28.4x,true
+Review(Account-0),Semantic,0,25000,10863.126,10863.126,10863.126,7.024,7.780,9.258,1396.3x,true
+Review(Account-0),Hybrid,0,25000,12849.041,12849.041,12849.041,1914.183,2007.862,2046.415,6.4x,true

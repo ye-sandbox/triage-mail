@@ -107,19 +107,22 @@ impl SqliteMailStore {
     }
     /// Stage at most 300 headers per tick; final component consolidation is linear in account size.
     pub fn backfill_conversations(&self) -> Result<usize, StorageError> {
-        self.transaction(|tx| {
-            let rows = tx.prepare("SELECT m.id,m.account_id,m.message_id_header,m.in_reply_to,m.references_header FROM messages m LEFT JOIN conversation_inputs i ON i.message_id=m.id WHERE i.message_id IS NULL ORDER BY m.id LIMIT 300").map_err(error)?
-                .query_map([], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,Option<String>>(4)?))).map_err(error)?.collect::<Result<Vec<_>,_>>().map_err(error)?;
-            for (id,account,header,parent,refs) in &rows {
-                let header = header.as_deref().and_then(graph::header_id);
-                let parent = parent.as_deref().and_then(graph::header_id);
-                let refs = serde_json::to_string(&graph::references(refs.as_deref().unwrap_or(""))).map_err(error)?;
-                tx.execute("INSERT INTO conversation_inputs VALUES (?1,?2,?3,?4,?5)", params![id,account,header,parent,refs]).map_err(error)?;
-            }
-            let account: Option<String> = tx.query_row("SELECT d.account_id FROM conversation_dirty d WHERE NOT EXISTS(SELECT 1 FROM messages m LEFT JOIN conversation_inputs i ON i.message_id=m.id WHERE m.account_id=d.account_id AND i.message_id IS NULL) ORDER BY d.account_id LIMIT 1",[],|r|r.get(0)).optional().map_err(error)?;
-            if let Some(account) = account { rebuild(tx, &account)?; }
-            Ok(rows.len())
-        })
+        self.write_transaction(
+            |tx| {
+                let rows = tx.prepare("SELECT m.id,m.account_id,m.message_id_header,m.in_reply_to,m.references_header FROM messages m LEFT JOIN conversation_inputs i ON i.message_id=m.id WHERE i.message_id IS NULL ORDER BY m.id LIMIT 300").map_err(error)?
+                    .query_map([], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,Option<String>>(4)?))).map_err(error)?.collect::<Result<Vec<_>,_>>().map_err(error)?;
+                for (id,account,header,parent,refs) in &rows {
+                    let header = header.as_deref().and_then(graph::header_id);
+                    let parent = parent.as_deref().and_then(graph::header_id);
+                    let refs = serde_json::to_string(&graph::references(refs.as_deref().unwrap_or(""))).map_err(error)?;
+                    tx.execute("INSERT INTO conversation_inputs VALUES (?1,?2,?3,?4,?5)", params![id,account,header,parent,refs]).map_err(error)?;
+                }
+                let account: Option<String> = tx.query_row("SELECT d.account_id FROM conversation_dirty d WHERE NOT EXISTS(SELECT 1 FROM messages m LEFT JOIN conversation_inputs i ON i.message_id=m.id WHERE m.account_id=d.account_id AND i.message_id IS NULL) ORDER BY d.account_id LIMIT 1",[],|r|r.get(0)).optional().map_err(error)?;
+                if let Some(account) = account { rebuild(tx, &account)?; }
+                Ok(rows.len())
+            },
+            |_, _, _| Ok(()),
+        )
     }
 }
 fn rebuild(tx: &Connection, account: &str) -> Result<(), StorageError> {

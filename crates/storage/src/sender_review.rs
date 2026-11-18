@@ -130,15 +130,38 @@ impl SqliteMailStore {
         &self,
         value: ReviewPreferences,
     ) -> Result<ReviewPreferences, StorageError> {
-        self.transaction(|tx| {
-            let previous = preferences(tx,&value.account_id)?;
-            if previous.revision!=value.revision { return Err(invalid()); }
-            let revision = value.revision.checked_add(1).ok_or_else(invalid)?;
-            let enabling = value.enabled && !previous.enabled;
-            if enabling { tx.execute("DELETE FROM sender_review_frontiers WHERE account_id=?1",[&value.account_id]).map_err(error)?; }
-            tx.execute("INSERT INTO sender_review_preferences VALUES (?1,?2,?3,?4,?5) ON CONFLICT(account_id) DO UPDATE SET revision=excluded.revision,enabled=excluded.enabled,hide_in_inbox=excluded.hide_in_inbox,initializing=excluded.initializing",params![value.account_id,revision,value.enabled,value.hide_in_inbox,value.enabled && (enabling || previous.initializing)]).map_err(error)?;
-            preferences(tx,&value.account_id)
-        })
+        self.write_transaction(
+            |tx| {
+                let previous = preferences(tx, &value.account_id)?;
+                if previous.revision != value.revision {
+                    return Err(invalid());
+                }
+                let revision = value.revision.checked_add(1).ok_or_else(invalid)?;
+                let enabling = value.enabled && !previous.enabled;
+                if enabling {
+                    tx.execute(
+                        "DELETE FROM sender_review_frontiers WHERE account_id=?1",
+                        [&value.account_id],
+                    )
+                    .map_err(error)?;
+                }
+                tx.execute(
+                    "INSERT INTO sender_review_preferences VALUES (?1,?2,?3,?4,?5) ON CONFLICT(account_id) DO UPDATE SET revision=excluded.revision,enabled=excluded.enabled,hide_in_inbox=excluded.hide_in_inbox,initializing=excluded.initializing",
+                    params![
+                        value.account_id,
+                        revision,
+                        value.enabled,
+                        value.hide_in_inbox,
+                        value.enabled && (enabling || previous.initializing)
+                    ],
+                )
+                .map_err(error)?;
+                preferences(tx, &value.account_id)
+            },
+            |idx, conn, prefs| {
+                crate::ram_vector_index::refresh_review_for_account(idx, conn, &prefs.account_id)
+            },
+        )
     }
     /// Called before each sync batch; unknown UIDNEXT can later establish a usable frontier.
     pub fn establish_review_frontier(
@@ -148,18 +171,58 @@ impl SqliteMailStore {
         validity: u32,
         next: u32,
     ) -> Result<(), StorageError> {
-        self.transaction(|tx| {
-            tx.execute("INSERT INTO sender_review_frontiers SELECT ?1,?2,?3,?4 WHERE EXISTS(SELECT 1 FROM sender_review_preferences WHERE account_id=?1 AND enabled=1) ON CONFLICT(account_id,folder) DO UPDATE SET uidvalidity=excluded.uidvalidity,frontier=excluded.frontier WHERE sender_review_frontiers.uidvalidity!=excluded.uidvalidity OR sender_review_frontiers.frontier=4294967295",params![account,folder,validity,if next==0 {u32::MAX} else {next-1}]).map_err(error)?;
-            Ok(())
-        })
+        self.write_transaction(
+            |tx| {
+                tx.execute(
+                    "INSERT INTO sender_review_frontiers SELECT ?1,?2,?3,?4 WHERE EXISTS(SELECT 1 FROM sender_review_preferences WHERE account_id=?1 AND enabled=1) ON CONFLICT(account_id,folder) DO UPDATE SET uidvalidity=excluded.uidvalidity,frontier=excluded.frontier WHERE sender_review_frontiers.uidvalidity!=excluded.uidvalidity OR sender_review_frontiers.frontier=4294967295",
+                    params![account, folder, validity, if next == 0 { u32::MAX } else { next - 1 }],
+                )
+                .map_err(error)?;
+                Ok(())
+            },
+            |_, _, _| Ok(()),
+        )
     }
     pub fn backfill_sender_review(&self) -> Result<usize, StorageError> {
-        self.transaction(|tx| {
-            let ids = tx.prepare("SELECT m.id FROM messages m LEFT JOIN sender_review_messages r ON r.message_id=m.id WHERE r.message_id IS NULL ORDER BY m.id LIMIT 300").map_err(error)?.query_map([],|r|r.get::<_,String>(0)).map_err(error)?.collect::<Result<Vec<_>,_>>().map_err(error)?;
-            for id in &ids { observe(tx,id,false)?; }
-            let completed = tx.execute("UPDATE sender_review_preferences SET initializing=0 WHERE initializing=1 AND NOT EXISTS(SELECT 1 FROM messages m LEFT JOIN sender_review_messages r ON r.message_id=m.id WHERE m.account_id=sender_review_preferences.account_id AND r.message_id IS NULL)",[]).map_err(error)?;
-            Ok(ids.len().max(completed))
-        })
+        self.write_transaction(
+            |tx| {
+                let ids = tx
+                    .prepare("SELECT m.id FROM messages m LEFT JOIN sender_review_messages r ON r.message_id=m.id WHERE r.message_id IS NULL ORDER BY m.id LIMIT 300")
+                    .map_err(error)?
+                    .query_map([], |r| r.get::<_, String>(0))
+                    .map_err(error)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(error)?;
+                for id in &ids {
+                    observe(tx, id, false)?;
+                }
+                let completed = tx
+                    .execute("UPDATE sender_review_preferences SET initializing=0 WHERE initializing=1 AND NOT EXISTS(SELECT 1 FROM messages m LEFT JOIN sender_review_messages r ON r.message_id=m.id WHERE m.account_id=sender_review_preferences.account_id AND r.message_id IS NULL)", [])
+                    .map_err(error)?;
+                Ok((ids, completed))
+            },
+            |idx, conn, (ids, completed)| {
+                if *completed > 0 {
+                    let accounts: Vec<String> = conn
+                        .prepare_cached("SELECT account_id FROM sender_review_preferences WHERE enabled=1 AND initializing=0")
+                        .map_err(error)?
+                        .query_map([], |r| r.get(0))
+                        .map_err(error)?
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(error)?;
+                    for acc in accounts {
+                        crate::ram_vector_index::refresh_review_for_account(idx, conn, &acc)?;
+                    }
+                }
+                for id in ids {
+                    if idx.contains_id(id) {
+                        crate::ram_vector_index::refresh_slot_from_conn(idx, conn, id)?;
+                    }
+                }
+                Ok(())
+            },
+        )
+        .map(|(ids, completed)| ids.len().max(completed))
     }
     pub fn review_metadata(&self, id: &str) -> Result<Option<SenderChoice>, StorageError> {
         self.transaction(|tx| {
@@ -174,14 +237,52 @@ impl SqliteMailStore {
         {
             return Err(invalid());
         }
-        self.transaction(|tx| {
-            account(tx,&value.account_id)?;
-            let current=choice(tx,&value.account_id,&value.sender)?.ok_or_else(invalid)?;
-            if current.revision!=value.revision { return Err(invalid()); }
-            let revision=value.revision.checked_add(1).ok_or_else(invalid)?;
-            tx.execute("UPDATE sender_review_choices SET revision=?3,state=?4 WHERE account_id=?1 AND sender=?2",params![value.account_id,value.sender,revision,value.state.name()]).map_err(error)?;
-            Ok(SenderChoice {revision,..value})
-        })
+        self.write_transaction(
+            |tx| {
+                account(tx, &value.account_id)?;
+                let current = choice(tx, &value.account_id, &value.sender)?.ok_or_else(invalid)?;
+                if current.revision != value.revision {
+                    return Err(invalid());
+                }
+                let revision = value.revision.checked_add(1).ok_or_else(invalid)?;
+                tx.execute(
+                    "UPDATE sender_review_choices SET revision=?3,state=?4 WHERE account_id=?1 AND sender=?2",
+                    params![value.account_id, value.sender, revision, value.state.name()],
+                )
+                .map_err(error)?;
+                Ok(SenderChoice { revision, ..value })
+            },
+            |idx, conn, saved| {
+                let prefs: Option<(bool, bool, bool)> = conn
+                    .query_row(
+                        "SELECT enabled, hide_in_inbox, initializing FROM sender_review_preferences WHERE account_id=?1",
+                        [&saved.account_id],
+                        |r| Ok((r.get::<_, bool>(0)?, r.get::<_, bool>(1)?, r.get::<_, bool>(2)?)),
+                    )
+                    .optional()
+                    .map_err(error)?;
+                let (state_opt, hidden) = match prefs {
+                    Some((true, hide_in_inbox, false)) => (
+                        Some(saved.state),
+                        hide_in_inbox && matches!(saved.state, ReviewState::Pending | ReviewState::Declined),
+                    ),
+                    _ => (None, false),
+                };
+                let mut stmt = conn
+                    .prepare_cached(
+                        "SELECT message_id FROM sender_review_messages WHERE account_id=?1 AND sender=?2",
+                    )
+                    .map_err(error)?;
+                let rows = stmt
+                    .query_map(params![saved.account_id, saved.sender], |r| r.get::<_, String>(0))
+                    .map_err(error)?;
+                for row in rows {
+                    let msg_id = row.map_err(error)?;
+                    idx.set_review_state_if_present(&msg_id, state_opt, hidden);
+                }
+                Ok(())
+            },
+        )
     }
     pub fn list_sender_choices(
         &self,
@@ -207,10 +308,40 @@ impl SqliteMailStore {
             return Err(invalid());
         }
         self.transaction(|tx| {
-            if let Some(account_id)=&query.account_filter { account(tx,account_id)?; }
-            let predicate="EXISTS(SELECT 1 FROM sender_review_messages r JOIN sender_review_choices c ON c.account_id=r.account_id AND c.sender=r.sender JOIN sender_review_preferences p ON p.account_id=r.account_id WHERE r.message_id=m.id AND p.enabled=1 AND p.initializing=0 AND c.state=?2)";
-            let ids=crate::scoped_search::ScopedSearch { conn:tx,account_id:query.account_filter.as_deref().unwrap_or(""),folder:state.name(),eligibility:predicate,messages:"messages m",now:crate::now_epoch_ms() }.execute(query)?;
-            crate::search::load_summaries(tx,&ids)
+            if let Some(account_id) = &query.account_filter {
+                account(tx, account_id)?;
+            }
+            let predicate = "EXISTS(SELECT 1 FROM sender_review_messages r JOIN sender_review_choices c ON c.account_id=r.account_id AND c.sender=r.sender JOIN sender_review_preferences p ON p.account_id=r.account_id WHERE r.message_id=m.id AND p.enabled=1 AND p.initializing=0 AND c.state=?2)";
+            let ram_guard =
+                if query.mode != crate::SearchMode::Lexical && query.query_embedding_int8.is_some()
+                {
+                    self.fresh_ram_guard(tx)?
+                } else {
+                    None
+                };
+            let ram_index = ram_guard.as_deref().and_then(|st| match st {
+                crate::ram_vector_index::RamVectorState::Ready(ready) => Some(&ready.index),
+                _ => None,
+            });
+            let ram_filter = ram_index.map(|_| crate::ram_vector_index::RamQueryFilter {
+                account_id: query.account_filter.as_deref(),
+                scope: None,
+                category: None,
+                review_state: Some(state),
+            });
+            let ids = crate::scoped_search::ScopedSearch {
+                conn: tx,
+                account_id: query.account_filter.as_deref().unwrap_or(""),
+                folder: state.name(),
+                eligibility: predicate,
+                messages: "messages m",
+                now: crate::now_epoch_ms(),
+                ram_index,
+                ram_filter,
+            }
+            .execute(query)?;
+            drop(ram_guard);
+            crate::search::load_summaries(tx, &ids)
         })
     }
 }

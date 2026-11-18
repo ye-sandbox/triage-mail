@@ -43,18 +43,21 @@ impl SqliteMailStore {
         action: ConversationAction,
     ) -> Result<ConversationPreview, StorageError> {
         action.validate()?;
-        self.transaction(|tx| {
-            let ids=super::search::matching_ids(tx,query,context,id,all)?;
-            if ids.is_empty() || ids.len()>500 { return Err(stale()); }
-            let matching=super::search::matching_ids(tx,query,context,id,false)?;
-            let outside_count=ids.iter().filter(|id| !matching.contains(id)).count();
-            let generation=epoch(tx)?;
-            let token: String=tx.query_row("SELECT lower(hex(randomblob(16)))",[],|r|r.get(0)).map_err(error)?;
-            tx.execute("DELETE FROM conversation_previews WHERE created_at<?1",[crate::now_epoch_ms()-300_000]).map_err(error)?;
-            tx.execute("DELETE FROM conversation_previews WHERE token IN (SELECT token FROM conversation_previews ORDER BY created_at DESC,token LIMIT -1 OFFSET 15)",[]).map_err(error)?;
-            tx.execute("INSERT INTO conversation_previews VALUES (?1,?2,?3,?4,?5)",params![token,generation,serde_json::to_string(&ids).map_err(error)?,serde_json::to_string(&action).map_err(error)?,crate::now_epoch_ms()]).map_err(error)?;
-            Ok(ConversationPreview {token,generation,action,messages:crate::search::load_summaries(tx,&ids)?,outside_count})
-        })
+        self.write_transaction(
+            |tx| {
+                let ids=super::search::matching_ids(tx,query,context,id,all)?;
+                if ids.is_empty() || ids.len()>500 { return Err(stale()); }
+                let matching=super::search::matching_ids(tx,query,context,id,false)?;
+                let outside_count=ids.iter().filter(|id| !matching.contains(id)).count();
+                let generation=epoch(tx)?;
+                let token: String=tx.query_row("SELECT lower(hex(randomblob(16)))",[],|r|r.get(0)).map_err(error)?;
+                tx.execute("DELETE FROM conversation_previews WHERE created_at<?1",[crate::now_epoch_ms()-300_000]).map_err(error)?;
+                tx.execute("DELETE FROM conversation_previews WHERE token IN (SELECT token FROM conversation_previews ORDER BY created_at DESC,token LIMIT -1 OFFSET 15)",[]).map_err(error)?;
+                tx.execute("INSERT INTO conversation_previews VALUES (?1,?2,?3,?4,?5)",params![token,generation,serde_json::to_string(&ids).map_err(error)?,serde_json::to_string(&action).map_err(error)?,crate::now_epoch_ms()]).map_err(error)?;
+                Ok(ConversationPreview {token,generation,action,messages:crate::search::load_summaries(tx,&ids)?,outside_count})
+            },
+            |_, _, _| Ok(()),
+        )
     }
     pub fn conversation_preview(
         &self,
@@ -82,10 +85,13 @@ impl SqliteMailStore {
         }).collect())
     }
     pub fn record_conversation_attempt(&self, id: &str, failed: bool) -> Result<(), StorageError> {
-        self.transaction(|tx| {
-            tx.execute("INSERT INTO conversation_attempts SELECT id,?2,1 FROM messages WHERE id=?1 ON CONFLICT(message_id) DO UPDATE SET failed=excluded.failed,attempts=attempts+1",params![id,failed]).map_err(error)?;
-            Ok(())
-        })
+        self.write_transaction(
+            |tx| {
+                tx.execute("INSERT INTO conversation_attempts SELECT id,?2,1 FROM messages WHERE id=?1 ON CONFLICT(message_id) DO UPDATE SET failed=excluded.failed,attempts=attempts+1",params![id,failed]).map_err(error)?;
+                Ok(())
+            },
+            |_, _, _| Ok(()),
+        )
     }
 }
 

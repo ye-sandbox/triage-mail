@@ -22,6 +22,7 @@ pub mod desktop;
 pub mod migrations;
 pub mod models;
 pub mod portable;
+pub mod ram_vector_index;
 pub mod reminders;
 pub mod repository;
 pub mod rules;
@@ -38,6 +39,7 @@ pub use models::{
     now_epoch_ms, AccountRecord, AttachmentRecord, FolderRecord, MessageFlagsDelta,
     MessageFolderMembershipRecord, MessageRecord,
 };
+pub use ram_vector_index::RamVectorIndex;
 pub use reminders::ReminderJobRecord;
 pub use repository::SqliteMailStore;
 pub use scoped_search::{MailboxScope, MailboxView};
@@ -228,3 +230,5 @@ mod partition_tests;
 pub mod embeddings;
 #[cfg(test)]
 mod embeddings_tests;
+#[cfg(test)]
+mod ram_vector_index_tests;

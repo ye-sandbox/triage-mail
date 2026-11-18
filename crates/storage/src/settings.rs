@@ -30,6 +30,7 @@ impl SqliteMailStore {
         if read_tokenizer(&conn)? == mode {
             return Ok(());
         }
+        let need_sync = self.check_and_prepare_write(&conn)?;
         let tokenizer = match mode {
             FtsTokenizerMode::Trigram => "trigram",
             FtsTokenizerMode::Unicode61RemoveDiacritics => "unicode61 remove_diacritics 2",
@@ -48,6 +49,9 @@ impl SqliteMailStore {
         .map_err(|e| StorageError::Query(e.to_string()))?;
         tx.commit()
             .map_err(|e| StorageError::Query(e.to_string()))?;
+        if need_sync {
+            self.finish_sync_write(&conn, need_sync, |_, _| Ok(()))?;
+        }
         self.tokenizer_mode.store(
             u8::from(mode == FtsTokenizerMode::Trigram),
             Ordering::Release,

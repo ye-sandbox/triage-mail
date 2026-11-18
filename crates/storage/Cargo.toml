@@ -21,6 +21,7 @@ sqlite-vec = "0.1.9"
 thiserror = { workspace = true }
 triage-ai = { workspace = true }
 vault = { workspace = true }
+zeroize = "1.9.1"
 
 [dev-dependencies]
 tempfile = "3"

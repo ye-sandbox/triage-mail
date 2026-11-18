@@ -45,25 +45,33 @@ impl SqliteMailStore {
         {
             return Err(error());
         }
-        let conn = self.conn.lock().map_err(|_| error())?;
-        conn.execute(
-            "INSERT INTO account_avatars(account_id,avatar_bytes,mime_type,width,height,updated_at_epoch_ms)
-             VALUES (?1,?2,?3,?4,?5,?6) ON CONFLICT(account_id) DO UPDATE SET
-             avatar_bytes=excluded.avatar_bytes,mime_type=excluded.mime_type,width=excluded.width,
-             height=excluded.height,updated_at_epoch_ms=excluded.updated_at_epoch_ms",
-            params![account_id, avatar.bytes, avatar.mime_type, avatar.width, avatar.height, crate::now_epoch_ms()],
-        ).map_err(|_| error())?;
-        Ok(())
+        self.write_transaction(
+            |tx| {
+                tx.execute(
+                    "INSERT INTO account_avatars(account_id,avatar_bytes,mime_type,width,height,updated_at_epoch_ms)
+                     VALUES (?1,?2,?3,?4,?5,?6) ON CONFLICT(account_id) DO UPDATE SET
+                     avatar_bytes=excluded.avatar_bytes,mime_type=excluded.mime_type,width=excluded.width,
+                     height=excluded.height,updated_at_epoch_ms=excluded.updated_at_epoch_ms",
+                    params![account_id, avatar.bytes, avatar.mime_type, avatar.width, avatar.height, crate::now_epoch_ms()],
+                ).map_err(|_| error())?;
+                Ok(())
+            },
+            |_, _, _| Ok(()),
+        )
     }
 
     pub fn remove_account_avatar(&self, account_id: &str) -> Result<(), StorageError> {
-        let conn = self.conn.lock().map_err(|_| error())?;
-        conn.execute(
-            "DELETE FROM account_avatars WHERE account_id=?1",
-            [account_id],
+        self.write_transaction(
+            |tx| {
+                tx.execute(
+                    "DELETE FROM account_avatars WHERE account_id=?1",
+                    [account_id],
+                )
+                .map_err(|_| error())?;
+                Ok(())
+            },
+            |_, _, _| Ok(()),
         )
-        .map_err(|_| error())?;
-        Ok(())
     }
 }
 

@@ -151,19 +151,44 @@ impl SqliteMailStore {
         if limit == 0 || limit > 300 {
             return Err(invalid());
         }
-        self.transaction(|tx| {
-            let ids = tx.prepare("SELECT m.id FROM messages m LEFT JOIN message_categories a ON a.message_id=m.id WHERE a.version IS NULL OR a.version<>?1 ORDER BY m.id LIMIT ?2").map_err(error)?.query_map(params![CLASSIFIER_VERSION,limit],|r|r.get::<_,String>(0)).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
-            for id in &ids {
-                refresh(tx, id)?;
-            }
-            Ok(ids.len())
-        })
+        self.write_transaction(
+            |tx| {
+                let ids = tx
+                    .prepare("SELECT m.id FROM messages m LEFT JOIN message_categories a ON a.message_id=m.id WHERE a.version IS NULL OR a.version<>?1 ORDER BY m.id LIMIT ?2")
+                    .map_err(error)?
+                    .query_map(params![CLASSIFIER_VERSION, limit], |r| r.get::<_, String>(0))
+                    .map_err(error)?
+                    .collect::<rusqlite::Result<Vec<_>>>()
+                    .map_err(error)?;
+                for id in &ids {
+                    refresh(tx, id)?;
+                }
+                Ok(ids)
+            },
+            |idx, conn, ids| {
+                for id in ids {
+                    if idx.contains_id(id) {
+                        crate::ram_vector_index::refresh_slot_from_conn(idx, conn, id)?;
+                    }
+                }
+                Ok(())
+            },
+        )
+        .map(|ids| ids.len())
     }
     pub fn category_metadata(&self, id: &str) -> Result<CategoryMetadata, StorageError> {
-        self.transaction(|tx| {
-            ensure(tx, id)?;
-            metadata(tx, id)
-        })
+        self.write_transaction(
+            |tx| {
+                ensure(tx, id)?;
+                metadata(tx, id)
+            },
+            |idx, conn, _| {
+                if idx.contains_id(id) {
+                    crate::ram_vector_index::refresh_slot_from_conn(idx, conn, id)?;
+                }
+                Ok(())
+            },
+        )
     }
     pub fn correct_category(
         &self,
@@ -171,17 +196,45 @@ impl SqliteMailStore {
         revision: u32,
         category: Option<TriageCategory>,
     ) -> Result<CategoryMetadata, StorageError> {
-        self.transaction(|tx| {
-            ensure(tx,id)?;
-            let current = metadata(tx, id)?;
-            if current.correction_revision != revision {
-                return Err(invalid());
-            }
-            let revision = revision.checked_add(1).ok_or_else(invalid)?;
-            // INVARIANT: Null resets retain revisions, preventing stale save/reset ABA races.
-            tx.execute("INSERT INTO category_corrections SELECT account_id,correction_key,?2,?3 FROM message_categories WHERE message_id=?1 ON CONFLICT(account_id,correction_key) DO UPDATE SET revision=excluded.revision,category=excluded.category",params![id,revision,category.map(TriageCategory::as_str)]).map_err(error)?;
-            metadata(tx,id)
-        })
+        self.write_transaction(
+            |tx| {
+                ensure(tx, id)?;
+                let current = metadata(tx, id)?;
+                if current.correction_revision != revision {
+                    return Err(invalid());
+                }
+                let revision = revision.checked_add(1).ok_or_else(invalid)?;
+                // INVARIANT: Null resets retain revisions, preventing stale save/reset ABA races.
+                tx.execute(
+                    "INSERT INTO category_corrections SELECT account_id,correction_key,?2,?3 FROM message_categories WHERE message_id=?1 ON CONFLICT(account_id,correction_key) DO UPDATE SET revision=excluded.revision,category=excluded.category",
+                    params![id, revision, category.map(TriageCategory::as_str)],
+                )
+                .map_err(error)?;
+                metadata(tx, id)
+            },
+            |idx, conn, _| {
+                let mut stmt = conn
+                    .prepare_cached(
+                        "SELECT a2.message_id FROM message_categories a1
+                         JOIN message_categories a2
+                           ON a2.account_id = a1.account_id
+                          AND a2.correction_key = a1.correction_key
+                         WHERE a1.message_id = ?1",
+                    )
+                    .map_err(error)?;
+                let affected: Vec<String> = stmt
+                    .query_map([id], |r| r.get(0))
+                    .map_err(error)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(error)?;
+                for msg_id in affected {
+                    if idx.contains_id(&msg_id) {
+                        crate::ram_vector_index::refresh_slot_from_conn(idx, conn, &msg_id)?;
+                    }
+                }
+                Ok(())
+            },
+        )
     }
     pub fn list_category_overrides(
         &self,
@@ -230,16 +283,60 @@ impl SqliteMailStore {
         {
             return Err(invalid());
         }
-        self.transaction(|tx| {
-            let account: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?1)",[&value.account_id],|r|r.get(0)).map_err(error)?;
-            let revision: Option<u32> = tx.query_row("SELECT revision FROM category_sender_overrides WHERE account_id=?1 AND sender_key=?2",params![value.account_id,value.sender],|r|r.get(0)).optional().map_err(error)?;
-            if !account || revision.unwrap_or(0) != value.revision {
-                return Err(invalid());
-            }
-            value.revision=value.revision.checked_add(1).ok_or_else(invalid)?;
-            tx.execute("INSERT INTO category_sender_overrides VALUES (?1,?2,?3,?4) ON CONFLICT(account_id,sender_key) DO UPDATE SET revision=excluded.revision,category=excluded.category",params![value.account_id,value.sender,value.revision,value.category.map(TriageCategory::as_str)]).map_err(error)?;
-            Ok(value)
-        })
+        self.write_transaction(
+            |tx| {
+                let account: bool = tx
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?1)",
+                        [&value.account_id],
+                        |r| r.get(0),
+                    )
+                    .map_err(error)?;
+                let revision: Option<u32> = tx
+                    .query_row(
+                        "SELECT revision FROM category_sender_overrides WHERE account_id=?1 AND sender_key=?2",
+                        params![value.account_id, value.sender],
+                        |r| r.get(0),
+                    )
+                    .optional()
+                    .map_err(error)?;
+                if !account || revision.unwrap_or(0) != value.revision {
+                    return Err(invalid());
+                }
+                value.revision = value.revision.checked_add(1).ok_or_else(invalid)?;
+                tx.execute(
+                    "INSERT INTO category_sender_overrides VALUES (?1,?2,?3,?4) ON CONFLICT(account_id,sender_key) DO UPDATE SET revision=excluded.revision,category=excluded.category",
+                    params![
+                        value.account_id,
+                        value.sender,
+                        value.revision,
+                        value.category.map(TriageCategory::as_str)
+                    ],
+                )
+                .map_err(error)?;
+                Ok(value)
+            },
+            |idx, conn, saved| {
+                let sql = format!(
+                    "SELECT m.id, {}
+                     FROM message_categories a
+                     JOIN messages m ON m.id = a.message_id
+                     WHERE a.account_id = ?1 AND a.sender_key = ?2",
+                    crate::search::CATEGORY_EFFECTIVE
+                );
+                let mut stmt = conn.prepare_cached(&sql).map_err(error)?;
+                let rows = stmt
+                    .query_map(params![saved.account_id, saved.sender], |r| {
+                        Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+                    })
+                    .map_err(error)?;
+                for row in rows {
+                    let (msg_id, eff_cat) = row.map_err(error)?;
+                    idx.set_category_if_present(&msg_id, eff_cat.as_deref());
+                }
+                Ok(())
+            },
+        )
     }
     pub fn search_category(
         &self,
@@ -263,13 +360,27 @@ impl SqliteMailStore {
                     ..Default::default()
                 },
             };
-            crate::saved_views::execute_view(
+            let ram_guard = if query.mode != crate::SearchMode::Lexical
+                && query.query_embedding_int8.is_some()
+            {
+                self.fresh_ram_guard(tx)?
+            } else {
+                None
+            };
+            let ram_index = ram_guard.as_deref().and_then(|state| match state {
+                crate::ram_vector_index::RamVectorState::Ready(ready) => Some(&ready.index),
+                _ => None,
+            });
+            let res = crate::saved_views::execute_view(
                 tx,
                 &view,
                 query.query_embedding_int8.clone(),
                 (query.limit, query.offset),
                 crate::now_epoch_ms(),
-            )
+                ram_index,
+            );
+            drop(ram_guard);
+            res
         })
     }
 }

@@ -158,35 +158,65 @@ impl SqliteMailStore {
         if !view.validate() {
             return Err(invalid());
         }
-        self.transaction(|tx| {
-            validate_accounts(tx, &view)?;
-            let deleted: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM saved_view_deleted_ids WHERE id=?1)", [&view.id], |r| r.get(0)).map_err(error)?;
-            let revision: Option<u32> = tx.query_row("SELECT revision FROM saved_views WHERE id=?1", [&view.id], |r| r.get(0)).optional().map_err(error)?;
-            let count: u32 = tx.query_row("SELECT count(*) FROM saved_views", [], |r| r.get(0)).map_err(error)?;
-            if deleted || revision.unwrap_or(0) != view.revision || (revision.is_none() && count >= 200) { return Err(invalid()); }
-            view.revision = view.revision.checked_add(1).ok_or_else(invalid)?;
-            let json = serde_json::to_string(&view).map_err(error)?;
-            tx.execute("INSERT INTO saved_views VALUES (?1,?2,?3) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,definition_json=excluded.definition_json", params![view.id,view.revision,json]).map_err(error)?;
-            Ok(view)
-        })
+        self.write_transaction(
+            |tx| {
+                validate_accounts(tx, &view)?;
+                let deleted: bool = tx
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM saved_view_deleted_ids WHERE id=?1)",
+                        [&view.id],
+                        |r| r.get(0),
+                    )
+                    .map_err(error)?;
+                let revision: Option<u32> = tx
+                    .query_row(
+                        "SELECT revision FROM saved_views WHERE id=?1",
+                        [&view.id],
+                        |r| r.get(0),
+                    )
+                    .optional()
+                    .map_err(error)?;
+                let count: u32 = tx
+                    .query_row("SELECT count(*) FROM saved_views", [], |r| r.get(0))
+                    .map_err(error)?;
+                if deleted
+                    || revision.unwrap_or(0) != view.revision
+                    || (revision.is_none() && count >= 200)
+                {
+                    return Err(invalid());
+                }
+                view.revision = view.revision.checked_add(1).ok_or_else(invalid)?;
+                let json = serde_json::to_string(&view).map_err(error)?;
+                tx.execute(
+                    "INSERT INTO saved_views VALUES (?1,?2,?3) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,definition_json=excluded.definition_json",
+                    params![view.id, view.revision, json],
+                )
+                .map_err(error)?;
+                Ok(view)
+            },
+            |_, _, _| Ok(()),
+        )
     }
 
     pub fn delete_saved_view(&self, id: &str, revision: u32) -> Result<(), StorageError> {
-        self.transaction(|tx| {
-            if tx
-                .execute(
-                    "DELETE FROM saved_views WHERE id=?1 AND revision=?2",
-                    params![id, revision],
-                )
-                .map_err(error)?
-                != 1
-            {
-                return Err(invalid());
-            }
-            tx.execute("INSERT INTO saved_view_deleted_ids VALUES (?1)", [id])
-                .map_err(error)?;
-            Ok(())
-        })
+        self.write_transaction(
+            |tx| {
+                if tx
+                    .execute(
+                        "DELETE FROM saved_views WHERE id=?1 AND revision=?2",
+                        params![id, revision],
+                    )
+                    .map_err(error)?
+                    != 1
+                {
+                    return Err(invalid());
+                }
+                tx.execute("INSERT INTO saved_view_deleted_ids VALUES (?1)", [id])
+                    .map_err(error)?;
+                Ok(())
+            },
+            |_, _, _| Ok(()),
+        )
     }
 
     /// Resolve the persisted text/mode before embedding; execution rechecks its revision.
@@ -222,9 +252,36 @@ impl SqliteMailStore {
         let (limit, offset) = page;
         self.transaction(|tx| {
             let view = read(tx, id, revision)?;
-            execute_view(tx, &view, embedding, (limit, offset), now)
+            let ram_guard = if view.mode != SearchMode::Lexical && embedding.is_some() {
+                self.fresh_ram_guard(tx)?
+            } else {
+                None
+            };
+            let ram_index = ram_guard.as_deref().and_then(|state| match state {
+                crate::ram_vector_index::RamVectorState::Ready(ready) => Some(&ready.index),
+                _ => None,
+            });
+            let res = execute_view(tx, &view, embedding, (limit, offset), now, ram_index);
+            drop(ram_guard);
+            res
         })
     }
+}
+
+fn can_use_pure_ram_filter(view: &SavedView) -> bool {
+    let f = &view.filters;
+    f.is_read.is_none()
+        && f.is_starred.is_none()
+        && f.has_attachments.is_none()
+        && f.tags.is_empty()
+        && f.sender.is_none()
+        && f.sender_domain.is_none()
+        && f.extraction.is_none()
+        && f.due_from.is_none()
+        && f.due_to.is_none()
+        && f.upcoming_days.is_none()
+        && (view.accounts.len() <= 1
+            || matches!(view.scope, Some(crate::MailboxScope::AccountView { .. })))
 }
 
 pub(crate) fn execute_view(
@@ -233,6 +290,7 @@ pub(crate) fn execute_view(
     embedding: Option<Vec<i8>>,
     page: (usize, usize),
     now: i64,
+    ram_index: Option<&crate::RamVectorIndex>,
 ) -> Result<Vec<MessageRowSummary>, StorageError> {
     HybridQuery {
         query_text: view.query.clone(),
@@ -243,7 +301,7 @@ pub(crate) fn execute_view(
         offset: page.1,
     }
     .validate()?;
-    execute_view_all(tx, view, embedding, page, now)
+    execute_view_all(tx, view, embedding, page, now, ram_index)
 }
 
 // INVARIANT: Only native grouped search supplies a full-result limit; IPC remains bounded.
@@ -253,8 +311,12 @@ pub(crate) fn execute_view_all(
     embedding: Option<Vec<i8>>,
     page: (usize, usize),
     now: i64,
+    ram_index: Option<&crate::RamVectorIndex>,
 ) -> Result<Vec<MessageRowSummary>, StorageError> {
-    crate::search::load_summaries(tx, &execute_view_ids(tx, view, embedding, page, now)?)
+    crate::search::load_summaries(
+        tx,
+        &execute_view_ids(tx, view, embedding, page, now, ram_index)?,
+    )
 }
 
 pub(crate) fn execute_view_ids(
@@ -263,6 +325,7 @@ pub(crate) fn execute_view_ids(
     embedding: Option<Vec<i8>>,
     page: (usize, usize),
     now: i64,
+    ram_index: Option<&crate::RamVectorIndex>,
 ) -> Result<Vec<String>, StorageError> {
     validate_accounts(tx, view)?;
     let (limit, offset) = page;
@@ -282,13 +345,18 @@ pub(crate) fn execute_view_ids(
             crate::search::CATEGORY_EFFECTIVE
         ));
     }
+    let mut resolved_folder_owned = String::new();
+    let mut scope_account_owned: Option<&str> = None;
+    let mut scope_mailbox_ref: Option<&crate::MailboxView> = None;
     if let Some(crate::MailboxScope::AccountView {
         account_id,
         view: mailbox,
     }) = &view.scope
     {
-        value["resolved_folder"] =
-            crate::scoped_search::validate_scope(tx, account_id, mailbox)?.into();
+        resolved_folder_owned = crate::scoped_search::validate_scope(tx, account_id, mailbox)?;
+        scope_account_owned = Some(account_id.as_str());
+        scope_mailbox_ref = Some(mailbox);
+        value["resolved_folder"] = resolved_folder_owned.clone().into();
         eligibility
             .push_str(" AND m.account_id=json_extract(?2,'$.scope.AccountView.account_id') AND (");
         eligibility.push_str(
@@ -297,6 +365,27 @@ pub(crate) fn execute_view_ids(
         );
         eligibility.push(')');
     }
+    let ram_filter = ram_index.and_then(|_| {
+        if !can_use_pure_ram_filter(view) {
+            return None;
+        }
+        let account_id = scope_account_owned.or_else(|| view.accounts.first().map(String::as_str));
+        let scope = scope_mailbox_ref.map(|mailbox| {
+            // INVARIANT: SavedView/Category scopes intentionally do not apply INBOX_VISIBLE.
+            crate::ram_vector_index::scope_to_ram_filter(
+                mailbox,
+                &resolved_folder_owned,
+                now,
+                false,
+            )
+        });
+        Some(crate::ram_vector_index::RamQueryFilter {
+            account_id,
+            scope,
+            category: view.filters.category,
+            review_state: None,
+        })
+    });
     let json = serde_json::to_string(&value).map_err(error)?;
     let filters = view.filters.clone();
     // INVARIANT: The connection mutex encloses registration, all branches and hydration.
@@ -320,6 +409,8 @@ pub(crate) fn execute_view_ids(
         eligibility: &eligibility,
         messages: "messages m",
         now,
+        ram_index,
+        ram_filter,
     };
     let result = search.execute(&query);
     // INVARIANT: Private filter snapshots do not outlive this search in a SQL closure.

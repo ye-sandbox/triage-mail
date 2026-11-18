@@ -102,38 +102,76 @@ impl SqliteMailStore {
 
     /// The caller must provide an unpublished, fresh encrypted database.
     pub fn read_backup<R: Read>(&self, input: R, passphrase: &[u8]) -> Result<(), StorageError> {
+        self.clear_ram_index();
         let mut reader = BackupReader::new(input, passphrase)?;
         let manifest: Manifest = decode(&reader.record()?.ok_or_else(invalid)?)?;
         if manifest.version != 1 || manifest.schema != BACKUP_SCHEMA_VERSION {
             return Err(invalid());
         }
-        self.transaction(|tx| {
-            // Refuse even an empty-looking installation with configuration/history.
-            let tables: Vec<String> = tx.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-                .map_err(|_| invalid())?.query_map([], |r| r.get(0)).map_err(|_| invalid())?
-                .collect::<Result<_, _>>().map_err(|_| invalid())?;
-            for table in tables {
-                if matches!(table.as_str(), "schema_migrations" | "conversation_epoch" | "alert_schedule_cursor") || table.starts_with("messages_fts") || table.starts_with("vec_messages") { continue; }
-                let count: i64 = tx.query_row(&format!("SELECT count(*) FROM \"{table}\""), [], |r| r.get(0)).map_err(|_| invalid())?;
-                if count != 0 { return Err(invalid()); }
-            }
-            let mut table_index = 0;
-            let mut count = 0u64;
-            while let Some(bytes) = reader.record()? {
-                let record: Record = decode(&bytes)?;
-                if record.table != table_index || table_index >= TABLES.len() { return Err(invalid()); }
-                if let Some(cells) = record.cells {
-                    count += 1;
-                    if count > 10_000_000 { return Err(invalid()); }
-                    insert_row(tx, TABLES[table_index], cells)?;
-                } else { table_index += 1; }
-            }
-            if table_index != TABLES.len() { return Err(invalid()); }
-            sanitize(tx)?;
-            if tx.prepare("PRAGMA foreign_key_check").map_err(|_| invalid())?.exists([]).map_err(|_| invalid())? { return Err(invalid()); }
-            Ok(())
-        })?;
+        self.write_transaction(
+            |tx| {
+                // Refuse even an empty-looking installation with configuration/history.
+                let tables: Vec<String> = tx
+                    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+                    .map_err(|_| invalid())?
+                    .query_map([], |r| r.get(0))
+                    .map_err(|_| invalid())?
+                    .collect::<Result<_, _>>()
+                    .map_err(|_| invalid())?;
+                for table in tables {
+                    if matches!(
+                        table.as_str(),
+                        "schema_migrations" | "conversation_epoch" | "alert_schedule_cursor"
+                    ) || table.starts_with("messages_fts")
+                        || table.starts_with("vec_messages")
+                    {
+                        continue;
+                    }
+                    let count: i64 = tx
+                        .query_row(&format!("SELECT count(*) FROM \"{table}\""), [], |r| r.get(0))
+                        .map_err(|_| invalid())?;
+                    if count != 0 {
+                        return Err(invalid());
+                    }
+                }
+                let mut table_index = 0;
+                let mut count = 0u64;
+                while let Some(bytes) = reader.record()? {
+                    let record: Record = decode(&bytes)?;
+                    if record.table != table_index || table_index >= TABLES.len() {
+                        return Err(invalid());
+                    }
+                    if let Some(cells) = record.cells {
+                        count += 1;
+                        if count > 10_000_000 {
+                            return Err(invalid());
+                        }
+                        insert_row(tx, TABLES[table_index], cells)?;
+                    } else {
+                        table_index += 1;
+                    }
+                }
+                if table_index != TABLES.len() {
+                    return Err(invalid());
+                }
+                sanitize(tx)?;
+                if tx
+                    .prepare("PRAGMA foreign_key_check")
+                    .map_err(|_| invalid())?
+                    .exists([])
+                    .map_err(|_| invalid())?
+                {
+                    return Err(invalid());
+                }
+                Ok(())
+            },
+            |idx, _, _| {
+                idx.clear();
+                Ok(())
+            },
+        )?;
         self.set_tokenizer(manifest.tokenizer)?;
+        self.clear_ram_index();
         let conn = self.conn.lock().map_err(|_| invalid())?;
         let check: String = conn
             .query_row("PRAGMA integrity_check", [], |r| r.get(0))
