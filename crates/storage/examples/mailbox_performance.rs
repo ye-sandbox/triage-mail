@@ -77,7 +77,51 @@ fn expected(
         .map(|id| format!("message-{id:06}"))
         .collect()
 }
-fn run(fixture: &data::Fixture, label: &str, view: Option<MailboxView>) -> Result<()> {
+#[derive(Clone, Default)]
+struct CliOptions {
+    with_slow_baseline: bool,
+    verbose: bool,
+    selector: Option<String>,
+}
+
+fn parse_cli_options() -> CliOptions {
+    let mut opts = CliOptions::default();
+    for arg in std::env::args().skip(1) {
+        match arg.as_str() {
+            "--with-slow-baseline" => opts.with_slow_baseline = true,
+            "--verbose" => opts.verbose = true,
+            "-h" | "--help" => {
+                eprintln!(
+                    "Usage: mailbox_performance [Plan|<Label>] [--with-slow-baseline] [--verbose] [--help]"
+                );
+                std::process::exit(0);
+            }
+            other if other.starts_with('-') => {
+                eprintln!("error: unknown argument '{other}'");
+                std::process::exit(2);
+            }
+            other if opts.selector.is_none() => opts.selector = Some(other.to_string()),
+            other => {
+                eprintln!("error: unexpected positional argument '{other}'");
+                std::process::exit(2);
+            }
+        }
+    }
+    opts
+}
+
+fn percentile(sorted: &[f64], num: usize, den: usize) -> f64 {
+    let idx = (sorted.len() * num).div_ceil(den).saturating_sub(1);
+    sorted[idx.min(sorted.len() - 1)]
+}
+
+fn run(
+    fixture: &data::Fixture,
+    warm_hydrated_store: &SqliteMailStore,
+    label: &str,
+    view: Option<MailboxView>,
+    opts: &CliOptions,
+) -> Result<()> {
     let scope = view
         .clone()
         .map(|view| MailboxScope::AccountView {
@@ -128,31 +172,64 @@ fn run(fixture: &data::Fixture, label: &str, view: Option<MailboxView>) -> Resul
                 }
                 Ok((ms, rows.len()))
             };
-            for sample in 0..3 {
+            if opts.with_slow_baseline {
+                for sample in 0..3 {
+                    let store =
+                        SqliteMailStore::open(&path, &fixture.key, FtsTokenizerMode::default())?;
+                    let (ms, count) = measure(&store)?;
+                    println!(
+                        "{label},{mode:?},{blank},{offset},{},reopened,{sample},{ms:.6},{count}",
+                        ids.len()
+                    );
+                }
                 let store =
                     SqliteMailStore::open(&path, &fixture.key, FtsTokenizerMode::default())?;
-                let (ms, count) = measure(&store)?;
-                println!(
-                    "{label},{mode:?},{blank},{offset},{},reopened,{sample},{ms:.6},{count}",
-                    ids.len()
-                );
-            }
-            let store = SqliteMailStore::open(&path, &fixture.key, FtsTokenizerMode::default())?;
-            for _ in 0..5 {
-                measure(&store)?;
-            }
-            for sample in 0..30 {
-                let (ms, count) = measure(&store)?;
-                println!(
-                    "{label},{mode:?},{blank},{offset},{},warm,{sample},{ms:.6},{count}",
-                    ids.len()
-                );
+                for _ in 0..5 {
+                    measure(&store)?;
+                }
+                for sample in 0..30 {
+                    let (ms, count) = measure(&store)?;
+                    println!(
+                        "{label},{mode:?},{blank},{offset},{},warm,{sample},{ms:.6},{count}",
+                        ids.len()
+                    );
+                }
+            } else {
+                let (w0, _) = measure(warm_hydrated_store)?;
+                let slow_fast_mode = w0 > 250.0;
+                if !slow_fast_mode {
+                    let _ = measure(warm_hydrated_store)?;
+                }
+                let target_samples = if slow_fast_mode { 3 } else { 30 };
+                let mut samples = Vec::with_capacity(target_samples);
+                for sample in 0..target_samples {
+                    let (ms, count) = measure(warm_hydrated_store)?;
+                    if opts.verbose {
+                        println!(
+                            "{label},{mode:?},{blank},{offset},{},warm,{sample},{ms:.6},{count}",
+                            ids.len()
+                        );
+                    }
+                    samples.push(ms);
+                }
+                if !opts.verbose {
+                    samples.sort_by(f64::total_cmp);
+                    println!(
+                        "{label},{mode:?},{blank},{offset},{},warm,{},{:.3},{:.3},{:.3}",
+                        ids.len(),
+                        samples.len(),
+                        percentile(&samples, 50, 100),
+                        percentile(&samples, 95, 100),
+                        *samples.last().unwrap(),
+                    );
+                }
             }
         }
     }
     Ok(())
 }
 fn main() -> Result<()> {
+    let opts = parse_cli_options();
     let fixture = data::seed()?;
     let path = fixture.directory.path().join("synthetic.db");
     let conn = storage::connection::open_encrypted_connection(&path, &fixture.key)?;
@@ -164,7 +241,7 @@ fn main() -> Result<()> {
         conn.query_row("PRAGMA cipher_version", [], |r| r.get::<_, String>(0))?,
         conn.query_row("SELECT vec_version()", [], |r| r.get::<_, String>(0))?
     );
-    if std::env::args().nth(1).as_deref() == Some("Plan") {
+    if opts.selector.as_deref() == Some("Plan") {
         // INVARIANT: Diagnostic SQL mirrors the production blank Inbox branch, including
         // its message-ID index requirement. Never tune statistics or indices only in fixtures.
         let mut stmt = conn.prepare("EXPLAIN QUERY PLAN SELECT m.id FROM messages m
@@ -190,7 +267,17 @@ fn main() -> Result<()> {
         }
         return Ok(());
     }
-    println!("view,mode,blank,offset,eligible,cache,sample,ms,results");
+    drop(conn);
+    let warm_hydrated_store =
+        SqliteMailStore::open(&path, &fixture.key, FtsTokenizerMode::default())?;
+    if !opts.with_slow_baseline {
+        warm_hydrated_store.hydrate_ram_index()?;
+    }
+    if opts.with_slow_baseline || opts.verbose {
+        println!("view,mode,blank,offset,eligible,cache,sample,ms,results");
+    } else {
+        println!("view,mode,blank,offset,eligible,cache,samples,p50_ms,p95_ms,max_ms");
+    }
     for (label, view) in [
         ("Global", None),
         ("Inbox", Some(MailboxView::Inbox)),
@@ -200,11 +287,12 @@ fn main() -> Result<()> {
         ("All-label", Some(MailboxView::Folder("All Mail".into()))),
         ("Empty", Some(MailboxView::Folder("Empty".into()))),
     ] {
-        if std::env::args()
-            .nth(1)
+        if opts
+            .selector
+            .as_deref()
             .is_none_or(|selected| selected == label)
         {
-            run(&fixture, label, view)?;
+            run(&fixture, &warm_hydrated_store, label, view, &opts)?;
         }
     }
     Ok(())

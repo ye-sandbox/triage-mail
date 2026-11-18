@@ -8,13 +8,50 @@ use storage::{
     SearchMode, SqliteMailStore,
 };
 
+#[derive(Clone, Copy, Default)]
+struct CliOptions {
+    with_slow_baseline: bool,
+    verbose: bool,
+}
+
+fn parse_cli_options() -> CliOptions {
+    let mut opts = CliOptions::default();
+    for arg in std::env::args().skip(1) {
+        match arg.as_str() {
+            "--with-slow-baseline" => opts.with_slow_baseline = true,
+            "--verbose" => opts.verbose = true,
+            "-h" | "--help" => {
+                eprintln!(
+                    "Usage: saved_view_performance [--with-slow-baseline] [--verbose] [--help]"
+                );
+                std::process::exit(0);
+            }
+            other => {
+                eprintln!("error: unknown argument '{other}'");
+                std::process::exit(2);
+            }
+        }
+    }
+    opts
+}
+
+fn percentile(sorted: &[f64], num: usize, den: usize) -> f64 {
+    let idx = (sorted.len() * num).div_ceil(den).saturating_sub(1);
+    sorted[idx.min(sorted.len() - 1)]
+}
+
 fn main() -> data::Result<()> {
+    let opts = parse_cli_options();
     let fixture = data::seed()?;
     let store = SqliteMailStore::open(
         fixture.directory.path().join("synthetic.db"),
         &fixture.key,
         Default::default(),
     )?;
+    if !opts.with_slow_baseline {
+        store.hydrate_ram_index()?;
+    }
+    let _ = opts.verbose;
     println!("mode,accounts,eligible,samples,p50_ms,p95_ms,max_ms");
     for mode in [
         SearchMode::Lexical,
@@ -66,25 +103,32 @@ fn main() -> data::Result<()> {
                 }
             }
             assert_eq!(actual, expected);
-            let mut times = Vec::new();
-            for sample in 0..32 {
+            let run_one = || -> data::Result<f64> {
                 let start = Instant::now();
                 let rows =
                     store.search_saved_view(&view.id, view.revision, embedding.clone(), 200, 0)?;
                 assert_eq!(rows.len(), expected.len().min(200));
-                if sample >= 2 {
-                    times.push(start.elapsed().as_secs_f64() * 1000.0);
-                }
+                Ok(start.elapsed().as_secs_f64() * 1000.0)
+            };
+            let w0 = run_one()?;
+            let slow_fast_mode = !opts.with_slow_baseline && w0 > 250.0;
+            if !slow_fast_mode {
+                let _ = run_one()?;
+            }
+            let target_samples = if slow_fast_mode { 3 } else { 30 };
+            let mut times = Vec::with_capacity(target_samples);
+            for _ in 0..target_samples {
+                times.push(run_one()?);
             }
             times.sort_by(f64::total_cmp);
             println!(
-                "{mode:?},{},{},{}, {:.3},{:.3},{:.3}",
+                "{mode:?},{},{},{},{:.3},{:.3},{:.3}",
                 if selected { "selected" } else { "all" },
                 expected.len(),
                 times.len(),
-                times[14],
-                times[28],
-                times[29]
+                percentile(&times, 50, 100),
+                percentile(&times, 95, 100),
+                *times.last().unwrap()
             );
         }
     }

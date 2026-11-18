@@ -2,6 +2,17 @@ import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vitest/config';
 
+type NodeProcessLike = {
+	stdout?: { isTTY?: boolean };
+	env?: Record<string, string | undefined>;
+};
+
+const nodeProcess = (globalThis as { process?: NodeProcessLike }).process;
+const isInteractiveTty =
+	Boolean(nodeProcess?.stdout?.isTTY) &&
+	!nodeProcess?.env?.CI &&
+	nodeProcess?.env?.TERM !== 'dumb';
+
 export default defineConfig(({ mode }) => ({
 	plugins: [tailwindcss(), sveltekit()],
 	server: {
@@ -15,6 +26,7 @@ export default defineConfig(({ mode }) => ({
 		include: ['src/**/*.{test,spec}.{js,ts}'],
 		pool: 'forks',
 		maxConcurrency: 1,
-		fileParallelism: false
+		fileParallelism: false,
+		reporters: isInteractiveTty ? ['default'] : [['default', { summary: false }]]
 	}
 }));

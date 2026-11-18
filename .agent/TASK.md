@@ -7,11 +7,37 @@
 
 ## Active Task
 
-No prioritized active task. Both tasks in the 2026-11-18 Lazy Attachment UX & 100k+ Exact RAM Search initiative (`[04.23]`, `[90.6]`) are complete; awaiting user selection for the next milestone.
+No prioritized active task. Task `[00.14]` (**Benchmark Speed & Token-Efficient Validation Harness**) is complete; awaiting user selection for the next milestone.
 
 ---
 
 ## Latest Completed Task
+
+### Task [00.14]: Benchmark Speed & Token-Efficient Validation Harness
+
+- **Status:** DONE
+- **Priority:** 1 (Developer & Validation Ergonomics — 2026-11-18)
+- **Origin:** Findings from `[90.6]` validation run (600s benchmark timeouts from unrequested 100k `vec0` baseline sweeps, ~1,200+ line non-TTY Vitest progress output, and duplicate fmt/clippy vs test cycles).
+- **Systems Involved:** `crates/storage/examples/`, `crates/storage/src/ram_vector_index_tests.rs`, `apps/desktop/vite.config.ts`, `docs/performance/ram-vector-index.md`, `AGENTS.md`, `.agent/NOTES.md`.
+- **Delivered:**
+  1. `[00.14.1]` Kept fast exactness/parity verification in `cargo test` (`crates/storage/src/ram_vector_index_tests.rs`). Refactored `crates/storage/examples/ram_vector_performance.rs` with zero-dependency `--with-slow-baseline`, `--verbose`, and `-h`/`--help` flags: default runs perform one fast `vec0` + independent-oracle parity check before hydrating the RAM index once, cap slow (`> 250ms`) queries to 3 samples, suppress per-sample stderr spam, and finish all 16 workloads with 100% parity in `45.5s` (vs 300–600s+). Audited all 6 sibling `*performance*.rs` examples (`category_performance.rs`, `sender_review_performance.rs`, `conversation_performance.rs`, `saved_view_performance.rs`, `mailbox_performance.rs`, `search_performance.rs`) to hydrate the RAM index by default, gate unhydrated `vec0`/cache sweeps behind `--with-slow-baseline`, use percentile helpers + adaptive slow-query capping, and emit concise summary CSVs unless `--verbose` / `--with-slow-baseline` is passed (preserving `Plan` / `<Label>` positional args in `mailbox_performance.rs`). Updated `docs/performance/ram-vector-index.md`.
+  2. `[00.14.2]` Updated `apps/desktop/vite.config.ts` with a strict TypeScript `NodeProcessLike` check (`!stdout.isTTY || CI || TERM === 'dumb'`) selecting `[['default', { summary: false }]]` in non-interactive/CI/agent logs while retaining interactive `'default'` UX in local terminals and respecting CLI `--reporter` overrides. Reduced agent test log output from ~2,292 lines to 55 lines with zero Vitest deprecation warnings.
+  3. `[00.14.3]` Updated `AGENTS.md` (`## Execution Protocol` and `## Validation Commands`) and `.agent/NOTES.md` (`Validation Harness & Benchmark CLI ([00.14])`) to require running `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo check --workspace`, and `pnpm --filter desktop check` before `cargo test --workspace` or release benchmarks, enforce single bounded timeouts (`480–540s` under the `600s` cap) instead of short polling loops, and inspect concise tails (`tail -n 30`).
+- **Validation:** `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo check --workspace`, `cargo check --no-default-features -p triage-mail-desktop`, `cargo test --workspace`, and `cargo build --offline --release -p storage --examples` all exited 0; `ram_vector_performance` default run completed in `45.524s` (0 stderr spam, 100% parity), `sender_review_performance` in `17.819s`, and all 7 example `--help` + `mailbox_performance Plan` checks exited 0; `pnpm --filter desktop check` (0 errors/warnings), `pnpm --filter desktop test` (31 files, 196 tests, 55 lines total), and `pnpm --filter desktop build` (19.16s) exited 0; `! grep -rn "export let" apps/desktop/src/`, `node scripts/ci-guard.mjs` (479 tracked text files, 0 findings), `node --test scripts/ci-guard.test.mjs` (5 passed), and `git diff --check` clean.
+- **Contracts:** `.agent/NOTES.md` (`Validation Harness & Benchmark CLI ([00.14])`) and `AGENTS.md` (`Validation & Token Hygiene`, `Validation Commands`).
+- **Next:** Awaiting user selection for the next milestone.
+
+#### Closing Checklist — [00.14]
+
+- [x] `[00.14.1]` Fast parity tests verified; `ram_vector_performance.rs` default run completes in `< 60s` with single parity check and zero per-sample stderr spam; `--with-slow-baseline` and `--verbose` work; sibling `*performance*.rs` examples audited.
+- [x] `[00.14.2]` Non-TTY `pnpm --filter desktop test` produces compact output (no ~1,200+ line live progress spam) while preserving interactive TTY UX; `check`, `test`, and `build` exit 0.
+- [x] `[00.14.3]` `AGENTS.md` and `.agent/NOTES.md` updated with pre-test fmt/clippy ordering, `480–540s` bounded timeouts, and concise log inspection rules.
+- [x] Full workspace DoD passed: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo check --workspace`, `cargo test --workspace`, `pnpm --filter desktop check/test/build`, `! grep -rn "export let" apps/desktop/src/`, `ci-guard`, and `git diff --check`.
+- [x] Atomic Conventional Commit recorded; task closed without pushing.
+
+---
+
+## Previous Completed Tasks
 
 ### Task [90.6]: Zeroized In-Memory Exact `int8` Vector & Eligibility Accelerator (`100k+` Scale)
 
@@ -26,8 +52,6 @@ No prioritized active task. Both tasks in the 2026-11-18 Lazy Attachment UX & 10
 - **Next:** Awaiting user selection for the next milestone.
 
 ---
-
-## Previous Completed Tasks
 
 ### Task [04.23]: Streaming Save-As & Safe Ephemeral Attachment Preview (`BODY.PEEK`)
 

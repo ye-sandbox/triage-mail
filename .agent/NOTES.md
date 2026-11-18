@@ -1097,3 +1097,14 @@ To keep the core 100% free and open-source (AGPLv3) with zero artificial limits 
 - **Desktop Background Hydration & Wipe (`apps/desktop/src-tauri/src/worker.rs`, `runtime.rs`):**
   - `WorkerSupervisor::start` launches non-blocking `tokio::task::spawn_blocking` hydration (`store.hydrate_ram_index()`) immediately on unlock; search never blocks waiting for hydration. `WorkerSupervisor::shutdown`, `cmd_quit_app`, and `tauri::RunEvent::Exit` call `store.clear_ram_index()`.
   - Empirical 100k validation recorded in `docs/performance/ram-vector-index.md` (`docs/performance/ram-vector-index.csv`): `1.71–4.78 ms` p50 kernel ranking and `100%` exact ordered-page parity against both `vec0` and the independent Rust oracle across all tested scopes.
+
+## Validation Harness & Benchmark CLI ([00.14])
+
+- **Storage Performance Examples (`crates/storage/examples/*performance*.rs`):**
+  - Fast small-fixture parity remains in `cargo test` (`crates/storage/src/ram_vector_index_tests.rs`).
+  - `ram_vector_performance.rs`, `category_performance.rs`, `sender_review_performance.rs`, `conversation_performance.rs`, `saved_view_performance.rs`, `mailbox_performance.rs`, and `search_performance.rs` share opt-in `--with-slow-baseline` and `--verbose` (plus `-h`/`--help`) flags (`mailbox_performance.rs` preserves positional `Plan` / `<Label>` selection).
+  - Default runs hydrate the RAM index once, perform a single fast `vec0` + independent-oracle parity check (`ram_vector_performance`), adaptively cap slow (`> 250ms`) queries to 3 samples, and suppress per-sample stderr/stdout spam so runs complete in `< 60s`. Pass `--with-slow-baseline` to run full unhydrated `vec0`/cache sweeps.
+- **Compact Non-TTY / Agent Vitest Output (`apps/desktop/vite.config.ts`):**
+  - `test.reporters` selects `[['default', { summary: false }]]` whenever `!stdout.isTTY || CI || TERM === 'dumb'`, eliminating ~1,200–2,200+ line live progress redraws in CI/agent logs while retaining interactive `'default'` UX in local terminals and respecting explicit CLI `--reporter` flags.
+- **Agent Validation Order & Timeouts (`AGENTS.md`):**
+  - Always run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo check --workspace`, and `pnpm --filter desktop check` **before** running `cargo test --workspace` or release benchmarks; use single bounded timeouts (`480–540s`) and concise log tails (`tail -n 30`).

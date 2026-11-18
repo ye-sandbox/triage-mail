@@ -22,6 +22,47 @@ const RAM_SAMPLES: usize = 30;
 const RAM_WARMUP: usize = 2;
 const VEC0_SAMPLES: usize = 5;
 const VEC0_WARMUP: usize = 1;
+const FAST_SLOW_QUERY_SAMPLES: usize = 3;
+
+#[derive(Clone, Copy, Default)]
+struct CliOptions {
+    with_slow_baseline: bool,
+    verbose: bool,
+}
+
+fn print_usage() {
+    eprintln!(
+        "Usage: ram_vector_performance [--with-slow-baseline] [--verbose] [--help]\n\
+         \n\
+         Default mode hydrates the exact int8 RAM index once, verifies a fast vec0 +\n\
+         independent-oracle parity baseline, and measures all 16 workloads in <60s.\n\
+         \n\
+         Options:\n\
+           --with-slow-baseline  Run full 100k sqlite-vec (vec0) baselines across all 16 cases\n\
+           --verbose             Emit per-case and per-sample (>250ms) diagnostics to stderr\n\
+           -h, --help            Show this help message"
+    );
+}
+
+fn parse_cli_options() -> CliOptions {
+    let mut opts = CliOptions::default();
+    for arg in std::env::args().skip(1) {
+        match arg.as_str() {
+            "--with-slow-baseline" => opts.with_slow_baseline = true,
+            "--verbose" => opts.verbose = true,
+            "-h" | "--help" => {
+                print_usage();
+                std::process::exit(0);
+            }
+            other => {
+                eprintln!("error: unknown argument '{other}'");
+                print_usage();
+                std::process::exit(2);
+            }
+        }
+    }
+    opts
+}
 
 fn percentile(sorted: &[f64], num: usize, den: usize) -> f64 {
     let idx = (sorted.len() * num).div_ceil(den).saturating_sub(1);
@@ -31,6 +72,8 @@ fn percentile(sorted: &[f64], num: usize, den: usize) -> f64 {
 fn measure_search<F>(
     warmup: usize,
     samples_count: usize,
+    fast_cap_slow: bool,
+    verbose: bool,
     mut f: F,
 ) -> data::Result<(f64, f64, f64, Vec<String>)>
 where
@@ -42,19 +85,24 @@ where
         let t0 = Instant::now();
         let rows = f()?;
         let ms = t0.elapsed().as_secs_f64() * 1000.0;
-        if ms > 250.0 {
+        if verbose && ms > 250.0 {
             eprintln!("  warmup {i}: {ms:.1}ms");
         }
         if ms > 5000.0 {
             slow_limit = Some(1);
         } else if ms > 2000.0 && slow_limit.is_none() {
             slow_limit = Some(2);
+        } else if fast_cap_slow && ms > 250.0 && slow_limit.is_none() {
+            slow_limit = Some(FAST_SLOW_QUERY_SAMPLES);
         }
         let ids: Vec<String> = rows.into_iter().map(|r| r.id).collect();
         if i == 0 {
             reference = ids;
         } else {
             assert_eq!(ids, reference, "warmup query instability");
+        }
+        if fast_cap_slow && ms > 250.0 {
+            break;
         }
     }
     let effective_samples = match slow_limit {
@@ -66,7 +114,7 @@ where
         let start = Instant::now();
         let rows = f()?;
         let ms = start.elapsed().as_secs_f64() * 1000.0;
-        if ms > 250.0 {
+        if verbose && ms > 250.0 {
             eprintln!("  sample {i}: {ms:.1}ms");
         }
         let ids: Vec<String> = rows.into_iter().map(|r| r.id).collect();
@@ -144,6 +192,7 @@ fn measure_ram_kernel_only(
 }
 
 fn main() -> data::Result<()> {
+    let opts = parse_cli_options();
     let fixture = data::seed()?;
     let path = fixture.directory.path().join("synthetic.db");
     let store = SqliteMailStore::open(&path, &fixture.key, FtsTokenizerMode::default())?;
@@ -195,9 +244,43 @@ fn main() -> data::Result<()> {
         },
     })?;
 
-    // Hydrate RAM index & record footprint + cold hydration duration
+    // Independent oracle indices for Global, Inbox(account-2), Archive(account-2)
+    let global_ids: Vec<usize> = (0..data::ROWS).collect();
+    let inbox_ids: Vec<usize> = (0..data::ROWS)
+        .filter(|&id| id % 4 == 2 && data::folder(id) == "INBOX" && !data::active_snooze(id))
+        .collect();
+    let archive_ids: Vec<usize> = (0..data::ROWS)
+        .filter(|&id| id % 4 == 2 && data::folder(id) == "Archive")
+        .collect();
+    let global_oracle_0 = independent_cosine_oracle(&global_ids, 200, 0);
+
+    // Single fast vec0 parity verification before hydrating the RAM index once.
     store.clear_ram_index();
     assert!(!store.is_ram_index_ready());
+    let single_vec0_ids: Vec<String> = if opts.with_slow_baseline {
+        Vec::new()
+    } else {
+        let q = HybridQuery {
+            query_text: "newsletter".into(),
+            query_embedding_int8: Some(query_vec.clone()),
+            account_filter: None,
+            mode: SearchMode::Semantic,
+            limit: 200,
+            offset: 0,
+        };
+        let ids: Vec<String> = store
+            .search_scoped(&q, &MailboxScope::GlobalAllMail)?
+            .into_iter()
+            .map(|r| r.id)
+            .collect();
+        assert_eq!(
+            ids, global_oracle_0,
+            "single vec0 parity check diverged from independent oracle"
+        );
+        ids
+    };
+
+    // Hydrate RAM index & record footprint + cold hydration duration
     let hyd_start = Instant::now();
     store.hydrate_ram_index()?;
     let hydration_ms = hyd_start.elapsed().as_secs_f64() * 1000.0;
@@ -205,11 +288,12 @@ fn main() -> data::Result<()> {
     let (vec_bytes, meta_bytes) = store.ram_index_allocated_bytes().unwrap();
 
     println!(
-        "# rows={}, hydration_ms={hydration_ms:.3}, vec_bytes={vec_bytes} ({:.2} MiB), meta_bytes={meta_bytes} ({:.2} MiB), total_mib={:.2}",
+        "# rows={}, hydration_ms={hydration_ms:.3}, vec_bytes={vec_bytes} ({:.2} MiB), meta_bytes={meta_bytes} ({:.2} MiB), total_mib={:.2}, slow_baseline={}",
         data::ROWS,
         vec_bytes as f64 / (1024.0 * 1024.0),
         meta_bytes as f64 / (1024.0 * 1024.0),
         (vec_bytes + meta_bytes) as f64 / (1024.0 * 1024.0),
+        opts.with_slow_baseline,
     );
 
     // Measure pure in-RAM vector kernel latency first (100k vectors, excluding SQLite summary hydration)
@@ -265,33 +349,49 @@ fn main() -> data::Result<()> {
                     offset: usize,
                     eligible: usize,
                     indep_oracle: Option<Vec<String>>,
+                    vec0_ref: Option<&[String]>,
                     run_fn: &dyn Fn() -> std::result::Result<
         Vec<storage::MessageRowSummary>,
         storage::StorageError,
     >|
      -> data::Result<()> {
-        eprintln!("running {label} {mode:?} offset={offset} ...");
-        store.clear_ram_index();
-        assert!(!store.is_ram_index_ready());
-        let (v_p50, v_p95, v_max, vec0_ids) = measure_search(VEC0_WARMUP, VEC0_SAMPLES, run_fn)?;
-        if let Some(expected) = &indep_oracle {
-            assert_eq!(
-                &vec0_ids, expected,
-                "vec0 diverged from independent oracle on {label}"
-            );
+        if opts.verbose {
+            eprintln!("running {label} {mode:?} offset={offset} ...");
         }
-        assert_eq!(
-            vec0_ids.iter().collect::<HashSet<_>>().len(),
-            vec0_ids.len(),
-            "duplicate IDs on {label}"
-        );
+        let vec0_metrics = if opts.with_slow_baseline {
+            store.clear_ram_index();
+            assert!(!store.is_ram_index_ready());
+            let (v_p50, v_p95, v_max, vec0_ids) =
+                measure_search(VEC0_WARMUP, VEC0_SAMPLES, false, opts.verbose, run_fn)?;
+            if let Some(expected) = &indep_oracle {
+                assert_eq!(
+                    &vec0_ids, expected,
+                    "vec0 diverged from independent oracle on {label}"
+                );
+            }
+            assert_eq!(
+                vec0_ids.iter().collect::<HashSet<_>>().len(),
+                vec0_ids.len(),
+                "duplicate IDs on {label}"
+            );
+            store.hydrate_ram_index()?;
+            Some((v_p50, v_p95, v_max, vec0_ids))
+        } else {
+            None
+        };
 
-        store.hydrate_ram_index()?;
         assert!(store.is_ram_index_ready());
-        let (r_p50, r_p95, r_max, ram_ids) = measure_search(RAM_WARMUP, RAM_SAMPLES, run_fn)?;
+        let (r_p50, r_p95, r_max, ram_ids) = measure_search(
+            RAM_WARMUP,
+            RAM_SAMPLES,
+            !opts.with_slow_baseline,
+            opts.verbose,
+            run_fn,
+        )?;
         assert_eq!(
-            ram_ids, vec0_ids,
-            "RAM index diverged from sqlite-vec oracle on {label} {mode:?} offset={offset}"
+            ram_ids.iter().collect::<HashSet<_>>().len(),
+            ram_ids.len(),
+            "duplicate RAM IDs on {label}"
         );
         if let Some(expected) = &indep_oracle {
             assert_eq!(
@@ -299,37 +399,47 @@ fn main() -> data::Result<()> {
                 "RAM diverged from independent oracle on {label}"
             );
         }
+        if let Some(expected_vec0) = vec0_ref {
+            assert_eq!(
+                ram_ids.as_slice(),
+                expected_vec0,
+                "RAM index diverged from single vec0 parity check on {label}"
+            );
+        }
 
-        let speedup = v_p95 / r_p95;
-        println!(
-            "{label},{mode:?},{offset},{eligible},{v_p50:.3},{v_p95:.3},{v_max:.3},{r_p50:.3},{r_p95:.3},{r_max:.3},{speedup:.1}x,true"
-        );
+        if let Some((v_p50, v_p95, v_max, vec0_ids)) = vec0_metrics {
+            assert_eq!(
+                ram_ids, vec0_ids,
+                "RAM index diverged from sqlite-vec oracle on {label} {mode:?} offset={offset}"
+            );
+            let speedup = v_p95 / r_p95;
+            println!(
+                "{label},{mode:?},{offset},{eligible},{v_p50:.3},{v_p95:.3},{v_max:.3},{r_p50:.3},{r_p95:.3},{r_max:.3},{speedup:.1}x,true"
+            );
+        } else {
+            println!(
+                "{label},{mode:?},{offset},{eligible},NA,NA,NA,{r_p50:.3},{r_p95:.3},{r_max:.3},NA,true"
+            );
+        }
         let _ = std::io::Write::flush(&mut std::io::stdout());
         Ok(())
     };
 
-    // Independent oracle indices for Global, Inbox(account-2), Archive(account-2)
-    let global_ids: Vec<usize> = (0..data::ROWS).collect();
-    let inbox_ids: Vec<usize> = (0..data::ROWS)
-        .filter(|&id| id % 4 == 2 && data::folder(id) == "INBOX" && !data::active_snooze(id))
-        .collect();
-    let archive_ids: Vec<usize> = (0..data::ROWS)
-        .filter(|&id| id % 4 == 2 && data::folder(id) == "Archive")
-        .collect();
-
     // 1. Global Semantic (offset 0 and 4000) & Hybrid (offset 0)
-    for (mode, offset, oracle) in [
+    for (mode, offset, oracle, vec0_ref) in [
         (
             SearchMode::Semantic,
             0,
-            Some(independent_cosine_oracle(&global_ids, 200, 0)),
+            Some(global_oracle_0),
+            (!opts.with_slow_baseline).then_some(single_vec0_ids.as_slice()),
         ),
         (
             SearchMode::Semantic,
             4000,
             Some(independent_cosine_oracle(&global_ids, 200, 4000)),
+            None,
         ),
-        (SearchMode::Hybrid, 0, None),
+        (SearchMode::Hybrid, 0, None, None),
     ] {
         let q = HybridQuery {
             query_text: "newsletter".into(),
@@ -339,9 +449,15 @@ fn main() -> data::Result<()> {
             limit: 200,
             offset,
         };
-        run_case("Global", mode, offset, data::ROWS, oracle, &|| {
-            store.search_scoped(&q, &MailboxScope::GlobalAllMail)
-        })?;
+        run_case(
+            "Global",
+            mode,
+            offset,
+            data::ROWS,
+            oracle,
+            vec0_ref,
+            &|| store.search_scoped(&q, &MailboxScope::GlobalAllMail),
+        )?;
     }
 
     // 2. Account-2 Inbox Semantic (offset 0, 4000) & Hybrid (offset 0)
@@ -370,9 +486,15 @@ fn main() -> data::Result<()> {
             limit: 200,
             offset,
         };
-        run_case("Inbox", mode, offset, inbox_ids.len(), oracle, &|| {
-            store.search_scoped(&q, &inbox_scope)
-        })?;
+        run_case(
+            "Inbox",
+            mode,
+            offset,
+            inbox_ids.len(),
+            oracle,
+            None,
+            &|| store.search_scoped(&q, &inbox_scope),
+        )?;
     }
 
     // 3. Starred, Snoozed, Archive on account-2
@@ -398,9 +520,15 @@ fn main() -> data::Result<()> {
             limit: 200,
             offset: 0,
         };
-        run_case(label, SearchMode::Semantic, 0, eligible, oracle, &|| {
-            store.search_scoped(&q, &scope)
-        })?;
+        run_case(
+            label,
+            SearchMode::Semantic,
+            0,
+            eligible,
+            oracle,
+            None,
+            &|| store.search_scoped(&q, &scope),
+        )?;
     }
 
     // 4. Category (Financial = 25,001 eligible) & Category + Starred (32 eligible)
@@ -413,7 +541,7 @@ fn main() -> data::Result<()> {
             limit: 200,
             offset: 0,
         };
-        run_case("Category(Financial)", mode, 0, 25_001, None, &|| {
+        run_case("Category(Financial)", mode, 0, 25_001, None, None, &|| {
             store.search_category(&q, None, TriageCategory::Financial)
         })?;
     }
@@ -422,6 +550,7 @@ fn main() -> data::Result<()> {
         SearchMode::Semantic,
         0,
         32,
+        None,
         None,
         &|| {
             store.search_saved_view(
@@ -452,7 +581,7 @@ fn main() -> data::Result<()> {
                 limit: 200,
                 offset: 0,
             };
-            run_case(label, mode, 0, eligible, None, &|| {
+            run_case(label, mode, 0, eligible, None, None, &|| {
                 store.search_sender_review(&q, ReviewState::Pending)
             })?;
         }

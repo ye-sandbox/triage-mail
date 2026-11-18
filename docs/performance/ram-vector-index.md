@@ -6,7 +6,11 @@ Uses only the offline disposable local fixture (`tools/performance/mailbox_data.
 network calls, provider access, or real mail. Reproduce with:
 
 ```bash
-cargo run --offline --release -p storage --example ram_vector_performance | tee docs/performance/ram-vector-index.csv
+# Fast default validation (<60s: single vec0 parity check + single RAM hydration + all 16 RAM workloads)
+cargo run --offline --release -p storage --example ram_vector_performance
+
+# Full vec0 vs RAM comparative CSV regeneration (opt-in slow baseline + full sample budgets)
+cargo run --offline --release -p storage --example ram_vector_performance -- --with-slow-baseline | tee docs/performance/ram-vector-index.csv
 ```
 
 ## Architecture & Memory Footprint

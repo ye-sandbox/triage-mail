@@ -51,11 +51,15 @@ The agent MUST minimize default token load by following progressive disclosure:
 1. Read `AGENTS.md`, `.agent/TASK.md`, and `.agent/NOTES.md` before editing any files.
 2. **Plan first (or Pre-Approved Fast-Track):** If `Status` in `.agent/TASK.md` is `READY FOR PLANNING`, set to `PLANNING`, present plan, await approval, then set to `RUNNING`. If task scope was already decided during planning (`Status: APPROVED`) with zero open questions/blockers, transition directly to `RUNNING` on `proceed` (or use the `task-queue` skill on `proceed queue` to execute sequential/parallel subagents with multi-account quota routing; tag independent tasks that have strictly disjoint file scopes with `[PARALLEL: Wx]` and `Paths:`). Halt and revert to `PLANNING` if any ambiguity or unapproved dependency arises.
 3. Work on exactly ONE active task at a time.
-4. **Falsifiable Definition of Done (DoD):**
+4. **Validation & Token Hygiene:**
+   - **Pre-Test Gate:** Run `cargo fmt --all` (or `-- --check`), `cargo clippy --workspace --all-targets -- -D warnings`, `cargo check --workspace`, and `pnpm --filter desktop check` **before** running full `cargo test --workspace` or `--release` benchmarks to avoid duplicate compile/test cycles.
+   - **Bounded Timeouts & Log Inspection:** Run long Cargo/test/benchmark commands with a single bounded timeout (`480–540s`, staying under the `600s` hard cap) instead of cascading short polling wakeups. Inspect concise tails/summaries (`tail -n 30`) rather than dumping multi-hundred-line progress logs into context.
+   - **Fast Benchmark Defaults:** `crates/storage/examples/*performance*.rs` default to fast RAM-hydrated validation (`<60s`, quiet stderr); pass `--with-slow-baseline` / `--verbose` only when explicitly regenerating full baseline tables or diagnosing per-sample outliers.
+5. **Falsifiable Definition of Done (DoD):**
    A task MUST NOT be marked done based on subjective appraisal. It MUST satisfy:
    - [ ] Strict Typing: `cargo check --workspace` and `pnpm --filter desktop check` exit with code 0.
+   - [ ] Linters (run before full test suites): `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` exit with code 0.
    - [ ] Automated Tests: `cargo test --workspace` and `pnpm --filter desktop test` exit with code 0.
-   - [ ] Linters: `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` exit with code 0.
    - [ ] Svelte 5 Invariant: `! grep -rn "export let" apps/desktop/src/` exits with code 0.
    - [ ] Secret & PII Scrubbing: Zero real email addresses, tokens, or secrets in tracked files; `git diff --check` exits with code 0.
    - [ ] Documentation Perimeter: If CLI flags, `.env.example` variables, or validation commands changed, synchronize `README.md` and `README.pt-br.md` (following `readme-standard` skill).
@@ -127,16 +131,19 @@ When releasing `vX.Y.Z`:
 
 ## Validation Commands
 
-- **Rust Workspace:**
-  - Check compilation: `cargo check --workspace` (Exit code MUST be 0)
-  - Run tests: `cargo test --workspace` (Exit code MUST be 0)
-  - Format check: `cargo fmt --all -- --check` (Exit code MUST be 0)
-  - Linter: `cargo clippy --workspace --all-targets -- -D warnings` (Exit code MUST be 0)
-- **Frontend (`apps/desktop`):**
+> **Execution Hygiene:** Run formatting, clippy, and typechecks **before** full test suites or release benchmarks. Use a single bounded command timeout (`480–540s`, below the `600s` hard cap) instead of cascading short polling wakeups, and inspect concise tails/summaries (`tail -n 30`) instead of multi-hundred-line progress logs.
+
+- **Rust Workspace (run in order):**
+  1. Format check: `cargo fmt --all -- --check` (or `cargo fmt --all` first) (Exit code MUST be 0)
+  2. Linter: `cargo clippy --workspace --all-targets -- -D warnings` (Exit code MUST be 0)
+  3. Check compilation: `cargo check --workspace` (Exit code MUST be 0)
+  4. Run tests: `cargo test --workspace` (Exit code MUST be 0)
+  - Optional performance benchmarks (`crates/storage/examples/*performance*.rs`): default runs complete in `<60s` with RAM index hydrated and quiet stderr; pass `--with-slow-baseline` for full `vec0`/cache sweeps and `--verbose` for per-sample diagnostics.
+- **Frontend (`apps/desktop`, run in order):**
   - Install dependencies: `pnpm install`
-  - Typecheck: `pnpm --filter desktop check` (Exit code MUST be 0)
-  - Run unit tests: `pnpm --filter desktop test` (Exit code MUST be 0)
-  - Build SPA: `pnpm --filter desktop build` (Exit code MUST be 0)
+  1. Typecheck: `pnpm --filter desktop check` (Exit code MUST be 0)
+  2. Run unit tests: `pnpm --filter desktop test` (non-TTY/`CI`/`TERM=dumb` automatically uses compact non-live reporter) (Exit code MUST be 0)
+  3. Build SPA: `pnpm --filter desktop build` (Exit code MUST be 0)
 
 ---
 

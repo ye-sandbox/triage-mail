@@ -141,26 +141,86 @@ fn measure(
     Ok((elapsed, rows.len()))
 }
 
+#[derive(Clone, Copy, Default)]
+struct CliOptions {
+    with_slow_baseline: bool,
+    verbose: bool,
+}
+
+fn parse_cli_options() -> CliOptions {
+    let mut opts = CliOptions::default();
+    for arg in std::env::args().skip(1) {
+        match arg.as_str() {
+            "--with-slow-baseline" => opts.with_slow_baseline = true,
+            "--verbose" => opts.verbose = true,
+            "-h" | "--help" => {
+                eprintln!("Usage: search_performance [--with-slow-baseline] [--verbose] [--help]");
+                std::process::exit(0);
+            }
+            other => {
+                eprintln!("error: unknown argument '{other}'");
+                std::process::exit(2);
+            }
+        }
+    }
+    opts
+}
+
+fn percentile(sorted: &[f64], num: usize, den: usize) -> f64 {
+    let idx = (sorted.len() * num).div_ceil(den).saturating_sub(1);
+    sorted[idx.min(sorted.len() - 1)]
+}
+
 fn run_case(
     path: &std::path::Path,
     key: &DatabaseKey,
+    warm_store: &SqliteMailStore,
     name: &str,
     query: HybridQuery,
     neighbors: &[String],
+    opts: CliOptions,
 ) -> Result<()> {
     let open = || SqliteMailStore::open(path, key, FtsTokenizerMode::default());
-    // INVARIANT: Reopen clears SQLite's connection cache, not the OS page cache.
-    for sample in 0..5 {
-        let (ms, count) = measure(&open()?, &query, neighbors)?;
-        println!("{name},reopened,{sample},{ms:.6},{count}");
+    if opts.with_slow_baseline {
+        // INVARIANT: Reopen clears SQLite's connection cache, not the OS page cache.
+        for sample in 0..5 {
+            let (ms, count) = measure(&open()?, &query, neighbors)?;
+            println!("{name},reopened,{sample},{ms:.6},{count}");
+        }
+        let store = open()?;
+        for _ in 0..5 {
+            measure(&store, &query, neighbors)?;
+        }
+        for sample in 0..SAMPLES {
+            let (ms, count) = measure(&store, &query, neighbors)?;
+            println!("{name},warm,{sample},{ms:.6},{count}");
+        }
+        return Ok(());
     }
-    let store = open()?;
-    for _ in 0..5 {
-        measure(&store, &query, neighbors)?;
+
+    let (w0, _) = measure(warm_store, &query, neighbors)?;
+    let slow_fast_mode = w0 > 250.0;
+    if !slow_fast_mode {
+        let _ = measure(warm_store, &query, neighbors)?;
     }
-    for sample in 0..SAMPLES {
-        let (ms, count) = measure(&store, &query, neighbors)?;
-        println!("{name},warm,{sample},{ms:.6},{count}");
+    let target_samples = if slow_fast_mode { 3 } else { SAMPLES };
+    let mut samples = Vec::with_capacity(target_samples);
+    for sample in 0..target_samples {
+        let (ms, count) = measure(warm_store, &query, neighbors)?;
+        if opts.verbose {
+            println!("{name},warm,{sample},{ms:.6},{count}");
+        }
+        samples.push(ms);
+    }
+    if !opts.verbose {
+        samples.sort_by(f64::total_cmp);
+        println!(
+            "{name},warm,{},{:.3},{:.3},{:.3}",
+            samples.len(),
+            percentile(&samples, 50, 100),
+            percentile(&samples, 95, 100),
+            *samples.last().unwrap(),
+        );
     }
     Ok(())
 }
@@ -262,10 +322,17 @@ fn profile_parallel_reads(path: &std::path::Path, key: &DatabaseKey) -> Result<(
     Ok(())
 }
 
-fn sparse_cases(path: &std::path::Path, key: &DatabaseKey, neighbors: &[String]) -> Result<()> {
+fn sparse_cases(
+    path: &std::path::Path,
+    key: &DatabaseKey,
+    warm_store: &SqliteMailStore,
+    neighbors: &[String],
+    opts: CliOptions,
+) -> Result<()> {
     run_case(
         path,
         key,
+        warm_store,
         "Semantic-filtered-page2",
         HybridQuery {
             query_text: String::new(),
@@ -276,6 +343,7 @@ fn sparse_cases(path: &std::path::Path, key: &DatabaseKey, neighbors: &[String])
             offset: 200,
         },
         neighbors,
+        opts,
     )?;
     let mut conn = open_encrypted_connection(path, key)?;
     let tx = conn.transaction()?;
@@ -296,6 +364,9 @@ fn sparse_cases(path: &std::path::Path, key: &DatabaseKey, neighbors: &[String])
     }
     tx.commit()?;
     drop(conn);
+    if !opts.with_slow_baseline {
+        warm_store.hydrate_ram_index()?;
+    }
     println!(
         "# sparse_phase,total_rows={},sparse_vectors=31,large_account_vectors=25000",
         ROWS + 31
@@ -314,6 +385,7 @@ fn sparse_cases(path: &std::path::Path, key: &DatabaseKey, neighbors: &[String])
         run_case(
             path,
             key,
+            warm_store,
             label,
             HybridQuery {
                 query_text: String::new(),
@@ -324,12 +396,14 @@ fn sparse_cases(path: &std::path::Path, key: &DatabaseKey, neighbors: &[String])
                 offset,
             },
             expected,
+            opts,
         )?;
     }
     Ok(())
 }
 
 fn main() -> Result<()> {
+    let opts = parse_cli_options();
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("synthetic.db");
     // INVARIANT: Generate an ephemeral key at runtime; never persist benchmark credentials.
@@ -337,8 +411,10 @@ fn main() -> Result<()> {
     std::fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
     let key = DatabaseKey::from_bytes(bytes);
     seed(&path, &key)?;
-    profile_cache(&path, &key)?;
-    profile_parallel_reads(&path, &key)?;
+    if opts.with_slow_baseline {
+        profile_cache(&path, &key)?;
+        profile_parallel_reads(&path, &key)?;
+    }
     let mut header = [0; 16];
     std::fs::File::open(&path)?.read_exact(&mut header)?;
     assert_ne!(&header, b"SQLite format 3\0");
@@ -346,7 +422,15 @@ fn main() -> Result<()> {
         "# rows={ROWS}, dimensions={DIMENSIONS}, database_bytes={}",
         std::fs::metadata(&path)?.len()
     );
-    println!("case,cache,sample,ms,results");
+    if opts.with_slow_baseline || opts.verbose {
+        println!("case,cache,sample,ms,results");
+    } else {
+        println!("case,cache,samples,p50_ms,p95_ms,max_ms");
+    }
+    let warm_store = SqliteMailStore::open(&path, &key, FtsTokenizerMode::default())?;
+    if !opts.with_slow_baseline {
+        warm_store.hydrate_ram_index()?;
+    }
     let neighbors = reference_neighbors(None);
     let filtered_neighbors = reference_neighbors(Some(2));
     for mode in [
@@ -363,6 +447,7 @@ fn main() -> Result<()> {
             run_case(
                 &path,
                 &key,
+                &warm_store,
                 &format!("{mode:?}-{label}"),
                 HybridQuery {
                     query_text: text.into(),
@@ -377,12 +462,14 @@ fn main() -> Result<()> {
                 } else {
                     &neighbors
                 },
+                opts,
             )?;
         }
     }
     run_case(
         &path,
         &key,
+        &warm_store,
         "Lexical-empty-inbox",
         HybridQuery {
             query_text: String::new(),
@@ -393,8 +480,9 @@ fn main() -> Result<()> {
             offset: 0,
         },
         &neighbors,
+        opts,
     )?;
-    sparse_cases(&path, &key, &filtered_neighbors)?;
+    sparse_cases(&path, &key, &warm_store, &filtered_neighbors, opts)?;
     println!("# final_process_rss,{}", rss()?);
     Ok(())
 }

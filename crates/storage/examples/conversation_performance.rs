@@ -7,7 +7,40 @@ use storage::{
     conversations::{ConversationQuery, ConversationSource},
     HybridQuery, MailboxScope, MailboxView, SearchMode, SqliteMailStore,
 };
+#[derive(Clone, Copy, Default)]
+struct CliOptions {
+    with_slow_baseline: bool,
+    verbose: bool,
+}
+
+fn parse_cli_options() -> CliOptions {
+    let mut opts = CliOptions::default();
+    for arg in std::env::args().skip(1) {
+        match arg.as_str() {
+            "--with-slow-baseline" => opts.with_slow_baseline = true,
+            "--verbose" => opts.verbose = true,
+            "-h" | "--help" => {
+                eprintln!(
+                    "Usage: conversation_performance [--with-slow-baseline] [--verbose] [--help]"
+                );
+                std::process::exit(0);
+            }
+            other => {
+                eprintln!("error: unknown argument '{other}'");
+                std::process::exit(2);
+            }
+        }
+    }
+    opts
+}
+
+fn percentile(sorted: &[f64], num: usize, den: usize) -> f64 {
+    let idx = (sorted.len() * num).div_ceil(den).saturating_sub(1);
+    sorted[idx.min(sorted.len() - 1)]
+}
+
 fn main() -> data::Result<()> {
+    let opts = parse_cli_options();
     let fixture = data::seed()?;
     let path = fixture.directory.path().join("synthetic.db");
     {
@@ -25,11 +58,16 @@ fn main() -> data::Result<()> {
         slowest = slowest.max(tick.elapsed().as_secs_f64() * 1000.);
         ticks += 1;
     }
-    eprintln!(
-        "rows={},ticks={ticks},backfill_ms={:.3},slowest_tick_ms={slowest:.3}",
-        data::ROWS,
-        start.elapsed().as_secs_f64() * 1000.
-    );
+    if opts.verbose {
+        eprintln!(
+            "rows={},ticks={ticks},backfill_ms={:.3},slowest_tick_ms={slowest:.3}",
+            data::ROWS,
+            start.elapsed().as_secs_f64() * 1000.
+        );
+    }
+    if !opts.with_slow_baseline {
+        store.hydrate_ram_index()?;
+    }
     println!("mode,workload,samples,p50_ms,p95_ms,max_ms");
     for mode in [
         SearchMode::Lexical,
@@ -57,8 +95,7 @@ fn main() -> data::Result<()> {
                 }),
                 generation: None,
             };
-            let mut samples = Vec::new();
-            for sample in 0..12 {
+            let run_one = || -> data::Result<f64> {
                 let start = Instant::now();
                 let result = store.search_conversations(&query, &context)?;
                 let elapsed = start.elapsed().as_secs_f64() * 1000.;
@@ -71,17 +108,26 @@ fn main() -> data::Result<()> {
                         assert_eq!(row.matching_count, 25);
                     }
                 }
-                if sample >= 2 {
-                    samples.push(elapsed);
-                }
+                Ok(elapsed)
+            };
+            let w0 = run_one()?;
+            let slow_fast_mode = !opts.with_slow_baseline && w0 > 250.0;
+            if !slow_fast_mode {
+                let _ = run_one()?;
+            }
+            let target_samples = if slow_fast_mode { 3 } else { 10 };
+            let mut samples = Vec::with_capacity(target_samples);
+            for _ in 0..target_samples {
+                samples.push(run_one()?);
             }
             samples.sort_by(f64::total_cmp);
             println!(
-                "{mode:?},{},10,{:.3},{:.3},{:.3}",
+                "{mode:?},{},{},{:.3},{:.3},{:.3}",
                 if narrow { "account-inbox" } else { "global" },
-                samples[4],
-                samples[9],
-                samples[9]
+                samples.len(),
+                percentile(&samples, 50, 100),
+                percentile(&samples, 95, 100),
+                *samples.last().unwrap()
             );
         }
     }

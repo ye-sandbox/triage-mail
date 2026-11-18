@@ -7,7 +7,40 @@ use storage::{
     sender_review::{ReviewState, SenderChoice},
     HybridQuery, SearchMode, SqliteMailStore,
 };
+#[derive(Clone, Copy, Default)]
+struct CliOptions {
+    with_slow_baseline: bool,
+    verbose: bool,
+}
+
+fn parse_cli_options() -> CliOptions {
+    let mut opts = CliOptions::default();
+    for arg in std::env::args().skip(1) {
+        match arg.as_str() {
+            "--with-slow-baseline" => opts.with_slow_baseline = true,
+            "--verbose" => opts.verbose = true,
+            "-h" | "--help" => {
+                eprintln!(
+                    "Usage: sender_review_performance [--with-slow-baseline] [--verbose] [--help]"
+                );
+                std::process::exit(0);
+            }
+            other => {
+                eprintln!("error: unknown argument '{other}'");
+                std::process::exit(2);
+            }
+        }
+    }
+    opts
+}
+
+fn percentile(sorted: &[f64], num: usize, den: usize) -> f64 {
+    let idx = (sorted.len() * num).div_ceil(den).saturating_sub(1);
+    sorted[idx.min(sorted.len() - 1)]
+}
+
 fn main() -> data::Result<()> {
+    let opts = parse_cli_options();
     let fixture = data::seed()?;
     let store = SqliteMailStore::open(
         fixture.directory.path().join("synthetic.db"),
@@ -23,10 +56,12 @@ fn main() -> data::Result<()> {
             break;
         }
     }
-    eprintln!(
-        "backfill_rows={rows},elapsed_ms={:.3}",
-        start.elapsed().as_secs_f64() * 1000.0
-    );
+    if opts.verbose {
+        eprintln!(
+            "backfill_rows={rows},elapsed_ms={:.3}",
+            start.elapsed().as_secs_f64() * 1000.0
+        );
+    }
     for id in 0..4 {
         let account = format!("account-{id}");
         let mut p = store.review_preferences(&account)?;
@@ -44,6 +79,9 @@ fn main() -> data::Result<()> {
         })?;
     }
     store.backfill_sender_review()?;
+    if !opts.with_slow_baseline {
+        store.hydrate_ram_index()?;
+    }
     println!("mode,workload,eligible,samples,p50_ms,p95_ms,max_ms");
     for mode in [
         SearchMode::Lexical,
@@ -63,8 +101,7 @@ fn main() -> data::Result<()> {
                 limit: 200,
                 offset: 0,
             };
-            let mut samples = vec![];
-            for sample in 0..32 {
+            let run_one = || -> data::Result<f64> {
                 let start = Instant::now();
                 let rows = store.search_sender_review(&query, ReviewState::Pending)?;
                 let ms = start.elapsed().as_secs_f64() * 1000.0;
@@ -76,22 +113,31 @@ fn main() -> data::Result<()> {
                     assert_eq!(row.folder, data::folder(id));
                     assert_eq!(row.uid, id as u32 + 1);
                 }
-                if sample >= 2 {
-                    samples.push(ms);
-                }
+                Ok(ms)
+            };
+            let w0 = run_one()?;
+            let slow_fast_mode = !opts.with_slow_baseline && w0 > 250.0;
+            if !slow_fast_mode {
+                let _ = run_one()?;
+            }
+            let target_samples = if slow_fast_mode { 3 } else { 30 };
+            let mut samples = Vec::with_capacity(target_samples);
+            for _ in 0..target_samples {
+                samples.push(run_one()?);
             }
             samples.sort_by(f64::total_cmp);
             println!(
-                "{mode:?},{},{},30,{:.3},{:.3},{:.3}",
+                "{mode:?},{},{},{},{:.3},{:.3},{:.3}",
                 if narrow {
                     "account-review"
                 } else {
                     "all-review"
                 },
                 if narrow { 25000 } else { 75000 },
-                samples[14],
-                samples[28],
-                samples[29]
+                samples.len(),
+                percentile(&samples, 50, 100),
+                percentile(&samples, 95, 100),
+                *samples.last().unwrap()
             );
         }
     }
