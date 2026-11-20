@@ -7,7 +7,71 @@
 
 ## Active Task
 
-No prioritized active task. Task `[00.14]` (**Benchmark Speed & Token-Efficient Validation Harness**) is complete; awaiting user selection for the next milestone.
+No task is `RUNNING`. `[04.24]` is DONE. Next: `[02.10]` (`READY FOR PLANNING`). Remaining queue (`[02.10]` → `[04.25]` → `[02.12]`; `[02.11]` PAUSED) is `READY FOR PLANNING`; promote exactly one to `PLANNING` on `proceed`. `[02.11]` is paused awaiting an Azure `client_id`; `[02.12]` has its P0 amendment approved.
+
+---
+
+## Planned Queue — Account Login Friction Reduction (2026-11-20)
+
+- **Origin:** Onboarding audit. Findings: Gmail App Password paste with spaces fails; generic auth errors; Outlook PKCE requires a user-registered Azure `client_id`; custom domains (Workspace/M365) resolve to "unresolved"; Google OAuth Testing mode silently expires refresh tokens after 7 days; no per-provider method recommendation.
+- **Cost constraint:** zero monetary cost (no paid verification, no hosted services). Google restricted-scope `mail.google.com` embedded OAuth (CASA audit) is explicitly OUT OF SCOPE.
+- **Systems Involved (queue):** `crates/mail-engine/src/discovery/`, `crates/mail-engine/src/lib.rs` (diagnostics), `apps/desktop/src-tauri/src/{onboarding,service}.rs`, `apps/desktop/src/lib/onboarding/`, `apps/desktop/src/lib/i18n/translations.ts` (EN + PT-BR parity), `README.md`/`README.pt-br.md`.
+
+### Task [04.24]: Gmail & App Password Quick Wins (Normalization, Pre-Test Hint, Testing-Mode Warning)
+
+- **Status:** DONE (2026-11-20) — commit `2883394`. Delivered normalization (Rust `IncomingCredentials::normalize` + `onboarding/secret.ts`), Gmail pre-test hint + fixed-URL `cmd_open_google_app_passwords`, Testing-mode 7-day warnings (EN/PT-BR, README). Validation: fmt/clippy/check/test/pnpm check/test/build/ci-guard/diff-check all exit 0.
+- **Covers:** audit items 2, 3, 7.
+- **Scope:**
+  1. `[04.24.1]` Normalize App Password input: strip all Unicode whitespace/newlines from `AppPassword` secrets for IMAP login. Apply in the Rust command boundary (`service.rs`, defense-in-depth) and before the IPC call in the form; never apply to Proton Bridge passwords or OAuth client secrets. Never log the secret or its length beyond the existing `appSecretLen` field.
+  2. `[04.24.2]` Gmail pre-test hint: when host is `imap.gmail.com`/`imap.googlemail.com` with `AppPassword`, if the normalized secret is not 16 ASCII letters, show a non-blocking inline hint ("looks like your regular password") before the test; add an "Open Google App Passwords" button reusing the existing `help_url` (opened via the existing `open_browser` path, user-initiated only).
+  3. `[04.24.3]` Add to the BYO OAuth guide and `OAuthAccessDenied`/`OAuthInvalidClient` hints: Google Testing-mode refresh tokens expire in 7 days; publish the consent screen "In production" (free for personal use) to avoid weekly re-authorization.
+- **Constraints:** Svelte 5 Runes only (load `svelte-dev`); secrets stay in unbound DOM inputs/transient IPC; EN/PT-BR translations in sync; no new network calls.
+- **Tests:** Rust unit tests for normalization (spaces, NBSP, tabs, CR/LF; Proton/OAuth untouched); Vitest for hint logic and button; i18n parity test passes.
+- **Docs:** README EN/PT-BR account-setup sections (`readme-standard`).
+
+### Task [02.10]: Provider-Aware Auth Diagnostics & Expanded Offline Presets
+
+- **Status:** READY FOR PLANNING
+- **Covers:** audit items 6, 4.
+- **Scope:**
+  1. `[02.10.1]` Extend diagnostics so `AuthenticationRejected` hints are provider-specific (Gmail: 2-Step Verification + App Password; Outlook/Hotmail with password: basic auth disabled, use Microsoft OAuth; Workspace: admin may block App Passwords). Prefer an additive optional provider hint key resolved in the UI from host/preset; do NOT break existing `ConnectionDiagnosticCode`/`IpcError` wire variants (P1).
+  2. `[02.10.2]` Expand `discovery/presets.rs` (and mirror `apps/desktop/src/lib/onboarding/presets.ts`) with offline domains: `gmx.*`, `mail.com`, `aol.com`, `proton.me`/`pm.me` (Bridge), `zoho.eu`, `yandex.*`, `ig.com.br`, `globo.com`, regional `hotmail.*`/`live.*`/`outlook.*`. Verify each host/port from provider documentation; unverifiable entries MUST be omitted rather than guessed.
+  3. `[02.10.3]` Keep Rust and TS preset tables consistent with a parity test (domain → host/auth).
+- **Constraints:** `mail-engine` stays `#![forbid(unsafe_code)]`; presets are offline data; RFC 2606 domains only in tests.
+
+### Task [04.25]: "Which Method Is Right For Me?" Guided Recommendation Card
+
+- **Status:** READY FOR PLANNING (soft dependency: `[04.24]`, `[02.10]`)
+- **Covers:** audit item 8.
+- **Scope:** After email entry and discovery, show a compact recommendation card driven by `DiscoveredProvider` (Gmail personal → App Password, BYO OAuth as alternative; Outlook → Microsoft sign-in; unresolved/custom domain → ISPDB then manual; Proton → Bridge). Collapse the other methods under "Other options" instead of showing all four at once. Keep manual override intact (`DiscoveryController.manual` invariant: a late suggestion must never replace user-edited settings).
+- **Constraints:** Svelte 5 Runes; keyboard accessible; EN/PT-BR; no layout shift; `WdgAccountDiscoveryForm.svelte` (1,166 LOC) MUST NOT grow — extract a new widget component.
+- **Tests:** Vitest for recommendation mapping per provider/source and manual-override precedence; `pnpm --filter desktop check/test/build`.
+
+### Task [02.11]: Built-In Public Microsoft `client_id` For One-Click Outlook Sign-In
+
+- **Status:** PAUSED (2026-11-20) — no Entra tenant available to register the Azure app (personal MSA has no tenant; Azure portal sign-in failed with AADSTS50058). P0 amendment stays approved (ADR-028). Resume when the user supplies a public-client `client_id`; the agent MUST NOT invent one. Meanwhile Outlook keeps the user-supplied `client_id` flow; improve its guide under `[04.25]` if needed.
+- **Covers:** audit item 1.
+- **Gate (user approval required before `PLANNING`):**
+  1. Amend `AGENTS.md` P0: a publicly registered OAuth2 **public-client** `client_id` (no secret, PKCE only) MAY be embedded as a compile-time constant; `client_secret`, tokens and any confidential credential remain forbidden. Record in `docs/adr/decisions.md`.
+  2. The user registers a free Azure/Entra multi-tenant + personal-accounts app (public client, redirect `http://127.0.0.1`, delegated `IMAP.AccessAsUser.All` + `offline_access`) and supplies the resulting `client_id`. The agent MUST NOT invent or guess one.
+- **Scope (after approval):** default Outlook preset uses the built-in `client_id`; the existing user-supplied `client_id` field remains as an override; no change to vault storage, token refresh or IPC wire shapes (P1). Document the registration and rotation procedure in `.agent/knowledge/`.
+- **Tests:** PKCE flow unit tests with a fake token exchange (no real credentials); override precedence; ci-guard stays green.
+
+### Task [02.12]: User-Initiated MX Detection For Workspace / Microsoft 365 Custom Domains
+
+- **Status:** READY FOR PLANNING (P0 amendment approved 2026-11-20, ADR-028; soft dependency: `[02.10]`)
+- **Covers:** audit item 5.
+- **Gate:** amend P0 with an exception: user-initiated DNS MX lookup of the typed email's domain only, behind an explicit button, never automatic, same public-DNS/bounded-deadline rules as discovery. Recorded in ADR.
+- **Scope (after approval):** add `DiscoveryTransport::mx(domain)` (bounded 3s, ≤ 10 records, only the domain is resolved, no local part leaves the machine). Map `*.l.google.com`/`aspmx.*` → Google Workspace preset (BYO OAuth / App Password guidance) and `*.mail.protection.outlook.com` → Microsoft 365 preset; anything else → existing ISPDB/manual path. Result source `DiscoverySource::Mx` (additive enum variant; verify TS union and serde compatibility, P1).
+- **Tests:** transport fake with fixed MX sets; invalid/empty/oversized answers; offline default remains zero-network.
+
+### Queue Closing Checklist (per task)
+
+- [ ] `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo check --workspace`, `pnpm --filter desktop check` (before tests).
+- [ ] `cargo test --workspace`, `pnpm --filter desktop test`, `pnpm --filter desktop build`.
+- [ ] `! grep -rn "export let" apps/desktop/src/`, `node scripts/ci-guard.mjs`, `git diff --check`.
+- [ ] EN/PT-BR README + i18n parity; knowledge card if a provider quirk was discovered.
+- [ ] Atomic Conventional Commit; hash logged; next task promoted. Nothing pushed.
 
 ---
 

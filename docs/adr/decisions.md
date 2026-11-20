@@ -806,3 +806,10 @@ type: architectural-decision-log
   checkpoint failures with rollback of messages, flags, jobs and reset deletions.
   Existing desktop regressions cover post-commit effects and event order. Synthetic
   fixtures do not establish live provider or all-platform interoperability.
+
+### [2026-11-20] ADR-028: Public OAuth Client ID and User-Initiated MX Detection (P0 Exceptions)
+
+- **Context:** Onboarding audit showed Outlook sign-in requires users to register their own Azure app, and Workspace/Microsoft 365 custom domains resolve as "unresolved". Both are the largest login-friction sources at zero monetary cost.
+- **Decision:** (1) `[02.11]` MAY embed a publicly registered OAuth2 public-client `client_id` (PKCE, no secret) as a compile-time constant; user-supplied values always override it. (2) `[02.12]` MAY perform a user-initiated, button-triggered MX lookup of the email domain only, bounded (3s, 10 records, public DNS), whose result only selects a provider preset.
+- **Limits:** Secrets, tokens and confidential credentials stay forbidden in tracked files. No automatic or background lookups; no local part leaves the machine. Google embedded OAuth (restricted-scope CASA audit, paid) remains out of scope.
+- **Status:** Policy approved 2026-11-20. `[02.11]` still requires the user-registered Azure `client_id`; no implementation yet.
