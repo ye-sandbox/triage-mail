@@ -41,7 +41,7 @@ No task is `RUNNING`. `[04.24]` and `[02.10]` are DONE. `[04.25]` is DONE. Next:
 
 ### Task [04.25]: "Which Method Is Right For Me?" Guided Recommendation Card
 
-- **Status:** DONE (2026-11-20) — commit `HASH`. Extracted `recommendation.ts` (pure mapping) + `WdgMethodRecommendationCard.svelte`; form shrank 1,183 → 1,070 LOC; Vitest + README EN/PT-BR. Frontend-only gates exit 0.
+- **Status:** DONE (2026-11-20) — commit `f10f8e8`. Extracted `recommendation.ts` (pure mapping) + `WdgMethodRecommendationCard.svelte`; form shrank 1,183 → 1,070 LOC; Vitest + README EN/PT-BR. Frontend-only gates exit 0.
 - **Covers:** audit item 8.
 - **Scope:** After email entry and discovery, show a compact recommendation card driven by `DiscoveredProvider` (Gmail personal → App Password, BYO OAuth as alternative; Outlook → Microsoft sign-in; unresolved/custom domain → ISPDB then manual; Proton → Bridge). Collapse the other methods under "Other options" instead of showing all four at once. Keep manual override intact (`DiscoveryController.manual` invariant: a late suggestion must never replace user-edited settings).
 - **Constraints:** Svelte 5 Runes; keyboard accessible; EN/PT-BR; no layout shift; `WdgAccountDiscoveryForm.svelte` (1,166 LOC) MUST NOT grow — extract a new widget component.
