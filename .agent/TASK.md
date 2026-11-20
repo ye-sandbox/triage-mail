@@ -7,7 +7,7 @@
 
 ## Active Task
 
-No task is `RUNNING`. `[04.24]` and `[02.10]` are DONE. Next: `[04.25]` (`READY FOR PLANNING`). Remaining queue (`[04.25]` → `[02.12]`; `[02.11]` PAUSED) is `READY FOR PLANNING`; promote exactly one to `PLANNING` on `proceed`. `[02.11]` is paused awaiting an Azure `client_id`; `[02.12]` has its P0 amendment approved.
+No task is `RUNNING`. `[04.24]` and `[02.10]` are DONE. `[04.25]` is DONE. Next: `[02.12]` (`READY FOR PLANNING`). Remaining queue (`[02.12]`; `[02.11]` PAUSED) is `READY FOR PLANNING`; promote exactly one to `PLANNING` on `proceed`. `[02.11]` is paused awaiting an Azure `client_id`; `[02.12]` has its P0 amendment approved.
 
 ---
 
@@ -41,7 +41,7 @@ No task is `RUNNING`. `[04.24]` and `[02.10]` are DONE. Next: `[04.25]` (`READY 
 
 ### Task [04.25]: "Which Method Is Right For Me?" Guided Recommendation Card
 
-- **Status:** READY FOR PLANNING (soft dependency: `[04.24]`, `[02.10]`)
+- **Status:** DONE (2026-11-20) — commit `HASH`. Extracted `recommendation.ts` (pure mapping) + `WdgMethodRecommendationCard.svelte`; form shrank 1,183 → 1,070 LOC; Vitest + README EN/PT-BR. Frontend-only gates exit 0.
 - **Covers:** audit item 8.
 - **Scope:** After email entry and discovery, show a compact recommendation card driven by `DiscoveredProvider` (Gmail personal → App Password, BYO OAuth as alternative; Outlook → Microsoft sign-in; unresolved/custom domain → ISPDB then manual; Proton → Bridge). Collapse the other methods under "Other options" instead of showing all four at once. Keep manual override intact (`DiscoveryController.manual` invariant: a late suggestion must never replace user-edited settings).
 - **Constraints:** Svelte 5 Runes; keyboard accessible; EN/PT-BR; no layout shift; `WdgAccountDiscoveryForm.svelte` (1,166 LOC) MUST NOT grow — extract a new widget component.

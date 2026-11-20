@@ -137,6 +137,8 @@ e conectar**. Nenhum ID de aplicativo ou segredo é distribuído com o programa.
 | **OAuth · BYO Credentials** | Fluxo contínuo de tokens OAuth para Google ou servidores corporativos | Projeto de desenvolvedor com `client_id` e `client_secret` (aplicativo Desktop) | Google / Gmail (via Console GCP), SSO corporativo privado (Keycloak, Okta) |
 | **Proton Mail Bridge** | Contas Proton Mail com criptografia de ponta a ponta | Plano pago do Proton + aplicativo oficial Proton Mail Bridge aberto localmente | Exclusivo para Proton Mail |
 
+O formulário de nova conta exibe um cartão de recomendação compacto para o provedor detectado (Gmail → Senha de Aplicativo, Outlook → login Microsoft, Proton → Bridge, domínios desconhecidos → IMAP manual) e recolhe os demais métodos em "Mais métodos de acesso".
+
 ### Detalhes de Configuração por Provedor
 
 #### Google / Gmail

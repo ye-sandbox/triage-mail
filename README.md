@@ -135,6 +135,8 @@ then select **Authorize and connect**. No application ID or secret is bundled.
 | **OAuth · BYO Credentials** | Continuous OAuth token flow for Google / enterprise | Developer project with `client_id` and `client_secret` (Desktop client) | Google / Gmail (via GCP Console), private enterprise SSO (Keycloak, Okta) |
 | **Proton Mail Bridge** | End-to-end encrypted Proton Mail accounts | Paid Proton account + official Proton Mail Bridge app running locally | Proton Mail exclusively |
 
+The add-account form shows a compact recommendation card for the detected provider (Gmail → App Password, Outlook → Microsoft sign-in, Proton → Bridge, unknown domains → manual IMAP) and collapses the remaining methods under "More sign-in methods".
+
 ### Provider Configuration Details
 
 #### Google / Gmail

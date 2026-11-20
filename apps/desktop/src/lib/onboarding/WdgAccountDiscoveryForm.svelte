@@ -44,6 +44,12 @@
 	} from './types';
 	import WdgProviderDiagnosticHint from './WdgProviderDiagnosticHint.svelte';
 	import WdgAccountHelpGuide from './WdgAccountHelpGuide.svelte';
+	import WdgMethodRecommendationCard from './WdgMethodRecommendationCard.svelte';
+	import {
+		isMethodPrimary,
+		providerKindFor,
+		type RecommendedAction
+	} from './recommendation';
 
 	interface Props {
 		controller: AccountController;
@@ -101,29 +107,14 @@
 	const isBridge = $derived(method === 'ProtonBridgeLocal');
 	const isArchive = $derived(method === 'LocalArchive');
 
-	const providerKind = $derived.by<'google' | 'microsoft' | 'proton' | 'custom' | 'appPassword'>(() => {
-		const host = discovery.settings.host.trim().toLowerCase();
-		const presetName = discovery.selectedPreset;
-		if (
-			presetName === 'Gmail' ||
-			presetName === 'Gmail OAuth' ||
-			presetName === 'Google Workspace' ||
-			host === 'imap.gmail.com' ||
-			host === 'imap.googlemail.com'
-		) {
-			return 'google';
-		}
-		if (presetName === 'Outlook' || host === 'outlook.office365.com') {
-			return 'microsoft';
-		}
-		if (presetName === 'Proton' || method === 'ProtonBridgeLocal' || host === '127.0.0.1') {
-			return 'proton';
-		}
-		if (presetName === 'Other IMAP' || discovery.status === 'unresolved' || !host) {
-			return 'custom';
-		}
-		return 'appPassword';
-	});
+	const providerKind = $derived(
+		providerKindFor({
+			preset: discovery.selectedPreset,
+			host: discovery.settings.host,
+			method,
+			status: discovery.status
+		})
+	);
 
 	const needsManualServer = $derived(
 		!isArchive &&
@@ -146,19 +137,12 @@
 		{ id: 'LocalArchive', label: t.methodLocalArchive }
 	]);
 
-	function isTabPrimary(tabId: AuthMethod): boolean {
-		if (tabId === method || tabId === 'LocalArchive' || providerKind === 'custom' || showAllMethods) {
-			return true;
-		}
-		switch (providerKind) {
-			case 'google':
-				return tabId === 'AppPassword' || tabId === 'OAuth2ByoCredentials';
-			case 'microsoft':
-				return tabId === 'OAuth2PublicPkce' || tabId === 'AppPassword';
-			case 'proton':
-				return tabId === 'ProtonBridgeLocal';
-			default:
-				return tabId === 'AppPassword';
+	function applyRecommendation(action: RecommendedAction) {
+		if (action.type === 'preset') selectPresetByName(action.name);
+		else if (action.type === 'method') switchMethod(action.method);
+		else {
+			switchMethod('AppPassword');
+			advancedExpanded = true;
 		}
 	}
 
@@ -646,109 +630,12 @@
 
 			<div class="flex flex-col gap-4">
 				{#if !isArchive}
-					<div class="space-y-2.5 rounded-md border border-separator bg-field/70 px-3.5 py-3">
-						<p class="text-xs leading-relaxed text-secondary">
-							{#if providerKind === 'google'}
-								{t.providerGuidanceGoogle}
-							{:else if providerKind === 'microsoft'}
-								{t.providerGuidanceMicrosoft}
-							{:else if providerKind === 'proton'}
-								{t.providerGuidanceProton}
-							{:else if providerKind === 'custom'}
-								{t.providerGuidanceCustom}
-							{:else}
-								{t.providerGuidanceAppPassword}
-							{/if}
-						</p>
-						<div class="flex flex-wrap items-center gap-2">
-							{#if providerKind === 'google'}
-								<button
-									type="button"
-									onclick={() => selectPresetByName('Gmail')}
-									class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {method === 'AppPassword'
-										? 'border-accent bg-selection-soft text-accent'
-										: 'border-separator bg-surface text-foreground hover:bg-selection-soft'}"
-								>
-									{t.methodAppPassword} · {t.recommendedOption}
-								</button>
-								<button
-									type="button"
-									onclick={() => selectPresetByName('Gmail OAuth')}
-									class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {method === 'OAuth2ByoCredentials'
-										? 'border-accent bg-selection-soft text-accent'
-										: 'border-separator bg-surface text-foreground hover:bg-selection-soft'}"
-								>
-									{t.googleCloudJsonOption}
-								</button>
-							{:else if providerKind === 'microsoft'}
-								<button
-									type="button"
-									onclick={() => selectPresetByName('Outlook')}
-									class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {method === 'OAuth2PublicPkce'
-										? 'border-accent bg-selection-soft text-accent'
-										: 'border-separator bg-surface text-foreground hover:bg-selection-soft'}"
-								>
-									{t.microsoftSetup} · {t.recommendedOption}
-								</button>
-								<button
-									type="button"
-									onclick={() => switchMethod('AppPassword')}
-									class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {method === 'AppPassword'
-										? 'border-accent bg-selection-soft text-accent'
-										: 'border-separator bg-surface text-foreground hover:bg-selection-soft'}"
-								>
-									{t.methodAppPassword}
-								</button>
-							{:else if providerKind === 'proton'}
-								<button
-									type="button"
-									onclick={() => selectPresetByName('Proton')}
-									class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {method === 'ProtonBridgeLocal'
-										? 'border-accent bg-selection-soft text-accent'
-										: 'border-separator bg-surface text-foreground hover:bg-selection-soft'}"
-								>
-									{t.methodProton} · {t.recommendedOption}
-								</button>
-							{:else if providerKind === 'custom'}
-								<button
-									type="button"
-									onclick={() => {
-										switchMethod('AppPassword');
-										advancedExpanded = true;
-									}}
-									class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {method === 'AppPassword'
-										? 'border-accent bg-selection-soft text-accent'
-										: 'border-separator bg-surface text-foreground hover:bg-selection-soft'}"
-								>
-									{t.customImapOption}
-								</button>
-							{:else}
-								<button
-									type="button"
-									onclick={() => switchMethod('AppPassword')}
-									class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {method === 'AppPassword'
-										? 'border-accent bg-selection-soft text-accent'
-										: 'border-separator bg-surface text-foreground hover:bg-selection-soft'}"
-								>
-									{t.methodAppPassword} · {t.recommendedOption}
-								</button>
-								<button
-									type="button"
-									onclick={() => (advancedExpanded = true)}
-									class="rounded-md border border-separator bg-surface px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-selection-soft"
-								>
-									{t.customImapOption}
-								</button>
-							{/if}
-							<button
-								type="button"
-								onclick={() => switchMethod('LocalArchive')}
-								class="rounded-md border border-separator bg-surface px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-selection-soft"
-							>
-								{t.offlineImportOption}
-							</button>
-						</div>
-					</div>
+					<WdgMethodRecommendationCard
+						kind={providerKind}
+						{method}
+						onAction={applyRecommendation}
+						onOffline={() => switchMethod('LocalArchive')}
+					/>
 				{/if}
 
 				<div class="flex flex-wrap items-center gap-2">
@@ -761,7 +648,7 @@
 							<button
 								type="button"
 								role="tab"
-								hidden={!isTabPrimary(tab.id)}
+								hidden={!isMethodPrimary(tab.id, providerKind, method, showAllMethods)}
 								aria-selected={method === tab.id}
 								onclick={() => switchMethod(tab.id)}
 								class="min-h-[36px] flex-1 rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors {method ===
