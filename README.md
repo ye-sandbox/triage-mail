@@ -142,7 +142,7 @@ then select **Authorize and connect**. No application ID or secret is bundled.
   1. Enable 2-Step Verification in [Google Account Security](https://myaccount.google.com/security).
   2. Visit [App Passwords](https://myaccount.google.com/apppasswords), generate a 16-character password (e.g. named `Triage Mail`).
   3. Ensure IMAP is enabled in Gmail settings (*See all settings $\rightarrow$ Forwarding and POP/IMAP $\rightarrow$ Enable IMAP*).
-  4. In `triage-mail`, select **App password**: Host `imap.gmail.com`, Port `993`, and paste the 16-character password.
+  4. In `triage-mail`, select **App password**: Host `imap.gmail.com`, Port `993`, and paste the 16-character password. Spaces in the password as Google displays it are removed automatically, and a hint appears if the value does not look like an App Password.
 - **Alternative (BYO OAuth):**
   1. Create a project in [Google Cloud Console](https://console.cloud.google.com/).
   2. Configure OAuth Consent Screen (External, add scope `https://mail.google.com/`).
@@ -152,6 +152,7 @@ then select **Authorize and connect**. No application ID or secret is bundled.
      - Token endpoint: `https://oauth2.googleapis.com/token`
      - Scopes: `https://mail.google.com/`
      - Client ID & Client Secret from GCP.
+  5. While the consent screen is in *Testing* mode, Google expires refresh tokens after 7 days. Publish it **In production** (free for personal use) to avoid weekly re-authorization.
 
 #### Microsoft (Outlook.com / Hotmail / Microsoft 365)
 - **Recommended (OAuth · Public PKCE):**

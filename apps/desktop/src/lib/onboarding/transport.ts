@@ -43,6 +43,7 @@ export const nativeAccountTransport: AccountTransport = {
 	subscriptions: () => invoke<Record<string, AccountSubscription>>('cmd_account_subscriptions'),
 	setBadge: (accountId, overrideMode) =>
 		invoke<AccountSubscription>('cmd_set_account_badge', { accountId, overrideMode }),
+	openGoogleAppPasswords: () => invoke<void>('cmd_open_google_app_passwords'),
 	chooseArchiveFile: () => invoke<string | null>('cmd_choose_transfer_file', { save: false }),
 	importLocalArchive(path, emailDisplay, format, onProgress) {
 		let active = true;

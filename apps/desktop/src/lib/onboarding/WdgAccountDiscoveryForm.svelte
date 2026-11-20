@@ -20,6 +20,8 @@
 	import { nativeDiscoveryTransport, type DiscoveryTransport } from './discovery';
 	import { DiscoveryController } from './discovery-controller.svelte';
 	import { clearCredentialInputs } from './forms';
+	import { looksLikeRegularGmailPassword, normalizeSecretFor } from './secret';
+	import WdgGmailAppPasswordHint from './WdgGmailAppPasswordHint.svelte';
 	import { MAX_GOOGLE_CLIENT_JSON_BYTES, parseGoogleOAuthClientJson } from './google-oauth-json';
 	import {
 		createDemoAccountDto,
@@ -82,6 +84,16 @@
 	let tickTimer: ReturnType<typeof setInterval> | undefined;
 
 	const t = $derived(i18n.t.accountForm);
+	// INVARIANT: only a boolean derived from the secret is kept in Runes state, never the secret itself.
+	let gmailSecretSuspect = $state(false);
+	function refreshGmailHint() {
+		const el = form?.querySelector<HTMLInputElement>('input[name="secret"]');
+		gmailSecretSuspect = looksLikeRegularGmailPassword(
+			discovery.settings.host,
+			method,
+			el?.value ?? ''
+		);
+	}
 	const obT = $derived(i18n.t.onboarding);
 	const method = $derived(discovery.settings.method);
 	const oauth = $derived(method === 'OAuth2PublicPkce' || method === 'OAuth2ByoCredentials');
@@ -397,7 +409,7 @@
 			imap_port: isBridge ? 1143 : Number(value('port')),
 			auth_method: method
 		};
-		const secret = String(data.get('secret') ?? '');
+		const secret = normalizeSecretFor(method, String(data.get('secret') ?? ''));
 		let credentials: PasswordCredentials = isBridge
 			? { ProtonBridgeLocal: { bridge_password: secret } }
 			: { AppPassword: { secret } };
@@ -405,6 +417,7 @@
 		credentials = { AppPassword: { secret: '' } };
 		for (const key of ['secret', 'client']) data.delete(key);
 		clearCredentialInputs(form);
+		gmailSecretSuspect = false;
 		await pending;
 	}
 
@@ -442,7 +455,7 @@
 			const cleanEmail = value('email');
 			const finalHost = isBridge ? '127.0.0.1' : value('host');
 			const finalPort = isBridge ? 1143 : Number(value('port')) || 993;
-			const secretLen = String(data.get('secret') ?? '').trim().length;
+			const secretLen = normalizeSecretFor(method, String(data.get('secret') ?? '')).trim().length;
 			const clientLen = String(data.get('client') ?? '').trim().length;
 			for (const key of ['secret', 'client']) data.delete(key);
 			clearCredentialInputs(form);
@@ -489,7 +502,7 @@
 				}
 			};
 		} else {
-			const secret = String(data.get('secret') ?? '');
+			const secret = normalizeSecretFor(method, String(data.get('secret') ?? ''));
 			submission = {
 				credentials: isBridge
 					? { ProtonBridgeLocal: { bridge_password: secret } }
@@ -501,6 +514,7 @@
 		submission = { credentials: { AppPassword: { secret: '' } } };
 		for (const key of ['secret', 'client']) data.delete(key);
 		clearCredentialInputs(form);
+		gmailSecretSuspect = false;
 		const ok = await pending;
 		if (ok) {
 			if (emailInput) emailInput.value = '';
@@ -1000,7 +1014,10 @@
 										required
 										maxlength="4096"
 										autocomplete="off"
-										oninput={() => discovery.protectCredentials()}
+										oninput={() => {
+											discovery.protectCredentials();
+											refreshGmailHint();
+										}}
 										class="{INPUT_CLS} font-mono"
 									/>
 								</label>
@@ -1073,14 +1090,12 @@
 					{/if}
 
 					{#if discovery.selectedPreset === 'Gmail' && method === 'AppPassword'}
-						<a
-							class="text-xs text-accent underline"
-							href="https://myaccount.google.com/apppasswords"
-							target="_blank"
-							rel="noopener noreferrer"
-						>
-							{t.gmailAppPasswordHelp}
-						</a>
+						<WdgGmailAppPasswordHint
+							suspect={gmailSecretSuspect}
+							hint={t.gmailRegularPasswordHint}
+							buttonLabel={t.gmailAppPasswordHelp}
+							onOpen={() => void controller.transport.openGoogleAppPasswords?.()}
+						/>
 					{/if}
 				{/if}
 			</div>

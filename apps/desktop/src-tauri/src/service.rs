@@ -94,6 +94,18 @@ impl<'de> Deserialize<'de> for IncomingCredentials {
     }
 }
 
+impl IncomingCredentials {
+    /// INVARIANT: only `AppPassword` secrets are normalized; Google displays app passwords in
+    /// space-separated groups, but Proton Bridge passwords and OAuth client secrets are opaque.
+    pub fn normalize(&mut self) {
+        if let AccountAuthMaterial::AppPassword { secret } = &mut self.0 {
+            let cleaned: String = secret.chars().filter(|c| !c.is_whitespace()).collect();
+            secret.zeroize();
+            *secret = cleaned;
+        }
+    }
+}
+
 impl std::fmt::Debug for IncomingCredentials {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("IncomingCredentials([REDACTED])")
@@ -277,8 +289,9 @@ impl DesktopService {
     pub async fn add_account(
         self: &Arc<Self>,
         mut config: AccountConfigDto,
-        credentials: IncomingCredentials,
+        mut credentials: IncomingCredentials,
     ) -> Result<String, IpcError> {
+        credentials.normalize();
         if config.account_id.is_empty() {
             config.account_id = opaque_id()?;
         }
@@ -422,8 +435,9 @@ impl DesktopService {
     pub async fn test_account_connection(
         self: &Arc<Self>,
         mut config: AccountConfigDto,
-        credentials: IncomingCredentials,
+        mut credentials: IncomingCredentials,
     ) -> Result<ConnectionTestResultDto, IpcError> {
+        credentials.normalize();
         if config.auth_method == AuthMethod::LocalArchive {
             return Err(IpcError::InvalidRequest);
         }
@@ -511,8 +525,9 @@ impl DesktopService {
     pub async fn update_account_auth(
         self: &Arc<Self>,
         config: AccountConfigDto,
-        credentials: IncomingCredentials,
+        mut credentials: IncomingCredentials,
     ) -> Result<(), IpcError> {
+        credentials.normalize();
         if config.account_id.is_empty() {
             return Err(IpcError::InvalidRequest);
         }
@@ -1172,4 +1187,55 @@ fn commit_attachment_stage_file(
         let _ = dir.sync_all();
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod normalize_tests {
+    use super::*;
+
+    fn app(secret: &str) -> IncomingCredentials {
+        IncomingCredentials(AccountAuthMaterial::AppPassword {
+            secret: secret.into(),
+        })
+    }
+
+    #[test]
+    fn app_password_whitespace_is_stripped() {
+        let mut c = app(" abcd efgh\u{a0}ijkl\tmnop\r\n");
+        c.normalize();
+        assert!(
+            matches!(&c.0, AccountAuthMaterial::AppPassword { secret } if secret == "abcdefghijklmnop")
+        );
+    }
+
+    #[test]
+    fn all_whitespace_secret_fails_validation() {
+        let mut c = app(" \t\u{a0}");
+        c.normalize();
+        assert!(
+            !matches!(&c.0, AccountAuthMaterial::AppPassword { secret } if valid_credential(secret))
+        );
+    }
+
+    #[test]
+    fn bridge_and_oauth_secrets_are_untouched() {
+        let mut c = IncomingCredentials(AccountAuthMaterial::ProtonBridgeLocal {
+            bridge_password: "a b".into(),
+        });
+        c.normalize();
+        assert!(
+            matches!(&c.0, AccountAuthMaterial::ProtonBridgeLocal { bridge_password } if bridge_password == "a b")
+        );
+        let mut c = IncomingCredentials(AccountAuthMaterial::OAuth2ByoCredentials {
+            client_id: "id".into(),
+            client_secret: "x y".into(),
+            access_token: "t".into(),
+            refresh_token: None,
+            token_endpoint: Some("https://example.com/token".into()),
+        });
+        c.normalize();
+        assert!(
+            matches!(&c.0, AccountAuthMaterial::OAuth2ByoCredentials { client_secret, .. } if client_secret == "x y")
+        );
+    }
 }

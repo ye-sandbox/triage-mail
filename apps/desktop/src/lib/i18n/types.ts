@@ -175,6 +175,7 @@ export interface Translations {
 		probeSuccess: string;
 		probeFailed: string;
 		gmailAppPasswordHelp: string;
+		gmailRegularPasswordHint: string;
 
 		title: string;
 		subtitle: string;

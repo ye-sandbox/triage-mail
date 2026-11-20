@@ -807,6 +807,13 @@ pub fn cmd_cancel_authorization(state: State<'_, RuntimeState>, window: tauri::W
     state.authorizations.cancel(window.label());
 }
 
+/// INVARIANT: fixed, argument-free URL so the webview can never request arbitrary navigation;
+/// only reachable from an explicit user click on the Gmail App Password help button.
+#[tauri::command]
+pub fn cmd_open_google_app_passwords() -> Result<(), IpcError> {
+    onboarding::open_browser("https://myaccount.google.com/apppasswords")
+}
+
 #[tauri::command]
 pub async fn cmd_test_account_connection(
     state: State<'_, RuntimeState>,
@@ -1224,6 +1231,7 @@ pub fn run() {
             cmd_authorize_account,
             cmd_reauthorize_account,
             cmd_cancel_authorization,
+            cmd_open_google_app_passwords,
             cmd_account_diagnostics,
             cmd_account_subscriptions,
             cmd_set_account_badge,

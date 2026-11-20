@@ -68,6 +68,7 @@ export interface AccountTransport {
 	diagnostics?(): Promise<Record<string, ConnectionDiagnosticCode>>;
 	subscriptions?(): Promise<Record<string, AccountSubscription>>;
 	setBadge?(accountId: string, override: BadgeOverride): Promise<AccountSubscription>;
+	openGoogleAppPasswords?(): Promise<void>;
 	chooseArchiveFile?(): Promise<string | null>;
 	importLocalArchive?(
 		path: string,

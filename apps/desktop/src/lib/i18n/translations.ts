@@ -182,6 +182,8 @@ export const translations: Record<SupportedLocale, Translations> = {
 			probeFailed:
 				'IMAP TLS could not be confirmed. Check the host and try again or configure it manually.',
 			gmailAppPasswordHelp: 'Create a Google app password (requires 2-Step Verification)',
+			gmailRegularPasswordHint:
+				'This does not look like a Google app password (16 letters). A regular Gmail password will be rejected. Create an app password first.',
 
 			title: 'Connect an account',
 			subtitle: 'Use the connection settings supplied by your mail provider.',
@@ -236,11 +238,11 @@ export const translations: Record<SupportedLocale, Translations> = {
 				},
 				OAuthAccessDenied: {
 					title: 'Provider denied OAuth authorization',
-					hint: 'Access was declined or blocked. If you are using a personal Google Cloud project in Testing mode, add your email under OAuth consent screen -> Test users and approve access in the browser.'
+					hint: 'Access was declined or blocked. If you are using a personal Google Cloud project in Testing mode, add your email under OAuth consent screen -> Test users and approve access in the browser. Testing-mode refresh tokens expire after 7 days; publish the consent screen "In production" (free for personal use) to avoid weekly re-authorization.'
 				},
 				OAuthInvalidClient: {
 					title: 'OAuth client configuration mismatch',
-					hint: 'Check your Client ID, Client secret, and endpoints. Create a "Desktop app" (or "Public client/native") client and register http://127.0.0.1/callback as the redirect URI.'
+					hint: 'Check your Client ID, Client secret, and endpoints. Google Testing-mode tokens also expire after 7 days; publish the consent screen "In production" to stop this. Create a "Desktop app" (or "Public client/native") client and register http://127.0.0.1/callback as the redirect URI.'
 				},
 				OAuthCancelled: {
 					title: 'Authorization cancelled',
@@ -433,7 +435,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 					'Create a Desktop Application in Google Cloud Console or your enterprise identity provider.',
 				services:
 					'Google Cloud Console (Gmail / Google Workspace) and private enterprise SSO (Keycloak, Okta).',
-				gcpTip: 'Scope required: https://mail.google.com/ with loopback redirect.',
+				gcpTip: 'Scope required: https://mail.google.com/ with loopback redirect. Google Testing-mode refresh tokens expire after 7 days: publish the consent screen "In production" (free for personal use).',
 				fields: [
 					'Quick fill (Gmail OAuth): Auto-fills Host (imap.gmail.com), Port (993), Google OAuth endpoints, and the https://mail.google.com/ scope.',
 					'Client ID & Client secret: The Desktop OAuth client credentials created in your Google Cloud Console project.'
@@ -797,6 +799,8 @@ export const translations: Record<SupportedLocale, Translations> = {
 				'Não foi possível confirmar o IMAP com TLS. Confira o host e tente novamente ou configure manualmente.',
 			gmailAppPasswordHelp:
 				'Criar uma senha de aplicativo Google (requer verificação em duas etapas)',
+			gmailRegularPasswordHint:
+				'Isto não parece uma senha de aplicativo Google (16 letras). A senha normal do Gmail será rejeitada. Crie primeiro uma senha de aplicativo.',
 
 			title: 'Conectar uma conta',
 			subtitle: 'Use as configurações de conexão fornecidas pelo seu provedor de e-mail.',
@@ -851,11 +855,11 @@ export const translations: Record<SupportedLocale, Translations> = {
 				},
 				OAuthAccessDenied: {
 					title: 'Provedor negou a autorização OAuth',
-					hint: 'O acesso foi recusado ou bloqueado. Em projetos pessoais do Google Cloud em modo Teste, adicione seu e-mail em Tela de permissão OAuth -> Usuários de teste e aprove no navegador.'
+					hint: 'O acesso foi recusado ou bloqueado. Em projetos pessoais do Google Cloud em modo Teste, adicione seu e-mail em Tela de permissão OAuth -> Usuários de teste e aprove no navegador. Tokens do modo Teste expiram em 7 dias; publique a tela de permissão "Em produção" (gratuito para uso pessoal) para evitar reautorizações semanais.'
 				},
 				OAuthInvalidClient: {
 					title: 'Configuração do cliente OAuth inválida',
-					hint: 'Verifique seu ID do cliente, Chave secreta e endpoints. Crie um cliente do tipo "App para computador" (ou "Cliente público/nativo") e registre http://127.0.0.1/callback como URI de redirecionamento.'
+					hint: 'Verifique seu ID do cliente, Chave secreta e endpoints. Tokens do modo Teste do Google também expiram em 7 dias; publique a tela de permissão "Em produção" para evitar isso. Crie um cliente do tipo "App para computador" (ou "Cliente público/nativo") e registre http://127.0.0.1/callback como URI de redirecionamento.'
 				},
 				OAuthCancelled: {
 					title: 'Autorização cancelada',
@@ -1048,7 +1052,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 					'Criar um projeto e credenciais do tipo "App para computador" no Google Cloud Console ou provedor corporativo.',
 				services:
 					'Google Cloud Console (Gmail / Google Workspace) e SSO corporativo (Keycloak, Okta).',
-				gcpTip: 'Escopo necessário: https://mail.google.com/ com redirecionamento loopback.',
+				gcpTip: 'Escopo necessário: https://mail.google.com/ com redirecionamento loopback. Tokens de atualização do modo Teste do Google expiram em 7 dias: publique a tela de permissão "Em produção" (gratuito para uso pessoal).',
 				fields: [
 					'Preenchimento rápido (Gmail OAuth): Preenche automaticamente Host (imap.gmail.com), Porta (993), Endpoints OAuth do Google e o escopo https://mail.google.com/.',
 					'ID do cliente e Chave secreta: As credenciais OAuth de aplicativo Desktop geradas no seu projeto do Google Cloud Console.'

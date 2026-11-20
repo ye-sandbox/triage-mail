@@ -144,7 +144,7 @@ e conectar**. Nenhum ID de aplicativo ou segredo é distribuído com o programa.
   1. Ative a verificação em duas etapas no painel de [Segurança da Conta Google](https://myaccount.google.com/security).
   2. Acesse [Senhas de app](https://myaccount.google.com/apppasswords) e crie uma senha de 16 caracteres (ex.: com o nome `Triage Mail`).
   3. Verifique se o IMAP está ativado no Gmail (*Configurações $\rightarrow$ Ver todas as configurações $\rightarrow$ Encaminhamento e POP/IMAP $\rightarrow$ Ativar IMAP*).
-  4. No `triage-mail`, selecione **App password**: Host `imap.gmail.com`, Porta `993` e cole a senha de 16 caracteres gerada.
+  4. No `triage-mail`, selecione **App password**: Host `imap.gmail.com`, Porta `993` e cole a senha de 16 caracteres gerada. Os espaços da senha como o Google a exibe são removidos automaticamente, e uma dica aparece se o valor não parecer uma senha de app.
 - **Alternativa (BYO OAuth):**
   1. Crie um projeto no [Google Cloud Console](https://console.cloud.google.com/).
   2. Configure a Tela de consentimento OAuth (Externa, com o escopo `https://mail.google.com/`).
@@ -154,6 +154,7 @@ e conectar**. Nenhum ID de aplicativo ou segredo é distribuído com o programa.
      - Endpoint de token: `https://oauth2.googleapis.com/token`
      - Escopos: `https://mail.google.com/`
      - Client ID e Client Secret gerados no GCP.
+  5. Enquanto a tela de consentimento estiver em modo *Teste*, o Google expira os refresh tokens após 7 dias. Publique-a **Em produção** (gratuito para uso pessoal) para evitar reautorizações semanais.
 
 #### Microsoft (Outlook.com / Hotmail / Microsoft 365)
 - **Recomendado (OAuth · Public PKCE):**
