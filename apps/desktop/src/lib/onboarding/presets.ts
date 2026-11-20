@@ -53,6 +53,11 @@ export const providerPresets: ProviderPreset[] = [
 	{ name: 'UOL', host: 'imap.uol.com.br', port: 993, method: 'AppPassword' },
 	{ name: 'BOL', host: 'imap.bol.com.br', port: 993, method: 'AppPassword' },
 	{ name: 'Terra', host: 'imap.terra.com.br', port: 993, method: 'AppPassword' },
+	{ name: 'Zoho EU', host: 'imap.zoho.eu', port: 993, method: 'AppPassword' },
+	{ name: 'GMX', host: 'imap.gmx.net', port: 993, method: 'AppPassword' },
+	{ name: 'Mail.com', host: 'imap.mail.com', port: 993, method: 'AppPassword' },
+	{ name: 'AOL', host: 'imap.aol.com', port: 993, method: 'AppPassword' },
+	{ name: 'Yandex', host: 'imap.yandex.com', port: 993, method: 'AppPassword' },
 	{ name: 'Proton', host: '127.0.0.1', port: 1143, method: 'ProtonBridgeLocal' },
 	{ name: 'Other IMAP', host: '', port: 993, method: 'AppPassword' }
 ];

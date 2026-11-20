@@ -110,7 +110,7 @@ O `triage-mail` oferece suporte a quatro métodos de autenticação sob um trans
 
 Informe um endereço de e-mail e saia do campo para buscar configurações locais dos
 provedores. As predefinições cobrem Gmail, domínios pessoais Microsoft, Yahoo,
-iCloud, Fastmail, Zoho, UOL, BOL e Terra. Domínios próprios e organizacionais podem
+iCloud, Fastmail, Zoho (US/UE), GMX, Mail.com, AOL, Yandex, UOL, BOL, Terra e Proton (via Bridge). Domínios próprios e organizacionais podem
 exigir configuração manual; uma predefinição não verifica a conta nem garante
 acesso IMAP no plano contratado.
 

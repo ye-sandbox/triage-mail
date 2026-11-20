@@ -223,6 +223,10 @@ export const translations: Record<SupportedLocale, Translations> = {
 				'Login verified. Credentials were cleared—re-enter your password to connect.',
 			testLoginFailed:
 				'Login test failed. Verify your host, port, and credentials.',
+			providerHints: {
+				gmail: 'Gmail requires 2-Step Verification and a 16-letter App Password (not your Google password). On Google Workspace, your administrator may have blocked App Passwords; use Google OAuth with your own client instead.',
+				microsoftBasicAuth: 'Outlook and Hotmail no longer accept passwords over IMAP (basic authentication is disabled). Use Microsoft sign-in instead of an App Password.'
+			},
 			diagnostics: {
 				TlsHandshakeFailed: {
 					title: 'TLS certificate or port mismatch',
@@ -840,6 +844,10 @@ export const translations: Record<SupportedLocale, Translations> = {
 				'Login verificado. As credenciais foram limpas — digite a senha novamente para conectar.',
 			testLoginFailed:
 				'O teste de login falhou. Verifique host, porta e credenciais.',
+			providerHints: {
+				gmail: 'O Gmail exige verificação em duas etapas e uma Senha de App de 16 letras (não a senha do Google). No Google Workspace, o administrador pode ter bloqueado Senhas de App; use OAuth do Google com seu próprio cliente.',
+				microsoftBasicAuth: 'Outlook e Hotmail não aceitam mais senha via IMAP (autenticação básica desativada). Use o login da Microsoft em vez de Senha de App.'
+			},
 			diagnostics: {
 				TlsHandshakeFailed: {
 					title: 'Falha de certificado TLS ou porta',

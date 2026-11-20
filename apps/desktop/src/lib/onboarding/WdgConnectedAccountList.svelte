@@ -24,6 +24,7 @@
 	import { oauthDefaultsForHost } from './presets';
 	import type { AccountConfig, Reauthorization } from './types';
 	import WdgAccountAvatar from './WdgAccountAvatar.svelte';
+	import WdgProviderDiagnosticHint from './WdgProviderDiagnosticHint.svelte';
 	import WdgAccountPlanBadge from './WdgAccountPlanBadge.svelte';
 	import WdgAccountPlanControl from './WdgAccountPlanControl.svelte';
 	import type { AccountSubscription, BadgeOverride } from './subscriptions';
@@ -570,6 +571,7 @@
 									{t.accountDiagnosticBanner}: {guidance.title}
 								</p>
 								<p class="leading-relaxed text-secondary">{guidance.hint}</p>
+								<WdgProviderDiagnosticHint code={accountDiag} host={account.imap_host} method={account.auth_method} />
 							</div>
 						</div>
 					{/if}

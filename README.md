@@ -109,8 +109,8 @@ Runtime credentials and database encryption keys are stored strictly in the oper
 ### Provider discovery
 
 Enter an email address and leave the field to look up built-in provider settings locally.
-Presets cover Gmail, Microsoft consumer domains, Yahoo, iCloud, Fastmail, Zoho,
-UOL, BOL, and Terra. Custom and organization domains may need manual settings;
+Presets cover Gmail, Microsoft consumer domains, Yahoo, iCloud, Fastmail, Zoho (US/EU),
+GMX, Mail.com, AOL, Yandex, UOL, BOL, Terra, and Proton (via Bridge). Custom and organization domains may need manual settings;
 a matching preset does not verify an account or guarantee IMAP access on its plan.
 
 **Look up settings online** explicitly sends only the domain to Mozilla Thunderbird

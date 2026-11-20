@@ -7,7 +7,7 @@
 
 ## Active Task
 
-No task is `RUNNING`. `[04.24]` is DONE. Next: `[02.10]` (`READY FOR PLANNING`). Remaining queue (`[02.10]` → `[04.25]` → `[02.12]`; `[02.11]` PAUSED) is `READY FOR PLANNING`; promote exactly one to `PLANNING` on `proceed`. `[02.11]` is paused awaiting an Azure `client_id`; `[02.12]` has its P0 amendment approved.
+No task is `RUNNING`. `[04.24]` and `[02.10]` are DONE. Next: `[04.25]` (`READY FOR PLANNING`). Remaining queue (`[04.25]` → `[02.12]`; `[02.11]` PAUSED) is `READY FOR PLANNING`; promote exactly one to `PLANNING` on `proceed`. `[02.11]` is paused awaiting an Azure `client_id`; `[02.12]` has its P0 amendment approved.
 
 ---
 
@@ -31,7 +31,7 @@ No task is `RUNNING`. `[04.24]` is DONE. Next: `[02.10]` (`READY FOR PLANNING`).
 
 ### Task [02.10]: Provider-Aware Auth Diagnostics & Expanded Offline Presets
 
-- **Status:** READY FOR PLANNING
+- **Status:** DONE (2026-11-20) — commit `HASH`. UI-only provider hints (`provider-hints.ts`, `WdgProviderDiagnosticHint.svelte`; Gmail incl. Workspace note, Microsoft basic-auth), presets for GMX/Mail.com/AOL/Zoho EU/Yandex/Proton + regional Microsoft domains; `globo.com`/`ig.com.br` omitted (host unverifiable offline). Rust/TS parity via `preset_domains.json`. All gates exit 0.
 - **Covers:** audit items 6, 4.
 - **Scope:**
   1. `[02.10.1]` Extend diagnostics so `AuthenticationRejected` hints are provider-specific (Gmail: 2-Step Verification + App Password; Outlook/Hotmail with password: basic auth disabled, use Microsoft OAuth; Workspace: admin may block App Passwords). Prefer an additive optional provider hint key resolved in the UI from host/preset; do NOT break existing `ConnectionDiagnosticCode`/`IpcError` wire variants (P1).

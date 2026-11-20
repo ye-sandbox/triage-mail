@@ -209,6 +209,7 @@ export interface Translations {
 		testLoginSuccess: string;
 		testLoginFailed: string;
 		diagnostics: Record<ConnectionDiagnosticCode, DiagnosticGuidance>;
+		providerHints: { gmail: string; microsoftBasicAuth: string };
 		browserAuthPending: string;
 		cancelAuth: string;
 		quickFillLabel: string;

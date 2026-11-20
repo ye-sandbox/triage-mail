@@ -42,6 +42,7 @@
 		LocalArchiveFormat,
 		PasswordCredentials
 	} from './types';
+	import WdgProviderDiagnosticHint from './WdgProviderDiagnosticHint.svelte';
 	import WdgAccountHelpGuide from './WdgAccountHelpGuide.svelte';
 
 	interface Props {
@@ -1169,6 +1170,7 @@
 			<div class="space-y-1">
 				<p class="font-semibold text-foreground">{guidance.title}</p>
 				<p class="leading-relaxed text-secondary">{guidance.hint}</p>
+				<WdgProviderDiagnosticHint code={controller.diagnostic} host={discovery.settings.host} {method} />
 			</div>
 		</div>
 	{:else if controller.error}
