@@ -1,4 +1,5 @@
 //! Local-first provider discovery. Online lookup and endpoint probing are separate user actions.
+mod mx;
 mod native;
 mod presets;
 mod xml;
@@ -19,6 +20,7 @@ pub const MAX_CONFIG_BYTES: usize = 64 * 1024;
 pub enum DiscoverySource {
     Preset,
     Ispdb,
+    Mx,
     Unresolved,
 }
 
@@ -73,6 +75,8 @@ pub trait DiscoveryTransport: Send + Sync {
     async fn ispdb(&self, domain: &str) -> Result<Vec<u8>, DiscoveryError>;
     /// Explicitly confirmed public host, implicit TLS on port 993; no authentication.
     async fn probe(&self, host: &str) -> Result<bool, DiscoveryError>;
+    /// MX exchange names of a normalized domain only; never the local part.
+    async fn mx(&self, domain: &str) -> Result<Vec<String>, DiscoveryError>;
 }
 
 /// Accept exactly one RFC 5322 mailbox; reject control/header injection and address literals.
@@ -172,6 +176,21 @@ pub async fn discover(
             if let Some(provider) = xml::parse(&domain, &bytes) {
                 return Ok(provider);
             }
+        }
+    }
+    Ok(DiscoveredProvider::unresolved(domain))
+}
+
+/// Explicit user action only (never called by `discover`). Falls back to the unresolved result.
+pub async fn detect_mx(
+    email: &str,
+    transport: &dyn DiscoveryTransport,
+) -> Result<DiscoveredProvider, DiscoveryError> {
+    let domain = email_domain(email)?;
+    // INVARIANT: One 3s deadline, <=10 records; the answer only selects a preset.
+    if let Ok(Ok(raw)) = tokio::time::timeout(DISCOVERY_TIMEOUT, transport.mx(&domain)).await {
+        if let Some(provider) = mx::classify(&domain, &mx::sanitize(raw)) {
+            return Ok(provider);
         }
     }
     Ok(DiscoveredProvider::unresolved(domain))

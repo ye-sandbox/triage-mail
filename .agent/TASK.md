@@ -59,7 +59,7 @@ No task is `RUNNING`. `[04.24]` and `[02.10]` are DONE. `[04.25]` is DONE. Next:
 
 ### Task [02.12]: User-Initiated MX Detection For Workspace / Microsoft 365 Custom Domains
 
-- **Status:** READY FOR PLANNING (P0 amendment approved 2026-11-20, ADR-028; soft dependency: `[02.10]`)
+- **Status:** RUNNING (plan + hickory-resolver approved 2026-11-20; P0 ADR-028; soft dependency: `[02.10]`)
 - **Covers:** audit item 5.
 - **Gate:** amend P0 with an exception: user-initiated DNS MX lookup of the typed email's domain only, behind an explicit button, never automatic, same public-DNS/bounded-deadline rules as discovery. Recorded in ADR.
 - **Scope (after approval):** add `DiscoveryTransport::mx(domain)` (bounded 3s, ≤ 10 records, only the domain is resolved, no local part leaves the machine). Map `*.l.google.com`/`aspmx.*` → Google Workspace preset (BYO OAuth / App Password guidance) and `*.mail.protection.outlook.com` → Microsoft 365 preset; anything else → existing ISPDB/manual path. Result source `DiscoverySource::Mx` (additive enum variant; verify TS union and serde compatibility, P1).

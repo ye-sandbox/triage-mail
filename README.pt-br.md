@@ -121,6 +121,11 @@ configurações IMAP com TLS implícito são aceitas. Não há teste automático
 **Confirmar e testar** conecta apenas ao host público exibido na porta 993, verifica
 o TLS e a saudação IMAP e não envia credenciais. O sucesso do teste não verifica o login.
 
+**Detectar via DNS** é um botão separado que consulta apenas os registros MX do
+domínio digitado (prazo de três segundos, no máximo 10 registros, nunca a parte local).
+Ele só seleciona uma predefinição Google Workspace ou Microsoft 365 e nunca roda
+automaticamente.
+
 Use **Configurações avançadas de conexão** para host/porta manuais, BYO OAuth ou
 Proton Bridge. Edições manuais e seleção de predefinições impedem que a busca automática
 sobrescreva o formulário. O Gmail tem um link direto para Senhas de aplicativo.

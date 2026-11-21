@@ -382,6 +382,29 @@ impl mail_engine::discovery::DiscoveryTransport for DiscoveryFixture {
         self.0.fetch_add(1, Ordering::SeqCst);
         Err(mail_engine::discovery::DiscoveryError::Unavailable)
     }
+    async fn mx(
+        &self,
+        domain: &str,
+    ) -> Result<Vec<String>, mail_engine::discovery::DiscoveryError> {
+        assert_eq!(domain, "example.com");
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Ok(vec!["aspmx.l.google.com.".into()])
+    }
+}
+
+#[tokio::test]
+async fn mx_ipc_service_returns_preset_only_on_explicit_call() {
+    let transport = DiscoveryFixture(AtomicUsize::new(0));
+    let found = detect_provider_mx("reader@example.com", &transport)
+        .await
+        .unwrap();
+    assert_eq!(found.source, mail_engine::discovery::DiscoverySource::Mx);
+    assert_eq!(found.imap_host.as_deref(), Some("imap.gmail.com"));
+    assert_eq!(transport.0.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        detect_provider_mx("not-an-email", &transport).await,
+        Err(IpcError::InvalidRequest)
+    );
 }
 
 #[tokio::test]

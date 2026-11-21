@@ -168,6 +168,9 @@ export const translations: Record<SupportedLocale, Translations> = {
 			onlineLookup: 'Look up settings online',
 			onlineLookupHelp:
 				'This sends only your email domain to Mozilla Thunderbird ISPDB and replaces the connection settings. It does not sign in or test a server.',
+			detectMx: 'Detect via DNS',
+			detectMxHelp:
+				'This looks up only the MX records of your email domain (no address, no sign-in) to recognize Google Workspace or Microsoft 365.',
 			confirmProbe: 'Confirm and test',
 			probeHelp:
 				'Confirm the host below to test its IMAP TLS connection on port 993. No credentials are sent.',
@@ -788,6 +791,9 @@ export const translations: Record<SupportedLocale, Translations> = {
 			onlineLookup: 'Buscar configurações online',
 			onlineLookupHelp:
 				'Esta ação envia apenas o domínio do e-mail ao ISPDB do Mozilla Thunderbird e substitui as configurações de conexão. Não faz login nem testa servidores.',
+			detectMx: 'Detectar via DNS',
+			detectMxHelp:
+				'Consulta apenas os registros MX do domínio do seu e-mail (sem endereço, sem login) para reconhecer Google Workspace ou Microsoft 365.',
 			confirmProbe: 'Confirmar e testar',
 			probeHelp:
 				'Confirme o host abaixo para testar a conexão IMAP com TLS na porta 993. Nenhuma credencial é enviada.',

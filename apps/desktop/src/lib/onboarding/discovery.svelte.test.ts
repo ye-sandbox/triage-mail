@@ -27,12 +27,24 @@ function deferred<T>() {
 function transport() {
 	return {
 		discover: vi.fn<DiscoveryTransport['discover']>().mockResolvedValue(result),
-		probe: vi.fn<DiscoveryTransport['probe']>().mockResolvedValue(true)
+		probe: vi.fn<DiscoveryTransport['probe']>().mockResolvedValue(true),
+		detectMx: vi.fn<DiscoveryTransport['detectMx']>().mockResolvedValue(result)
 	};
 }
 afterEach(() => {
 	document.body.innerHTML = '';
 	vi.useRealTimers();
+});
+
+it('detects via MX only on explicit call', async () => {
+	const api = transport();
+	const discovery = new DiscoveryController(api);
+	discovery.input('reader@example.com');
+	discovery.blur('reader@example.com');
+	expect(api.detectMx).not.toHaveBeenCalled();
+	await discovery.detectMx('reader@example.com');
+	expect(api.detectMx).toHaveBeenCalledWith('reader@example.com');
+	discovery.dispose();
 });
 
 it('debounces blur, keeps online lookup explicit and never probes on discovery', async () => {

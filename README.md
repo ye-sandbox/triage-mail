@@ -120,6 +120,10 @@ settings are accepted. No automatic host probing occurs. **Confirm and test**
 connects only to the displayed public host on port 993, verifies TLS and the IMAP
 greeting, and sends no credentials. A successful probe does not verify sign-in.
 
+**Detect via DNS** is a separate button that resolves only the MX records of the
+typed domain (three-second deadline, at most 10 records, never the local part). It
+only selects a Google Workspace or Microsoft 365 preset and never runs automatically.
+
 Use **Advanced connection settings** for manual host/port, BYO OAuth, or Proton
 Bridge configuration. Manual edits and preset selections prevent automatic lookup
 from overwriting the form. Gmail has a direct App Passwords link. **Set up Microsoft

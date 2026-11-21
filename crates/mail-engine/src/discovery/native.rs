@@ -48,6 +48,26 @@ impl DiscoveryTransport for NativeDiscovery {
         Ok(bytes)
     }
 
+    async fn mx(&self, domain: &str) -> Result<Vec<String>, DiscoveryError> {
+        let domain = super::normalize_host(domain)?;
+        let resolver = hickory_resolver::TokioResolver::builder_tokio()
+            .and_then(|b| b.build())
+            .map_err(|_| DiscoveryError::Unavailable)?;
+        let lookup = resolver
+            .mx_lookup(format!("{domain}."))
+            .await
+            .map_err(|_| DiscoveryError::Unavailable)?;
+        Ok(lookup
+            .answers()
+            .iter()
+            .filter_map(|r| match &r.data {
+                hickory_resolver::proto::rr::RData::MX(mx) => Some(mx.exchange.to_utf8()),
+                _ => None,
+            })
+            .take(super::mx::MAX_MX_RECORDS * 2)
+            .collect())
+    }
+
     async fn probe(&self, host: &str) -> Result<bool, DiscoveryError> {
         let host = super::normalize_host(host)?;
         let addresses: Vec<_> = tokio::net::lookup_host((host.as_str(), 993))

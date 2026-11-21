@@ -685,6 +685,14 @@ pub async fn cmd_probe_email_provider(host: String) -> Result<bool, IpcError> {
     onboarding::probe_provider(&host, &mail_engine::discovery::NativeDiscovery).await
 }
 
+/// Invoked only by the explicit "detect via DNS" button; resolves the domain's MX records only.
+#[tauri::command]
+pub async fn cmd_detect_email_provider_mx(
+    email: String,
+) -> Result<DiscoveredProviderDto, IpcError> {
+    onboarding::detect_provider_mx(&email, &mail_engine::discovery::NativeDiscovery).await
+}
+
 #[tauri::command]
 pub async fn cmd_list_accounts(
     state: State<'_, RuntimeState>,
@@ -1221,6 +1229,7 @@ pub fn run() {
             cmd_list_accounts,
             cmd_discover_email_provider,
             cmd_probe_email_provider,
+            cmd_detect_email_provider_mx,
             cmd_list_folders,
             cmd_get_account_avatar,
             cmd_set_account_avatar,
@@ -1458,6 +1467,7 @@ mod tests {
                 cmd_list_accounts,
                 cmd_discover_email_provider,
                 cmd_probe_email_provider,
+                cmd_detect_email_provider_mx,
                 cmd_get_account_avatar,
                 cmd_set_account_avatar,
                 cmd_remove_account_avatar,

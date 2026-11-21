@@ -14,13 +14,15 @@ export interface DiscoveredProvider {
 		scopes: string;
 	} | null;
 	help_url: string | null;
-	source: 'Preset' | 'Ispdb' | 'Unresolved';
+	source: 'Preset' | 'Ispdb' | 'Mx' | 'Unresolved';
 }
 export interface DiscoveryTransport {
 	discover(email: string, online: boolean): Promise<DiscoveredProvider>;
 	probe(host: string): Promise<boolean>;
+	detectMx(email: string): Promise<DiscoveredProvider>;
 }
 export const nativeDiscoveryTransport: DiscoveryTransport = {
 	discover: (email, online) => invoke('cmd_discover_email_provider', { email, online }),
-	probe: (host) => invoke('cmd_probe_email_provider', { host })
+	probe: (host) => invoke('cmd_probe_email_provider', { host }),
+	detectMx: (email) => invoke('cmd_detect_email_provider_mx', { email })
 };

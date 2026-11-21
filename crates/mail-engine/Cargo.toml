@@ -13,6 +13,7 @@ workspace = true
 async-trait = "0.1.92"
 base64 = "0.23.1"
 mail-parser = { version = "1.0.0", features = ["full_encoding", "serde"] }
+hickory-resolver = { version = "0.26.3", default-features = false, features = ["system-config", "tokio"] }
 quick-xml = "0.42.0"
 rand = "0.10.3"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }

@@ -100,14 +100,16 @@ export class DiscoveryController {
 			this.timer = setTimeout(() => void this.lookup(trimmed, false), 200);
 		}
 	}
-	async lookup(email: string, online: boolean) {
+	async lookup(email: string, online: boolean, viaMx = false) {
 		if (!this.active || this.manual) return;
 		this.invalidate();
 		const revision = this.revision;
 		const trimmed = email.trim();
 		this.busy = true;
 		try {
-			const provider = await this.transport.discover(trimmed, online);
+			const provider = viaMx
+				? await this.transport.detectMx(trimmed)
+				: await this.transport.discover(trimmed, online);
 			if (!this.active || revision !== this.revision) return;
 			this.beforeReplace();
 			this.provider = provider;
@@ -135,6 +137,11 @@ export class DiscoveryController {
 		// INVARIANT: Explicit lookup may replace manual settings; blur never does.
 		this.manual = false;
 		await this.lookup(email, true);
+	}
+	async detectMx(email: string) {
+		// INVARIANT: Explicit button only; resolves the domain's MX records, never on input/blur.
+		this.manual = false;
+		await this.lookup(email, true, true);
 	}
 	async probe() {
 		if (

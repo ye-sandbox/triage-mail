@@ -101,10 +101,12 @@ it('keeps discovery offline by default and probing a separate explicit command',
 	await nativeDiscoveryTransport.discover('reader@example.com', false);
 	await nativeDiscoveryTransport.discover('reader@example.com', true);
 	await nativeDiscoveryTransport.probe('imap.example.com');
+	await nativeDiscoveryTransport.detectMx('reader@example.com');
 	expect(vi.mocked(invoke).mock.calls).toEqual([
 		['cmd_discover_email_provider', { email: 'reader@example.com', online: false }],
 		['cmd_discover_email_provider', { email: 'reader@example.com', online: true }],
-		['cmd_probe_email_provider', { host: 'imap.example.com' }]
+		['cmd_probe_email_provider', { host: 'imap.example.com' }],
+		['cmd_detect_email_provider_mx', { email: 'reader@example.com' }]
 	]);
 });
 

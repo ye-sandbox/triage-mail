@@ -165,6 +165,8 @@ export interface Translations {
 		microsoftSetupHelp: string;
 		onlineLookup: string;
 		onlineLookupHelp: string;
+		detectMx: string;
+		detectMxHelp: string;
 		confirmProbe: string;
 		probeHelp: string;
 		discovering: string;

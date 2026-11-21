@@ -329,6 +329,10 @@
 		toast.success(`ISPDB: ${extractDomainOnly(emailValue)}`);
 	}
 
+	function handleMxClick() {
+		if (!demoMode) void discovery.detectMx(emailInput?.value ?? '');
+	}
+
 	function handleProbeClick() {
 		if (!demoMode) {
 			void discovery.probe();
@@ -560,6 +564,18 @@
 							<Search class="h-3.5 w-3.5 shrink-0 text-secondary" />
 							<span>{t.onlineLookup}</span>
 						</button>
+						{#if !demoMode}
+							<button
+								type="button"
+								title={t.detectMxHelp}
+								disabled={discovery.busy}
+								onclick={handleMxClick}
+								class="flex min-h-[40px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-separator bg-surface px-3.5 py-2 text-xs font-medium text-foreground whitespace-nowrap hover:bg-field disabled:opacity-50"
+							>
+								<Search class="h-3.5 w-3.5 shrink-0 text-secondary" />
+								<span>{t.detectMx}</span>
+							</button>
+						{/if}
 						{#if demoMode || (discovery.settings.host && discovery.settings.port === 993 && !isBridge)}
 							<button
 								type="button"

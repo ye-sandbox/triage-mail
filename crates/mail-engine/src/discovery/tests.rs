@@ -11,6 +11,7 @@ struct Fixture {
     calls: AtomicUsize,
     slow: bool,
     bytes: Vec<u8>,
+    mx: Vec<String>,
 }
 impl Default for Fixture {
     fn default() -> Self {
@@ -18,6 +19,7 @@ impl Default for Fixture {
             calls: AtomicUsize::new(0),
             slow: false,
             bytes: CONFIG.as_bytes().to_vec(),
+            mx: Vec::new(),
         }
     }
 }
@@ -38,6 +40,14 @@ impl DiscoveryTransport for Fixture {
             std::future::pending::<()>().await;
         }
         Ok(true)
+    }
+    async fn mx(&self, domain: &str) -> Result<Vec<String>, DiscoveryError> {
+        assert_eq!(domain, "example.com");
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        if self.slow {
+            std::future::pending::<()>().await;
+        }
+        Ok(self.mx.clone())
     }
 }
 
@@ -222,4 +232,59 @@ fn xml_accepts_safe_references_but_rejects_excessive_nesting_and_trailing_conten
         format!("{CONFIG}<![CDATA[extra]]>").as_bytes()
     )
     .is_none());
+}
+
+fn mx_fixture(names: &[&str]) -> Fixture {
+    Fixture {
+        mx: names.iter().map(|n| (*n).to_owned()).collect(),
+        ..Fixture::default()
+    }
+}
+
+#[tokio::test]
+async fn mx_maps_google_and_microsoft_only() {
+    let g = mx_fixture(&["aspmx.l.google.com.", "alt1.aspmx.l.google.com."]);
+    let p = detect_mx("a@example.com", &g).await.unwrap();
+    assert_eq!(p.source, DiscoverySource::Mx);
+    assert_eq!(p.imap_host.as_deref(), Some("imap.gmail.com"));
+    assert_eq!(p.recommended_auth, AuthMethod::AppPassword);
+    let m = mx_fixture(&["example-com.mail.protection.outlook.com"]);
+    let p = detect_mx("a@example.com", &m).await.unwrap();
+    assert_eq!(p.imap_host.as_deref(), Some("outlook.office365.com"));
+    assert_eq!(p.recommended_auth, AuthMethod::OAuth2PublicPkce);
+}
+
+#[tokio::test]
+async fn mx_unknown_empty_mixed_and_invalid_are_unresolved() {
+    for names in [
+        vec!["mail.example.net"],
+        vec![],
+        vec!["aspmx.l.google.com", "mail.example.net"],
+        vec!["127.0.0.1", "localhost", ""],
+    ] {
+        let p = detect_mx("a@example.com", &mx_fixture(&names))
+            .await
+            .unwrap();
+        assert_eq!(p.source, DiscoverySource::Unresolved, "{names:?}");
+    }
+}
+
+#[tokio::test]
+async fn mx_caps_records_and_discover_stays_offline() {
+    let mut many = vec!["mail.example.net".to_owned(); 5];
+    many.extend((0..30).map(|i| format!("m{i}.l.google.com")));
+    assert_eq!(mx::sanitize(many).len(), mx::MAX_MX_RECORDS);
+    let f = mx_fixture(&["aspmx.l.google.com"]);
+    discover("a@example.com", false, &f).await.unwrap();
+    assert_eq!(f.calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test(start_paused = true)]
+async fn mx_times_out_to_unresolved() {
+    let f = Fixture {
+        slow: true,
+        ..mx_fixture(&[])
+    };
+    let p = detect_mx("a@example.com", &f).await.unwrap();
+    assert_eq!(p.source, DiscoverySource::Unresolved);
 }

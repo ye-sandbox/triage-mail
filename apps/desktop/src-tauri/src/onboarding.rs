@@ -489,6 +489,15 @@ pub async fn discover_provider(
         .map_err(discovery_error)
 }
 
+pub async fn detect_provider_mx(
+    email: &str,
+    transport: &dyn mail_engine::discovery::DiscoveryTransport,
+) -> Result<crate::DiscoveredProviderDto, IpcError> {
+    mail_engine::discovery::detect_mx(email, transport)
+        .await
+        .map_err(discovery_error)
+}
+
 pub async fn probe_provider(
     host: &str,
     transport: &dyn mail_engine::discovery::DiscoveryTransport,
