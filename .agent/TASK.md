@@ -7,7 +7,7 @@
 
 ## Active Task
 
-No task is `RUNNING`. Queue **Cloudflare Email Routing & Alias Hub Virtual Mailboxes**: `[02.13]` DONE; `[01.12]` next, then `[04.26]` (`READY FOR PLANNING`). Previous queue (`[04.24]`, `[02.10]`, `[04.25]`, `[02.12]`) is DONE; `[02.11]` remains `FROZEN` (awaiting a user-supplied Azure public-client `client_id`).
+No task is `RUNNING`. Queue **Cloudflare Email Routing & Alias Hub Virtual Mailboxes**: `[02.13]` DONE; `[01.12]` DONE; `[04.26]` next (`READY FOR PLANNING`). Previous queue (`[04.24]`, `[02.10]`, `[04.25]`, `[02.12]`) is DONE; `[02.11]` remains `FROZEN` (awaiting a user-supplied Azure public-client `client_id`).
 
 ---
 
@@ -29,7 +29,7 @@ No task is `RUNNING`. Queue **Cloudflare Email Routing & Alias Hub Virtual Mailb
 
 ### Task [01.12]: Additive Account Aliases Persistence & Recipient Filtering (`crates/storage`, `crates/triage-ai`, `apps/desktop/src-tauri`)
 
-- **Status:** READY FOR PLANNING (next)
+- **Status:** DONE (2026-11-21) — commit `PENDING`. Delivered `AccountConnectionExtra::Aliases` + `normalize_aliases` (≤64, lowercase bare mailbox, no dupes), `recipient`/`recipient_domain` saved-view filters (`saved_facts_match` now 4-arg; RAM fast path excluded), `Condition::Recipient`/`RecipientDomain` + `MessageFacts.recipients` + `recipient_addresses`, and `cmd_account_aliases`/`cmd_set_account_aliases`. All gates exit 0.
 - **Priority:** 2 of 3
 - **Scope:**
   1. `[01.12.1]` **Additive Account Aliases in `account_connections.config_json` (`crates/storage/src/desktop.rs`):** Add `AccountConnectionExtra::Aliases` (`$.aliases`) storing a bounded, validated list of `AccountAlias { address: String, label: Option<String> }` per connected Hub account (normalized lowercase RFC 5322 email address, max 64 aliases per account, no control chars) without changing `CURRENT_SCHEMA_VERSION = 11`.
@@ -40,7 +40,7 @@ No task is `RUNNING`. Queue **Cloudflare Email Routing & Alias Hub Virtual Mailb
 
 ### Task [04.26]: Cloudflare Email Routing & Alias Hub Onboarding + Sidebar Virtual Mailboxes (`apps/desktop`)
 
-- **Status:** READY FOR PLANNING
+- **Status:** READY FOR PLANNING (next)
 - **Priority:** 3 of 3
 - **Scope:**
   1. `[04.26.1]` **Cloudflare Email Routing Onboarding Guidance & Playbook (`apps/desktop/src/lib/onboarding`):** Update `recommendation.ts`, `WdgMethodRecommendationCard.svelte`, and `WdgAccountHelpGuide.svelte` to recognize `"Cloudflare Email Routing"` (from MX detection or a dedicated guide tab/preset) and display a step-by-step EN/PT-BR playbook explaining how to point Cloudflare Email Routing (`Custom addresses` or `Catch-all`) and Gmail/Outlook auto-forwarding to a single Hub IMAP account.

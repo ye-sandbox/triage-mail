@@ -8,6 +8,7 @@ use crate::{AccountRecord, SqliteMailStore, StorageError};
 pub enum AccountConnectionExtra {
     Quota,
     BadgeOverride,
+    Aliases,
 }
 
 impl AccountConnectionExtra {
@@ -15,8 +16,51 @@ impl AccountConnectionExtra {
         match self {
             Self::Quota => "quota",
             Self::BadgeOverride => "badge_override",
+            Self::Aliases => "aliases",
         }
     }
+}
+
+/// Maximum routed aliases stored per connected account.
+pub const MAX_ACCOUNT_ALIASES: usize = 64;
+
+/// One address routed (forwarded/catch-all) into a connected Hub account.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AccountAlias {
+    pub address: String,
+    #[serde(default)]
+    pub label: Option<String>,
+}
+
+/// Normalizes an alias list: lowercase single mailbox, bounded label, no duplicates.
+/// Returns `None` when any entry is invalid or the list exceeds the bound.
+pub fn normalize_aliases(aliases: Vec<AccountAlias>) -> Option<Vec<AccountAlias>> {
+    if aliases.len() > MAX_ACCOUNT_ALIASES {
+        return None;
+    }
+    let mut out: Vec<AccountAlias> = Vec::with_capacity(aliases.len());
+    for alias in aliases {
+        let raw = alias.address.trim();
+        // INVARIANT: Display-name forms are rejected; only a bare mailbox is stored.
+        let address =
+            triage_ai::rules::sender_address(raw).filter(|a| a == &raw.to_ascii_lowercase())?;
+        if address.len() > 254 || out.iter().any(|a| a.address == address) {
+            return None;
+        }
+        let label = match alias.label.as_deref().map(str::trim) {
+            None | Some("") => None,
+            Some(l) if l.chars().count() <= 80 && !l.chars().any(char::is_control) => {
+                Some(l.to_string())
+            }
+            Some(_) => return None,
+        };
+        out.push(AccountAlias { address, label });
+    }
+    Some(out)
+}
+
+fn query_error_display(e: impl std::fmt::Display) -> StorageError {
+    StorageError::Query(e.to_string())
 }
 
 fn query_error(e: rusqlite::Error) -> StorageError {
@@ -167,6 +211,29 @@ impl SqliteMailStore {
             .map_err(query_error)?;
         self.finish_sync_write(&conn, was_in_sync, |_, _| Ok(()))?;
         Ok(changed > 0)
+    }
+
+    /// Reads the routed aliases of an account; malformed stored JSON degrades to empty.
+    pub fn account_aliases(&self, account_id: &str) -> Result<Vec<AccountAlias>, StorageError> {
+        let raw = self.get_account_connection_extra(account_id, AccountConnectionExtra::Aliases)?;
+        Ok(raw
+            .and_then(|j| serde_json::from_str(&j).ok())
+            .unwrap_or_default())
+    }
+
+    /// Replaces an account's aliases with the normalized list. `Ok(None)` when the account
+    /// has no connection row; invalid input is a query error.
+    pub fn set_account_aliases(
+        &self,
+        account_id: &str,
+        aliases: Vec<AccountAlias>,
+    ) -> Result<Option<Vec<AccountAlias>>, StorageError> {
+        let aliases = normalize_aliases(aliases)
+            .ok_or_else(|| StorageError::Query("invalid account aliases".into()))?;
+        let json = serde_json::to_string(&aliases).map_err(query_error_display)?;
+        Ok(self
+            .set_account_connection_extra(account_id, AccountConnectionExtra::Aliases, &json)?
+            .then_some(aliases))
     }
 
     pub fn find_message_id(

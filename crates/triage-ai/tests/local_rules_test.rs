@@ -19,6 +19,7 @@ fn facts() -> MessageFacts {
     MessageFacts {
         account_id: "a".into(),
         sender_address: sender_address("Billing <billing@sub.example.com>"),
+        recipients: vec![],
         subject: "Monthly BILL".into(),
         body: Some("Amount attached".into()),
         attachments: vec![("Invoice.PDF".into(), "application/pdf".into())],
@@ -137,4 +138,24 @@ fn amounts_dates_and_definitions_are_bounded_and_exact() {
     assert!(!r.validate());
     r.any = vec![Condition::Subject("bill".into()); 65];
     assert!(!r.validate());
+}
+
+#[test]
+fn recipient_conditions_match_forwarded_alias_and_report_missing_facts() {
+    let mut r = rule("rcpt");
+    r.all = vec![
+        Condition::Recipient("Alias@example.org".into()),
+        Condition::RecipientDomain("example.org".into()),
+    ];
+    let mut f = facts();
+    assert_eq!(
+        evaluate(&[r.clone()], &f).explanations[0].all,
+        vec![ConditionResult::MissingFact; 2]
+    );
+    f.recipients = triage_ai::rules::recipient_addresses("Me <me@example.com>, alias@example.org");
+    assert_eq!(f.recipients, vec!["me@example.com", "alias@example.org"]);
+    assert_eq!(evaluate(&[r.clone()], &f).actions, vec![RuleAction::Star]);
+    r.all = vec![Condition::Recipient("other@example.org".into())];
+    assert!(evaluate(&[r], &f).actions.is_empty());
+    assert!(triage_ai::rules::recipient_addresses("a@b\r\nc").is_empty());
 }

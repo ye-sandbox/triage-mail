@@ -888,6 +888,26 @@ pub async fn cmd_set_account_badge(
 }
 
 #[tauri::command]
+pub async fn cmd_account_aliases(
+    state: State<'_, RuntimeState>,
+) -> Result<HashMap<String, Vec<crate::aliases::AccountAliasDto>>, IpcError> {
+    state.initialize(None).await?.account_aliases().await
+}
+
+#[tauri::command]
+pub async fn cmd_set_account_aliases(
+    state: State<'_, RuntimeState>,
+    account_id: String,
+    aliases: Vec<crate::aliases::AccountAliasDto>,
+) -> Result<Vec<crate::aliases::AccountAliasDto>, IpcError> {
+    state
+        .initialize(None)
+        .await?
+        .set_account_aliases(account_id, aliases)
+        .await
+}
+
+#[tauri::command]
 pub async fn cmd_get_settings(
     state: State<'_, RuntimeState>,
 ) -> Result<crate::settings::SettingsDto, IpcError> {
@@ -1244,6 +1264,8 @@ pub fn run() {
             cmd_account_diagnostics,
             cmd_account_subscriptions,
             cmd_set_account_badge,
+            cmd_account_aliases,
+            cmd_set_account_aliases,
             cmd_search_messages,
             cmd_triage_action,
             cmd_get_message_body,
@@ -1478,6 +1500,8 @@ mod tests {
                 cmd_account_diagnostics,
                 cmd_account_subscriptions,
                 cmd_set_account_badge,
+                cmd_account_aliases,
+                cmd_set_account_aliases,
                 cmd_search_messages,
                 cmd_get_message_body,
                 cmd_triage_action,

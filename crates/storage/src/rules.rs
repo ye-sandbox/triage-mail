@@ -3,8 +3,8 @@ use crate::{desktop::LocalMutation, FolderSyncState, SqliteMailStore, StorageErr
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use sha2::{Digest, Sha256};
 use triage_ai::rules::{
-    evaluate, sender_address, Condition, MessageFacts, Rule, RuleAction, RulePlan, MAX_RULES,
-    MAX_SIMULATION_MESSAGES,
+    evaluate, recipient_addresses, sender_address, Condition, MessageFacts, Rule, RuleAction,
+    RulePlan, MAX_RULES, MAX_SIMULATION_MESSAGES,
 };
 
 fn error(_: impl std::fmt::Display) -> StorageError {
@@ -32,14 +32,16 @@ pub(crate) fn read_rules(conn: &Connection) -> Result<Vec<Rule>, StorageError> {
 pub(crate) fn facts(conn: &Connection, id: &str) -> Result<MessageFacts, StorageError> {
     let (mut f, badges): (MessageFacts, String) = conn
         .query_row(
-            "SELECT account_id,sender,subject,text_body,triage_badges FROM messages WHERE id=?1",
+            "SELECT account_id,sender,subject,text_body,triage_badges,recipients FROM messages WHERE id=?1",
             [id],
             |r| {
                 let sender: String = r.get(1)?;
+                let recipients: String = r.get(5)?;
                 Ok((
                     MessageFacts {
                         account_id: r.get(0)?,
                         sender_address: sender_address(&sender),
+                        recipients: recipient_addresses(&recipients),
                         subject: r.get(2)?,
                         body: r.get(3)?,
                         ..Default::default()

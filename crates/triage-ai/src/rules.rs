@@ -26,6 +26,9 @@ pub enum Condition {
     Sender(String),
     Domain(String),
     DomainSuffix(String),
+    /// Matches any normalized recipient mailbox (To/Cc/Bcc/forwarding headers).
+    Recipient(String),
+    RecipientDomain(String),
     Subject(String),
     Body(String),
     AttachmentName(String),
@@ -50,6 +53,8 @@ pub enum RuleAction {
 pub struct MessageFacts {
     pub account_id: String,
     pub sender_address: Option<String>,
+    /// Normalized lowercase recipient mailbox addresses; empty means unknown.
+    pub recipients: Vec<String>,
     pub subject: String,
     pub body: Option<String>,
     pub attachments: Vec<(String, String)>,
@@ -155,8 +160,8 @@ impl Condition {
         match self {
             Self::DueOnOrAfter(v) | Self::DueOnOrBefore(v) => valid_date(v),
             Self::AmountAtLeast(v) | Self::AmountAtMost(v) => *v <= 9_007_199_254_740_991,
-            Self::Sender(v) => valid_text(v, 320) && v.contains('@'),
-            Self::Domain(v) | Self::DomainSuffix(v) => {
+            Self::Sender(v) | Self::Recipient(v) => valid_text(v, 320) && v.contains('@'),
+            Self::Domain(v) | Self::DomainSuffix(v) | Self::RecipientDomain(v) => {
                 valid_text(v, 253)
                     && v.split('.').all(|p| {
                         !p.is_empty() && p.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
@@ -194,6 +199,14 @@ impl Condition {
                 }
                 None => return MissingFact,
             },
+            Self::Recipient(v) | Self::RecipientDomain(v) if facts.recipients.is_empty() => {
+                return MissingFact
+            }
+            Self::Recipient(v) => facts.recipients.iter().any(|a| a.eq_ignore_ascii_case(v)),
+            Self::RecipientDomain(v) => facts.recipients.iter().any(|a| {
+                a.rsplit_once('@')
+                    .is_some_and(|(_, d)| d.eq_ignore_ascii_case(v))
+            }),
             Self::Subject(v) => contains(&facts.subject, v),
             Self::Body(v) => match &facts.body {
                 Some(b) => contains(b, v),
@@ -285,6 +298,35 @@ pub fn evaluate(rules: &[Rule], facts: &MessageFacts) -> RulePlan {
         RuleAction::Alert(_) => 4,
     });
     plan
+}
+
+/// Parse a recipient header value into unique normalized mailbox addresses (bounded).
+pub fn recipient_addresses(raw: &str) -> Vec<String> {
+    const MAX_RECIPIENTS: usize = 256;
+    if raw.len() > 64 * 1024 || raw.contains(['\r', '\n']) {
+        return vec![];
+    }
+    let header = format!("To: {raw}\r\n\r\n");
+    let Some(message) = mail_parser::MessageParser::default().parse(header.as_bytes()) else {
+        return vec![];
+    };
+    let mut out: Vec<String> = vec![];
+    for mailbox in message.to().into_iter().flat_map(|l| l.mailboxes()) {
+        let Some(address) = mailbox.address() else {
+            continue;
+        };
+        let address = address.to_ascii_lowercase();
+        let valid = address
+            .rsplit_once('@')
+            .is_some_and(|(l, d)| !l.is_empty() && !d.is_empty());
+        if valid && !out.contains(&address) {
+            out.push(address);
+            if out.len() == MAX_RECIPIENTS {
+                break;
+            }
+        }
+    }
+    out
 }
 
 /// Parse exactly one mailbox; display-name text is never treated as an address.

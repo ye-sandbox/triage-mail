@@ -2624,3 +2624,56 @@ async fn attachment_save_streams_to_disk_rejects_symlinks_and_enforces_caps() {
         .collect();
     assert!(!entries.iter().any(|name| name.starts_with(".triage-att-")));
 }
+
+#[tokio::test]
+async fn account_aliases_persist_normalized_and_reject_invalid_input() {
+    use triage_mail_desktop_lib::aliases::AccountAliasDto;
+    let (service, _store, _vault) = setup(Arc::new(FakeRemote::default()));
+    let cfg = config("acct-hub");
+    service
+        .add_account(cfg.clone(), credentials())
+        .await
+        .unwrap();
+    let alias = |a: &str, l: Option<&str>| AccountAliasDto {
+        address: a.into(),
+        label: l.map(Into::into),
+    };
+    assert!(service.account_aliases().await.unwrap().is_empty());
+    let saved = service
+        .set_account_aliases(
+            "acct-hub".into(),
+            vec![
+                alias(" Billing@Example.com ", Some(" Billing ")),
+                alias("dev@example.com", Some(" ")),
+            ],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        saved,
+        vec![
+            alias("billing@example.com", Some("Billing")),
+            alias("dev@example.com", None)
+        ]
+    );
+    assert_eq!(service.account_aliases().await.unwrap()["acct-hub"], saved);
+    for bad in [
+        vec![alias("not-an-email", None)],
+        vec![alias("Name <a@example.com>", None)],
+        vec![alias("a@example.com", None), alias("A@example.com", None)],
+        (0..65)
+            .map(|i| alias(&format!("u{i}@example.com"), None))
+            .collect(),
+    ] {
+        assert_eq!(
+            service.set_account_aliases("acct-hub".into(), bad).await,
+            Err(IpcError::InvalidRequest)
+        );
+    }
+    assert_eq!(
+        service.set_account_aliases("missing".into(), vec![]).await,
+        Err(IpcError::NotFound)
+    );
+    assert_eq!(service.account_aliases().await.unwrap()["acct-hub"], saved);
+    assert_eq!(service.list_accounts().await.unwrap(), vec![cfg]);
+}

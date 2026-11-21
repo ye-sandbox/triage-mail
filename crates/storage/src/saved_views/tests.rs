@@ -208,30 +208,46 @@ fn parsed_sender_and_extraction_windows_fail_closed_at_utc_boundaries() {
     assert!(facts_match(
         &f,
         "Name <client@example.org>",
+        "",
         badge,
         "2026-10-03"
     ));
     assert!(!facts_match(
         &f,
         "Name <client@example.org>",
+        "",
         badge,
         "2026-10-02"
     ));
     assert!(!facts_match(
         &f,
         "client@example.org <imposter@example.com>",
+        "",
         badge,
         "2026-11-02"
     ));
     assert!(!facts_match(
         &f,
         "client@example.org,other@example.org",
+        "",
         badge,
         "2026-11-02"
     ));
-    assert!(!facts_match(&f, "client@example.org", "[]", "2026-11-02"));
+    assert!(!facts_match(
+        &f,
+        "client@example.org",
+        "",
+        "[]",
+        "2026-11-02"
+    ));
     f.due_from = Some("2026-11-03".into());
-    assert!(!facts_match(&f, "client@example.org", badge, "2026-11-02"));
+    assert!(!facts_match(
+        &f,
+        "client@example.org",
+        "",
+        badge,
+        "2026-11-02"
+    ));
     let store = fixture();
     let mut v = view();
     v.filters.upcoming_days = Some(30);
@@ -256,4 +272,29 @@ fn malformed_definitions_are_rejected_without_writes() {
     assert!(store.save_saved_view(v).is_err());
     assert!(store.list_saved_views().unwrap().is_empty());
     assert!(store.search_saved_view("unknown", 1, None, 0, 0).is_err());
+}
+
+#[test]
+fn recipient_filters_match_normalized_forwarded_addresses() {
+    let f = ViewFilters {
+        recipient: Some("alias@example.com".into()),
+        recipient_domain: Some("example.com".into()),
+        ..Default::default()
+    };
+    let to = "Reader <reader@example.org>, Alias <Alias@Example.com>";
+    assert!(facts_match(&f, "a@example.org", to, "[]", "2026-11-02"));
+    assert!(!facts_match(
+        &f,
+        "a@example.org",
+        "reader@example.org",
+        "[]",
+        "2026-11-02"
+    ));
+    assert!(!facts_match(&f, "a@example.org", "", "[]", "2026-11-02"));
+    let old: ViewFilters = serde_json::from_str(r#"{"tags":[],"is_read":null,"is_starred":null,"has_attachments":null,"sender":null,"sender_domain":null,"extraction":null,"due_from":null,"due_to":null,"upcoming_days":null}"#).unwrap();
+    assert!(old.recipient.is_none() && old.recipient_domain.is_none());
+    let store = fixture();
+    let mut v = view();
+    v.filters.recipient = Some("Bad Name <x@example.com>".into());
+    assert!(store.save_saved_view(v).is_err());
 }

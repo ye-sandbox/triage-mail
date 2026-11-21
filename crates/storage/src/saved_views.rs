@@ -21,6 +21,11 @@ pub struct ViewFilters {
     pub tags: Vec<String>,
     pub sender: Option<String>,
     pub sender_domain: Option<String>,
+    /// Matches a normalized mailbox in `messages.recipients` (incl. forwarding headers).
+    #[serde(default)]
+    pub recipient: Option<String>,
+    #[serde(default)]
+    pub recipient_domain: Option<String>,
     pub extraction: Option<ExtractionKind>,
     pub due_from: Option<String>,
     pub due_to: Option<String>,
@@ -82,12 +87,18 @@ impl SavedView {
             && f.sender
                 .as_ref()
                 .is_none_or(|s| bounded(s, 320) && sender_address(s).as_ref() == Some(s))
-            && f.sender_domain.as_ref().is_none_or(|s| {
-                bounded(s, 253)
-                    && s.is_ascii()
-                    && s.split('.').all(|p| {
-                        !p.is_empty() && p.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
-                    })
+            && f.recipient
+                .as_ref()
+                .is_none_or(|s| bounded(s, 320) && sender_address(s).as_ref() == Some(s))
+            && [&f.sender_domain, &f.recipient_domain].iter().all(|d| {
+                d.as_ref().is_none_or(|s| {
+                    bounded(s, 253)
+                        && s.is_ascii()
+                        && s.split('.').all(|p| {
+                            !p.is_empty()
+                                && p.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
+                        })
+                })
             })
             && [&f.due_from, &f.due_to]
                 .iter()
@@ -276,6 +287,8 @@ fn can_use_pure_ram_filter(view: &SavedView) -> bool {
         && f.tags.is_empty()
         && f.sender.is_none()
         && f.sender_domain.is_none()
+        && f.recipient.is_none()
+        && f.recipient_domain.is_none()
         && f.extraction.is_none()
         && f.due_from.is_none()
         && f.due_to.is_none()
@@ -392,13 +405,14 @@ pub(crate) fn execute_view_ids(
     // Sender parsing and typed extraction checks precede ranking, never loaded-page filtering.
     tx.create_scalar_function(
         "saved_facts_match",
-        3,
+        4,
         FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
         move |ctx| {
             let sender = ctx.get::<String>(0)?;
             let badges = ctx.get::<String>(1)?;
             let today = ctx.get::<String>(2)?;
-            Ok(facts_match(&filters, &sender, &badges, &today))
+            let recipients = ctx.get::<String>(3)?;
+            Ok(facts_match(&filters, &sender, &recipients, &badges, &today))
         },
     )
     .map_err(error)?;
@@ -414,7 +428,7 @@ pub(crate) fn execute_view_ids(
     };
     let result = search.execute(&query);
     // INVARIANT: Private filter snapshots do not outlive this search in a SQL closure.
-    tx.remove_function("saved_facts_match", 3).map_err(error)?;
+    tx.remove_function("saved_facts_match", 4).map_err(error)?;
     result
 }
 
@@ -424,7 +438,7 @@ const ELIGIBILITY: &str = "
  AND (json_extract(?2,'$.filters.is_starred') IS NULL OR m.is_starred=json_extract(?2,'$.filters.is_starred'))
  AND (json_extract(?2,'$.filters.has_attachments') IS NULL OR m.has_attachments=json_extract(?2,'$.filters.has_attachments'))
  AND NOT EXISTS (SELECT 1 FROM json_each(?2,'$.filters.tags') wanted WHERE NOT EXISTS (SELECT 1 FROM tags t WHERE t.message_id=m.id AND t.tag_name=wanted.value))
- AND saved_facts_match(m.sender,m.triage_badges,date(?3/1000,'unixepoch'))";
+ AND saved_facts_match(m.sender,m.triage_badges,date(?3/1000,'unixepoch'),m.recipients)";
 
 fn kind_matches(kind: ExtractionKind, badge: &TriageBadge) -> bool {
     matches!(
@@ -441,7 +455,26 @@ fn kind_matches(kind: ExtractionKind, badge: &TriageBadge) -> bool {
     )
 }
 
-fn facts_match(f: &ViewFilters, sender: &str, badges: &str, today: &str) -> bool {
+fn recipient_match(f: &ViewFilters, recipients: &str) -> bool {
+    if f.recipient.is_none() && f.recipient_domain.is_none() {
+        return true;
+    }
+    let list = triage_ai::rules::recipient_addresses(recipients);
+    f.recipient
+        .as_ref()
+        .is_none_or(|r| list.iter().any(|a| a == r))
+        && f.recipient_domain.as_ref().is_none_or(|d| {
+            list.iter().any(|a| {
+                a.rsplit_once('@')
+                    .is_some_and(|(_, x)| x.eq_ignore_ascii_case(d))
+            })
+        })
+}
+
+fn facts_match(f: &ViewFilters, sender: &str, recipients: &str, badges: &str, today: &str) -> bool {
+    if !recipient_match(f, recipients) {
+        return false;
+    }
     if f.sender.is_some() || f.sender_domain.is_some() {
         let Some(address) = sender_address(sender) else {
             return false;
