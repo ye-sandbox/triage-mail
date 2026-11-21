@@ -205,6 +205,7 @@ fn query(mode: SearchMode) -> SearchQueryDto {
         limit: 20,
         offset: 0,
         scope: None,
+        recipient: None,
     }
 }
 fn mutation(action: TriageActionDto) -> TriageMutationDto {
@@ -930,6 +931,7 @@ async fn blank_lexical_inbox_reads_persisted_mail_without_an_embedding_provider(
             limit: 200,
             offset: 0,
             scope: None,
+            recipient: None,
         })
         .await
         .unwrap();
@@ -1448,6 +1450,7 @@ async fn test_snooze_unsnooze_and_expiration_reconciliation() {
             limit: 10,
             offset: 0,
             scope: None,
+            recipient: None,
         })
         .await
         .unwrap();
@@ -2180,6 +2183,7 @@ async fn local_archive_import_streams_mbox_and_eml_with_local_only_triage_and_wo
                 account_id: mbox_summary.account_id.clone(),
                 view: MailboxViewDto::Inbox,
             }),
+            recipient: None,
         })
         .await
         .unwrap();
@@ -2676,4 +2680,15 @@ async fn account_aliases_persist_normalized_and_reject_invalid_input() {
     );
     assert_eq!(service.account_aliases().await.unwrap()["acct-hub"], saved);
     assert_eq!(service.list_accounts().await.unwrap(), vec![cfg]);
+}
+
+#[tokio::test]
+async fn recipient_search_requires_account_scope() {
+    let (service, _store, _) = setup(Arc::new(FakeRemote::default()));
+    let mut request = query(SearchMode::Lexical);
+    request.recipient = Some("billing@example.com".into());
+    assert!(matches!(
+        service.search_messages(request).await,
+        Err(IpcError::InvalidRequest)
+    ));
 }

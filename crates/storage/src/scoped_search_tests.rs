@@ -305,3 +305,36 @@ fn scoped_semantic_preserves_sqlite_null_distance_order_for_zero_vectors() {
         expected
     );
 }
+
+#[test]
+fn recipient_scope_filters_to_alias_and_fails_closed() {
+    let store = fixture();
+    {
+        let conn = store.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE messages SET recipients='Alias <billing@example.com>, reader@example.org' WHERE id IN ('a-002','a-004','b-004')",
+            [],
+        )
+        .unwrap();
+    }
+    let scope = MailboxScope::AccountView {
+        account_id: "a".into(),
+        view: MailboxView::Folder("INBOX".into()),
+    };
+    let q = query(SearchMode::Lexical, "", 0);
+    let rows = store
+        .search_scoped_recipient(&q, &scope, " Billing@Example.com ")
+        .unwrap();
+    assert!(!rows.is_empty());
+    assert!(rows.iter().all(|r| r.id.starts_with("a-")));
+    let ids: Vec<_> = rows.iter().map(|r| r.id.as_str()).collect();
+    assert!(ids.contains(&"a-004") && !ids.contains(&"b-004"));
+    let none = store
+        .search_scoped_recipient(&q, &scope, "missing@example.com")
+        .unwrap();
+    assert!(none.is_empty());
+    assert!(store
+        .search_scoped_recipient(&q, &MailboxScope::GlobalAllMail, "billing@example.com")
+        .is_err());
+    assert!(store.search_scoped_recipient(&q, &scope, " ").is_err());
+}

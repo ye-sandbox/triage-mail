@@ -7,7 +7,7 @@
 
 ## Active Task
 
-No task is `RUNNING`. Queue **Cloudflare Email Routing & Alias Hub Virtual Mailboxes**: `[02.13]` DONE; `[01.12]` DONE; `[04.26]` next (`READY FOR PLANNING`). Previous queue (`[04.24]`, `[02.10]`, `[04.25]`, `[02.12]`) is DONE; `[02.11]` remains `FROZEN` (awaiting a user-supplied Azure public-client `client_id`).
+No task is `RUNNING`. Queue **Cloudflare Email Routing & Alias Hub Virtual Mailboxes**: `[02.13]` DONE; `[01.12]` DONE; `[04.26]` DONE (queue complete). Previous queue (`[04.24]`, `[02.10]`, `[04.25]`, `[02.12]`) is DONE; `[02.11]` remains `FROZEN` (awaiting a user-supplied Azure public-client `client_id`).
 
 ---
 
@@ -40,7 +40,7 @@ No task is `RUNNING`. Queue **Cloudflare Email Routing & Alias Hub Virtual Mailb
 
 ### Task [04.26]: Cloudflare Email Routing & Alias Hub Onboarding + Sidebar Virtual Mailboxes (`apps/desktop`)
 
-- **Status:** READY FOR PLANNING (next)
+- **Status:** DONE (2026-11-21) — commit `HASH`. Approved with option B: additive optional `recipient` on `SearchQueryDto` (`[04.26.0]` Rust slice: `search_scoped_recipient` fails closed outside `AccountView`, bypasses the RAM vector index; IPC rejects `recipient` without scope). Frontend: Cloudflare kind + `EmailRouting` guide tab, `WdgAccountAliasesControl`, sidebar alias mailboxes (`ScopeFilter` `alias`). Gates: fmt/clippy/check/test/svelte-check/vitest (216)/build/ci-guard green.
 - **Priority:** 3 of 3
 - **Scope:**
   1. `[04.26.1]` **Cloudflare Email Routing Onboarding Guidance & Playbook (`apps/desktop/src/lib/onboarding`):** Update `recommendation.ts`, `WdgMethodRecommendationCard.svelte`, and `WdgAccountHelpGuide.svelte` to recognize `"Cloudflare Email Routing"` (from MX detection or a dedicated guide tab/preset) and display a step-by-step EN/PT-BR playbook explaining how to point Cloudflare Email Routing (`Custom addresses` or `Catch-all`) and Gmail/Outlook auto-forwarding to a single Hub IMAP account.

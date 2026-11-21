@@ -590,13 +590,20 @@ impl DesktopService {
                 _ => Some(s.query_embedding(&query.query)?),
             };
             let scope = query.scope.clone();
+            let recipient = query.recipient.clone();
             let query = query
                 .into_hybrid_query(embedding)
                 .map_err(|_| IpcError::InvalidRequest)?;
             // INVARIANT: Display overrides never replace the canonical IMAP folder/UID.
-            match scope {
-                Some(scope) => s.store.search_scoped(&query, &scope),
-                None => s.store.search(&query),
+            match (scope, recipient) {
+                (Some(scope), Some(alias)) => {
+                    s.store.search_scoped_recipient(&query, &scope, &alias)
+                }
+                (None, Some(_)) => Err(storage::StorageError::InvalidSearchQuery(
+                    "recipient requires an account scope".into(),
+                )),
+                (Some(scope), None) => s.store.search_scoped(&query, &scope),
+                (None, None) => s.store.search(&query),
             }
             .map_err(|error| match error {
                 storage::StorageError::InvalidSearchQuery(_) => IpcError::InvalidRequest,

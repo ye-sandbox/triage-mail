@@ -157,6 +157,17 @@ export interface Translations {
 		planApply: string;
 		planError: string;
 		storageUsage: string;
+		aliasesTitle: string;
+		aliasesHelp: string;
+		aliasAddressLabel: string;
+		aliasNameLabel: string;
+		aliasAdd: string;
+		aliasRemove: string;
+		aliasInvalid: string;
+		aliasDuplicate: string;
+		aliasLimit: string;
+		aliasSaveError: string;
+		aliasEmpty: string;
 	};
 	accountForm: {
 		discoveryIntro: string;
@@ -247,6 +258,7 @@ export interface Translations {
 		providerGuidanceAppPassword: string;
 		providerGuidanceProton: string;
 		providerGuidanceCustom: string;
+		providerGuidanceCloudflare: string;
 	};
 	guide: {
 		title: string;
@@ -292,6 +304,15 @@ export interface Translations {
 			fields: string[];
 			playbooks: GuidePlaybook[];
 		};
+		routing: {
+			title: string;
+			summary: string;
+			requirements: string;
+			services: string;
+			note: string;
+			fields: string[];
+			playbooks: GuidePlaybook[];
+		};
 		localArchive: {
 			title: string;
 			summary: string;
@@ -311,6 +332,7 @@ export interface Translations {
 		starred: string;
 		snoozed: string;
 		accounts: string;
+		aliasMailbox: string;
 		smartViews: string;
 		newSendersReview: string;
 		pending: string;

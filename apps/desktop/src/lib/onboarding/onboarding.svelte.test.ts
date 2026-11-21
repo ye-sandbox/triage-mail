@@ -676,7 +676,7 @@ describe('onboarding help guide and language selection', () => {
 		const tabs = [
 			...target.querySelectorAll<HTMLButtonElement>('#account-help-content button[role="tab"]')
 		];
-		expect(tabs).toHaveLength(5);
+		expect(tabs).toHaveLength(6);
 
 		tabs[1].click();
 		flushSync();
@@ -693,6 +693,10 @@ describe('onboarding help guide and language selection', () => {
 		expect(target.textContent).toContain('Mailbox details / Configuration');
 
 		tabs[4].click();
+		flushSync();
+		expect(target.textContent).toContain('Cloudflare Email Routing');
+
+		tabs[5].click();
 		flushSync();
 		expect(target.textContent).toContain('takeout.google.com');
 		expect(target.textContent).toContain('Mozilla Thunderbird');

@@ -1,3 +1,4 @@
+import type { AccountAlias, AccountAliasMap } from './aliases';
 import type { AccountSubscription, BadgeOverride } from './subscriptions';
 export type AuthMethod =
 	| 'AppPassword'
@@ -68,6 +69,8 @@ export interface AccountTransport {
 	diagnostics?(): Promise<Record<string, ConnectionDiagnosticCode>>;
 	subscriptions?(): Promise<Record<string, AccountSubscription>>;
 	setBadge?(accountId: string, override: BadgeOverride): Promise<AccountSubscription>;
+	aliases?(): Promise<AccountAliasMap>;
+	setAliases?(accountId: string, aliases: AccountAlias[]): Promise<AccountAlias[]>;
 	openGoogleAppPasswords?(): Promise<void>;
 	chooseArchiveFile?(): Promise<string | null>;
 	importLocalArchive?(

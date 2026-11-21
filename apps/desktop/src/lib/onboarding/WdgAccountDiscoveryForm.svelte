@@ -112,7 +112,8 @@
 			preset: discovery.selectedPreset,
 			host: discovery.settings.host,
 			method,
-			status: discovery.status
+			status: discovery.status,
+			providerName: discovery.provider?.provider_name
 		})
 	);
 
@@ -1082,5 +1083,9 @@
 		</p>
 	{/if}
 
-	<WdgAccountHelpGuide selectedMethod={method} selectedPreset={discovery.selectedPreset} />
+	<WdgAccountHelpGuide
+		selectedMethod={method}
+		selectedPreset={discovery.selectedPreset}
+		routing={providerKind === 'cloudflare'}
+	/>
 </section>

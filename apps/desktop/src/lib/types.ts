@@ -123,6 +123,7 @@ export type ScopeFilter =
 	| { kind: 'starred' }
 	| { kind: 'snoozed' }
 	| { kind: 'folder'; account_id: string; folder: FolderId }
+	| { kind: 'alias'; account_id: string; address: string }
 	| { kind: 'new_senders'; status: 'Pending' | 'Declined' }
 	| { kind: 'category'; category: MessageCategory }
 	| { kind: 'saved_view'; view_id: string };

@@ -2,6 +2,7 @@ import { i18n, type SupportedLocale } from '$lib/i18n/index.svelte';
 import { INBOX_FIXTURES } from '$lib/inbox/inbox.fixtures';
 import { nativeAvailable, nativeTransport } from '$lib/inbox/transport';
 import type { InboxTransport } from '$lib/inbox/types';
+import type { AccountAliasMap } from '$lib/onboarding/aliases';
 import type { AccountSubscription } from '$lib/onboarding/subscriptions';
 import { nativeAccountTransport } from '$lib/onboarding/transport';
 import type { AccountConfig, AccountTransport } from '$lib/onboarding/types';
@@ -35,7 +36,7 @@ const THEME_STORAGE_KEY = 'triage_mail_theme';
 
 export interface NativeShellHydrationDeps {
 	isNative?: () => boolean;
-	accountTransport?: Pick<AccountTransport, 'list' | 'subscriptions'>;
+	accountTransport?: Pick<AccountTransport, 'list' | 'subscriptions' | 'aliases'>;
 	inboxTransport?: Pick<InboxTransport, 'listFolders' | 'search' | 'savedViews'>;
 	remindersTransport?: Pick<RemindersTransport, 'listDueDates'>;
 	settingsTransport?: Pick<SettingsTransport, 'shellPreferences'>;
@@ -141,6 +142,19 @@ class AppStore {
 		}
 	}
 
+	private async loadAccountAliases(
+		transport: Pick<AccountTransport, 'aliases'>,
+		generation: number
+	): Promise<void> {
+		if (!transport.aliases) return;
+		try {
+			const aliases = await transport.aliases();
+			if (generation === this.hydrationGeneration) this.accountAliases = aliases;
+		} catch {
+			// Best-effort: virtual alias mailboxes are optional.
+		}
+	}
+
 	private async loadShellPreferences(
 		transport: Pick<SettingsTransport, 'shellPreferences'>,
 		generation: number
@@ -157,6 +171,7 @@ class AppStore {
 	}
 
 	accountSubscriptions = $state<Record<string, AccountSubscription>>({});
+	accountAliases = $state<AccountAliasMap>({});
 	savedViews = $state<SavedView[]>(
 		nativeAvailable() ? [] : structuredClone(SHELL_SAVED_VIEW_FIXTURES)
 	);
@@ -327,6 +342,7 @@ class AppStore {
 		this.vaultUnlocked = true;
 		this.accounts = accountConfigs.map(mapAccountToShellAccount);
 		void this.loadAccountSubscriptions(accountTransport, generation);
+		void this.loadAccountAliases(accountTransport, generation);
 		const shellPrefsPromise = this.loadShellPreferences(settingsTransport, generation);
 
 		if (accountConfigs.length === 0) {

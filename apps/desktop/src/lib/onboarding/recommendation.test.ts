@@ -3,6 +3,21 @@ import { guidanceKey, isMethodPrimary, providerKindFor, recommendedOptions } fro
 
 const base = { preset: '', host: '', method: 'AppPassword' as const, status: 'idle' };
 
+describe('Cloudflare Email Routing', () => {
+	const cf = { ...base, status: 'unresolved', providerName: 'Cloudflare Email Routing' };
+	it('is detected only for the unresolved forwarder', () => {
+		expect(providerKindFor(cf)).toBe('cloudflare');
+		expect(providerKindFor({ ...cf, host: 'imap.example.com' })).toBe('custom');
+		expect(providerKindFor({ ...cf, status: 'found' })).toBe('custom');
+		expect(providerKindFor({ ...cf, providerName: 'Other' })).toBe('custom');
+	});
+	it('maps guidance and options', () => {
+		expect(guidanceKey('cloudflare')).toBe('providerGuidanceCloudflare');
+		const options = recommendedOptions('cloudflare');
+		expect(options[0]).toMatchObject({ label: 'methodAppPassword', recommended: true });
+	});
+});
+
 describe('providerKindFor', () => {
 	it('maps presets and hosts', () => {
 		expect(providerKindFor({ ...base, preset: 'Gmail' })).toBe('google');

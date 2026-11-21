@@ -316,6 +316,63 @@ describe('UI v2 account navigation, localization, and snooze expiry', () => {
 		expect(target.textContent).toContain('first@example.com / Archive');
 	});
 
+	it('selects a virtual alias mailbox from the sidebar and sends the recipient filter', async () => {
+		const { inbox, search } = setup();
+		appStore.accounts = toShellAccounts(accounts);
+		appStore.accountAliases = {
+			first: [{ address: 'billing@example.com', label: 'Billing' }]
+		};
+		const workspace = createLiveWorkspace(inbox, { connected: true, accounts });
+		appStore.registerShellHooks({
+			onScopeChange: (s) => void workspace.applyShellScope(s)
+		});
+		const target = document.createElement('div');
+		document.body.append(target);
+		const nav = mount(SidebarNav, { target });
+		flushSync();
+		cleanup = async () => {
+			inbox.dispose();
+			appStore.accountAliases = {};
+			await unmount(nav);
+			target.remove();
+		};
+
+		const aliasBtn = Array.from(target.querySelectorAll('button')).find(
+			(b) => b.getAttribute('title') === 'billing@example.com'
+		)!;
+		expect(aliasBtn.textContent).toContain('Billing');
+		aliasBtn.click();
+		await tick();
+		flushSync();
+
+		expect(search).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				scope: { AccountView: { account_id: 'first', view: 'Inbox' } },
+				recipient: 'billing@example.com'
+			})
+		);
+		expect(appStore.activeScope).toEqual({
+			kind: 'alias',
+			account_id: 'first',
+			address: 'billing@example.com'
+		});
+	});
+
+	it('drops the recipient filter when the scope or view changes', async () => {
+		const { inbox, search } = setup();
+		await inbox.selectScope(scope('first'), 'billing@example.com');
+		expect(search).toHaveBeenLastCalledWith(
+			expect.objectContaining({ recipient: 'billing@example.com' })
+		);
+		await inbox.selectScope(scope('first'));
+		expect(search.mock.lastCall?.[0]).not.toHaveProperty('recipient');
+		await inbox.selectScope(scope('first'), 'billing@example.com');
+		await inbox.selectScope('GlobalAllMail', 'billing@example.com');
+		expect(search.mock.lastCall?.[0]).not.toHaveProperty('recipient');
+		expect(inbox.recipient).toBeUndefined();
+		inbox.dispose();
+	});
+
 	it('localizes workspace scopes and controls in Portuguese', async () => {
 		i18n.setLocale('pt-BR');
 		const { inbox } = setup();

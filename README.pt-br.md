@@ -126,6 +126,14 @@ domínio digitado (prazo de três segundos, no máximo 10 registros, nunca a par
 Ele só seleciona uma predefinição Google Workspace ou Microsoft 365 e nunca roda
 automaticamente.
 
+Quando os registros MX pertencem ao Cloudflare Email Routing (serviço que apenas
+encaminha, sem host IMAP), o formulário mostra um roteiro de roteamento em vez de uma
+predefinição: conecte a caixa de destino (Hub) e liste os endereços encaminhados em
+**Aliases / domínios roteados** no cartão da conta. Cada alias vira uma caixa virtual
+na barra lateral que filtra a conta Hub para as mensagens entregues àquele endereço.
+Aliases são rótulos locais guardados no banco criptografado; não geram login nem
+requisição de rede extra.
+
 Use **Configurações avançadas de conexão** para host/porta manuais, BYO OAuth ou
 Proton Bridge. Edições manuais e seleção de predefinições impedem que a busca automática
 sobrescreva o formulário. O Gmail tem um link direto para Senhas de aplicativo.

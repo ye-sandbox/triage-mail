@@ -378,6 +378,15 @@
 					await session.accounts.setBadge(id, override);
 					appStore.accountSubscriptions = { ...session.accounts.subscriptions };
 				}}
+				aliases={session.accounts.aliases}
+				aliasError={session.accounts.aliasError}
+				onSetAliases={!session.accounts.transport.setAliases
+					? undefined
+					: async (id, next) => {
+					const ok = await session.accounts.setAliases(id, next);
+					if (ok) appStore.accountAliases = { ...session.accounts.aliases };
+					return ok;
+				}}
 				diagnostic={session.accounts.diagnostic}
 				error={session.accounts.error}
 				{avatarTransport}

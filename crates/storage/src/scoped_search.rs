@@ -37,11 +37,39 @@ impl SqliteMailStore {
         self.search_scoped_at(query, scope, crate::now_epoch_ms())
     }
 
+    /// Searches an account mailbox restricted to messages delivered to one alias address.
+    pub fn search_scoped_recipient(
+        &self,
+        query: &HybridQuery,
+        scope: &MailboxScope,
+        recipient: &str,
+    ) -> Result<Vec<MessageRowSummary>, StorageError> {
+        // INVARIANT: Alias filtering needs a concrete account scope; fail closed otherwise.
+        if !matches!(scope, MailboxScope::AccountView { .. }) {
+            return Err(invalid_scope());
+        }
+        let wanted = recipient.trim().to_ascii_lowercase();
+        if wanted.is_empty() || wanted.len() > 320 || wanted.contains(char::is_control) {
+            return Err(invalid_scope());
+        }
+        self.search_scoped_inner(query, scope, crate::now_epoch_ms(), Some(wanted))
+    }
+
     pub(crate) fn search_scoped_at(
         &self,
         query: &HybridQuery,
         scope: &MailboxScope,
         now: i64,
+    ) -> Result<Vec<MessageRowSummary>, StorageError> {
+        self.search_scoped_inner(query, scope, now, None)
+    }
+
+    fn search_scoped_inner(
+        &self,
+        query: &HybridQuery,
+        scope: &MailboxScope,
+        now: i64,
+        recipient: Option<String>,
     ) -> Result<Vec<MessageRowSummary>, StorageError> {
         let MailboxScope::AccountView { account_id, view } = scope else {
             return self.search(query);
@@ -61,7 +89,7 @@ impl SqliteMailStore {
         // INVARIANT: Scope validation, both ranking branches, and hydration share one snapshot.
         let tx = conn.transaction().map_err(query_error)?;
         let folder = validate_scope(&tx, account_id, view)?;
-        let predicate = if matches!(view, MailboxView::Inbox) {
+        let mut predicate = if matches!(view, MailboxView::Inbox) {
             format!(
                 "({}) AND ({})",
                 eligibility(view),
@@ -70,7 +98,26 @@ impl SqliteMailStore {
         } else {
             eligibility(view).to_string()
         };
-        let ram_guard = if query.mode != SearchMode::Lexical && query.query_embedding_int8.is_some()
+        if let Some(wanted) = recipient.clone() {
+            // INVARIANT: The closure lives only inside this transaction and is removed before
+            // commit; matching reuses the shared normalized-recipient parser.
+            tx.create_scalar_function(
+                "alias_recipient_match",
+                1,
+                rusqlite::functions::FunctionFlags::SQLITE_UTF8
+                    | rusqlite::functions::FunctionFlags::SQLITE_DETERMINISTIC,
+                move |ctx| {
+                    let raw = ctx.get::<String>(0)?;
+                    Ok(triage_ai::rules::recipient_addresses(&raw).contains(&wanted))
+                },
+            )
+            .map_err(query_error)?;
+            predicate = format!("({predicate}) AND alias_recipient_match(m.recipients)");
+        }
+        // INVARIANT: The RAM accelerator has no recipient column; alias searches use SQL.
+        let ram_guard = if recipient.is_none()
+            && query.mode != SearchMode::Lexical
+            && query.query_embedding_int8.is_some()
         {
             self.fresh_ram_guard(&tx)?
         } else {
@@ -101,7 +148,12 @@ impl SqliteMailStore {
             ram_index,
             ram_filter,
         };
-        let ids = search.execute(query)?;
+        let ids = search.execute(query);
+        if recipient.is_some() {
+            tx.remove_function("alias_recipient_match", 1)
+                .map_err(query_error)?;
+        }
+        let ids = ids?;
         drop(ram_guard);
         let rows = crate::search::load_summaries(&tx, &ids)?;
         tx.commit().map_err(query_error)?;

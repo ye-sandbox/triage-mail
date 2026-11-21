@@ -156,7 +156,19 @@ export const translations: Record<SupportedLocale, Translations> = {
 			planCustomLabel: 'Custom label (max 12 characters)',
 			planApply: 'Apply',
 			planError: 'The badge could not be saved. Try again.',
-			storageUsage: 'Storage used'
+			storageUsage: 'Storage used',
+			aliasesTitle: 'Routed aliases / domains',
+			aliasesHelp:
+				'Addresses forwarded into this mailbox (Cloudflare Email Routing, Gmail/Outlook forwarding, SimpleLogin, Addy.io). Each one appears as a virtual mailbox in the sidebar. Stored locally only.',
+			aliasAddressLabel: 'Alias address',
+			aliasNameLabel: 'Label (optional)',
+			aliasAdd: 'Add alias',
+			aliasRemove: 'Remove alias',
+			aliasInvalid: 'Enter a valid email address such as billing@example.com.',
+			aliasDuplicate: 'This alias is already listed.',
+			aliasLimit: 'You can add up to 64 aliases per account.',
+			aliasSaveError: 'The aliases could not be saved. Try again.',
+			aliasEmpty: 'No aliases yet.'
 		},
 		accountForm: {
 			discoveryIntro:
@@ -308,7 +320,9 @@ export const translations: Record<SupportedLocale, Translations> = {
 			providerGuidanceProton:
 				'Connect to Proton Mail Bridge running locally (127.0.0.1:1143), or import an offline .mbox/.eml archive.',
 			providerGuidanceCustom:
-				'Configure your IMAP server host and port below, or choose an offline .mbox/.eml import.'
+				'Configure your IMAP server host and port below, or choose an offline .mbox/.eml import.',
+			providerGuidanceCloudflare:
+				'This domain uses Cloudflare Email Routing, which only forwards mail. Connect the destination mailbox that receives it (the Hub), then add your aliases to that account.'
 		},
 		guide: {
 			title: 'How sign-in methods work & step-by-step setup',
@@ -490,6 +504,38 @@ export const translations: Record<SupportedLocale, Translations> = {
 					}
 				]
 			},
+			routing: {
+				title: 'Email Routing (aliases)',
+				summary:
+					'Receive many addresses in one mailbox: route them to a single Hub IMAP account and connect only that account.',
+				requirements:
+					'A destination mailbox with IMAP access (for example Gmail with an App Password) and a domain on Cloudflare, or a mailbox that can auto-forward.',
+				services: 'Cloudflare Email Routing, Gmail/Outlook auto-forwarding, SimpleLogin, Addy.io.',
+				note: 'Aliases are only labels stored locally; no extra login or network request is made for them.',
+				fields: [
+					'Connect the Hub: sign in to the destination IMAP mailbox, not to the alias addresses.',
+					'Routed aliases: after connecting, add each forwarded address under "Routed aliases / domains" on the account card.'
+				],
+				playbooks: [
+					{
+						id: 'Cloudflare',
+						provider: 'Cloudflare Email Routing',
+						steps: [
+							'In Cloudflare, open your domain > Email > Email Routing and verify the destination address (your Hub mailbox).',
+							'Under Routing rules, create Custom addresses (e.g. billing@yourdomain) or enable Catch-all, with action "Send to an email" pointing to the Hub.',
+							'Connect the Hub mailbox here, then add the alias addresses on its account card.'
+						]
+					},
+					{
+						id: 'Forwarding',
+						provider: 'Gmail / Outlook auto-forwarding',
+						steps: [
+							'In the source mailbox settings, enable forwarding to your Hub address (confirm the verification email).',
+							'Connect the Hub mailbox here and add the forwarded address as an alias to filter it in the sidebar.'
+						]
+					}
+				]
+			},
 			localArchive: {
 				title: 'Offline Archive (.mbox / .eml)',
 				summary:
@@ -531,6 +577,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 			starred: 'Starred',
 			snoozed: 'Snoozed',
 			accounts: 'Accounts',
+			aliasMailbox: 'Messages delivered to',
 			smartViews: 'Smart Views',
 			newSendersReview: 'New Senders Review',
 			pending: 'Pending',
@@ -779,7 +826,19 @@ export const translations: Record<SupportedLocale, Translations> = {
 			planCustomLabel: 'Rótulo personalizado (máx. 12 caracteres)',
 			planApply: 'Aplicar',
 			planError: 'Não foi possível salvar o selo. Tente novamente.',
-			storageUsage: 'Armazenamento usado'
+			storageUsage: 'Armazenamento usado',
+			aliasesTitle: 'Aliases / domínios roteados',
+			aliasesHelp:
+				'Endereços encaminhados para esta caixa (Cloudflare Email Routing, encaminhamento do Gmail/Outlook, SimpleLogin, Addy.io). Cada um aparece como caixa virtual na barra lateral. Guardado apenas localmente.',
+			aliasAddressLabel: 'Endereço do alias',
+			aliasNameLabel: 'Rótulo (opcional)',
+			aliasAdd: 'Adicionar alias',
+			aliasRemove: 'Remover alias',
+			aliasInvalid: 'Informe um e-mail válido, como cobranca@example.com.',
+			aliasDuplicate: 'Este alias já está na lista.',
+			aliasLimit: 'Você pode adicionar até 64 aliases por conta.',
+			aliasSaveError: 'Não foi possível salvar os aliases. Tente novamente.',
+			aliasEmpty: 'Nenhum alias ainda.'
 		},
 		accountForm: {
 			discoveryIntro:
@@ -932,7 +991,9 @@ export const translations: Record<SupportedLocale, Translations> = {
 			providerGuidanceProton:
 				'Conecte-se ao Proton Mail Bridge em execução local (127.0.0.1:1143) ou importe um arquivo .mbox/.eml offline.',
 			providerGuidanceCustom:
-				'Configure o host e a porta IMAP abaixo ou escolha uma importação .mbox/.eml offline.'
+				'Configure o host e a porta IMAP abaixo ou escolha uma importação .mbox/.eml offline.',
+			providerGuidanceCloudflare:
+				'Este domínio usa o Cloudflare Email Routing, que apenas encaminha e-mails. Conecte a caixa de destino que os recebe (o Hub) e depois adicione seus aliases a essa conta.'
 		},
 		guide: {
 			title: 'Como funcionam os métodos de login e passo a passo',
@@ -1114,6 +1175,38 @@ export const translations: Record<SupportedLocale, Translations> = {
 					}
 				]
 			},
+			routing: {
+				title: 'Roteamento de e-mail (aliases)',
+				summary:
+					'Receba vários endereços em uma só caixa: roteie tudo para uma conta IMAP Hub e conecte apenas essa conta.',
+				requirements:
+					'Uma caixa de destino com acesso IMAP (por exemplo Gmail com Senha de App) e um domínio no Cloudflare, ou uma caixa que encaminhe automaticamente.',
+				services: 'Cloudflare Email Routing, encaminhamento automático do Gmail/Outlook, SimpleLogin, Addy.io.',
+				note: 'Aliases são apenas rótulos guardados localmente; nenhum login ou requisição de rede extra é feito para eles.',
+				fields: [
+					'Conectar o Hub: entre na caixa IMAP de destino, não nos endereços de alias.',
+					'Aliases roteados: depois de conectar, adicione cada endereço encaminhado em "Aliases / domínios roteados" no cartão da conta.'
+				],
+				playbooks: [
+					{
+						id: 'Cloudflare',
+						provider: 'Cloudflare Email Routing',
+						steps: [
+							'No Cloudflare, abra seu domínio > Email > Email Routing e verifique o endereço de destino (sua caixa Hub).',
+							'Em Routing rules, crie Custom addresses (ex.: cobranca@seudominio) ou ative o Catch-all, com a ação "Send to an email" apontando para o Hub.',
+							'Conecte a caixa Hub aqui e depois adicione os aliases no cartão da conta.'
+						]
+					},
+					{
+						id: 'Forwarding',
+						provider: 'Encaminhamento automático Gmail / Outlook',
+						steps: [
+							'Nas configurações da caixa de origem, ative o encaminhamento para o endereço do Hub (confirme o e-mail de verificação).',
+							'Conecte a caixa Hub aqui e adicione o endereço encaminhado como alias para filtrá-lo na barra lateral.'
+						]
+					}
+				]
+			},
 			localArchive: {
 				title: 'Arquivo Offline (.mbox / .eml)',
 				summary:
@@ -1155,6 +1248,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 			starred: 'Com Estrela',
 			snoozed: 'Adiados',
 			accounts: 'Contas',
+			aliasMailbox: 'Mensagens entregues para',
 			smartViews: 'Visões Inteligentes',
 			newSendersReview: 'Novos Remetentes',
 			pending: 'Pendentes',

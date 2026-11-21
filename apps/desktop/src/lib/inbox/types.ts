@@ -19,6 +19,8 @@ export type SearchQueryDto = {
 	limit: number;
 	offset: number;
 	scope?: MailboxScope;
+	/** Alias address filter; only valid together with an AccountView scope. */
+	recipient?: string;
 };
 export type MessageRowDto = {
 	id: string;

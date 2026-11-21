@@ -26,7 +26,9 @@
 	import WdgAccountAvatar from './WdgAccountAvatar.svelte';
 	import WdgProviderDiagnosticHint from './WdgProviderDiagnosticHint.svelte';
 	import WdgAccountPlanBadge from './WdgAccountPlanBadge.svelte';
+	import WdgAccountAliasesControl from './WdgAccountAliasesControl.svelte';
 	import WdgAccountPlanControl from './WdgAccountPlanControl.svelte';
+	import type { AccountAlias, AccountAliasMap } from './aliases';
 	import type { AccountSubscription, BadgeOverride } from './subscriptions';
 
 	interface Props {
@@ -40,6 +42,9 @@
 		subscriptions?: Record<string, AccountSubscription>;
 		badgeError?: boolean;
 		onSetBadge?: (accountId: string, override: BadgeOverride) => Promise<void>;
+		aliases?: AccountAliasMap;
+		aliasError?: boolean;
+		onSetAliases?: (accountId: string, aliases: AccountAlias[]) => Promise<boolean>;
 		diagnostic?: ConnectionDiagnosticCode | null;
 		error?: string;
 		avatarTransport?: AvatarTransport;
@@ -63,6 +68,9 @@
 		subscriptions = {},
 		badgeError = false,
 		onSetBadge,
+		aliases = {},
+		aliasError = false,
+		onSetAliases,
 		diagnostic = null,
 		error = '',
 		avatarTransport,
@@ -556,6 +564,15 @@
 							{subscription}
 							failed={badgeError}
 							onSetBadge={(override) => onSetBadge(account.account_id, override)}
+						/>
+					{/if}
+
+					{#if onSetAliases && account.auth_method !== 'LocalArchive'}
+						<WdgAccountAliasesControl
+							accountId={account.account_id}
+							aliases={aliases[account.account_id] ?? []}
+							failed={aliasError}
+							onSave={(next) => onSetAliases(account.account_id, next)}
 						/>
 					{/if}
 

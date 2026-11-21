@@ -275,6 +275,14 @@ export class InboxWorkspace {
 			});
 			return;
 		}
+		if (scope.kind === 'alias') {
+			this.activeAccountId = scope.account_id;
+			await this.inbox.selectScope(
+				{ AccountView: { account_id: scope.account_id, view: 'Inbox' } },
+				scope.address
+			);
+			return;
+		}
 		if (scope.kind === 'inbox' || scope.kind === 'starred' || scope.kind === 'snoozed') {
 			const accountId = this.activeAccountId ?? this.accounts[0]?.account_id;
 			if (!accountId) {

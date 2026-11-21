@@ -1,4 +1,5 @@
 import { i18n } from '../i18n/index.svelte';
+import type { AccountAlias, AccountAliasMap } from './aliases';
 import type { AccountSubscription, BadgeOverride } from './subscriptions';
 import type {
 	AccountConfig,
@@ -46,6 +47,8 @@ export class AccountController {
 	accountDiagnostics = $state<Record<string, ConnectionDiagnosticCode>>({});
 	subscriptions = $state<Record<string, AccountSubscription>>({});
 	badgeError = $state(false);
+	aliases = $state<AccountAliasMap>({});
+	aliasError = $state(false);
 	importProgress = $state<{ importedCount: number; active: boolean }>({
 		importedCount: 0,
 		active: false
@@ -91,6 +94,33 @@ export class AccountController {
 			if (this.active) this.badgeError = true;
 		}
 	}
+	async loadAliases() {
+		if (!this.active || !this.transport.aliases) return;
+		const revision = this.revision;
+		try {
+			const aliases = await this.transport.aliases();
+			if (this.active && revision === this.revision) this.aliases = aliases;
+		} catch {
+			// Best-effort: aliases are local labels and must never disrupt account loading.
+		}
+	}
+	/** Persists the full alias list; returns false (and sets `aliasError`) on failure. */
+	async setAliases(accountId: string, aliases: AccountAlias[]): Promise<boolean> {
+		if (!this.active || !this.transport.setAliases) return false;
+		this.aliasError = false;
+		try {
+			const saved = await this.transport.setAliases(accountId, aliases);
+			if (!this.active) return false;
+			const next = { ...this.aliases };
+			if (saved.length > 0) next[accountId] = saved;
+			else delete next[accountId];
+			this.aliases = next;
+			return true;
+		} catch {
+			if (this.active) this.aliasError = true;
+			return false;
+		}
+	}
 	async load(native = true) {
 		if (!this.active) return;
 		const revision = ++this.revision;
@@ -108,6 +138,7 @@ export class AccountController {
 				void this.loadDiagnostics();
 			}
 			void this.loadSubscriptions();
+			void this.loadAliases();
 		} catch (error: unknown) {
 			if (!this.active || revision !== this.revision) return;
 			this.phase = error === 'VaultUnavailable' ? 'locked' : 'error';

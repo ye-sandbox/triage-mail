@@ -1,5 +1,6 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import type { ConnectionDiagnosticCode, SyncProgressEvent } from '../inbox/types';
+import type { AccountAlias, AccountAliasMap } from './aliases';
 import type { AccountSubscription } from './subscriptions';
 import type {
 	AccountTransport,
@@ -43,6 +44,9 @@ export const nativeAccountTransport: AccountTransport = {
 	subscriptions: () => invoke<Record<string, AccountSubscription>>('cmd_account_subscriptions'),
 	setBadge: (accountId, overrideMode) =>
 		invoke<AccountSubscription>('cmd_set_account_badge', { accountId, overrideMode }),
+	aliases: () => invoke<AccountAliasMap>('cmd_account_aliases'),
+	setAliases: (accountId, aliases) =>
+		invoke<AccountAlias[]>('cmd_set_account_aliases', { accountId, aliases }),
 	openGoogleAppPasswords: () => invoke<void>('cmd_open_google_app_passwords'),
 	chooseArchiveFile: () => invoke<string | null>('cmd_choose_transfer_file', { save: false }),
 	importLocalArchive(path, emailDisplay, format, onProgress) {

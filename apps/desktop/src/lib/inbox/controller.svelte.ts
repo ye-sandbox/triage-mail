@@ -64,6 +64,7 @@ export class InboxController {
 		this.review = state;
 		this.category = null;
 		this.savedView = null;
+		this.recipient = undefined;
 		this.mutationError = '';
 		this.mutationNotice = '';
 		clearTimeout(this.refreshTimer);
@@ -78,6 +79,7 @@ export class InboxController {
 		this.category = category;
 		this.review = null;
 		this.savedView = null;
+		this.recipient = undefined;
 		this.mutationError = '';
 		this.mutationNotice = '';
 		clearTimeout(this.refreshTimer);
@@ -122,12 +124,15 @@ export class InboxController {
 		this.category = null;
 		this.review = null;
 		this.scope = undefined;
+		this.recipient = undefined;
 		this.mutationError = '';
 		this.mutationNotice = '';
 		clearTimeout(this.refreshTimer);
 		await this.search(view.query, view.mode);
 	}
 	scope = $state.raw<MailboxScope | undefined>(undefined);
+	/** Virtual alias mailbox: restricts the AccountView scope to one delivered-to address. */
+	recipient = $state<string | undefined>(undefined);
 	experimentalSemanticSearch = $state(false);
 	totalEmbeddingErrors = $state(0);
 	revision = $state(0);
@@ -150,12 +155,13 @@ export class InboxController {
 			? this.transport.listFolders(accountId)
 			: Promise.reject(new Error('Unavailable'));
 
-	async selectScope(scope?: MailboxScope) {
+	async selectScope(scope?: MailboxScope, recipient?: string) {
 		if (
 			!this.review &&
 			!this.category &&
 			!this.savedView &&
-			JSON.stringify(scope) === JSON.stringify(this.scope)
+			JSON.stringify(scope) === JSON.stringify(this.scope) &&
+			(recipient ?? undefined) === this.recipient
 		)
 			return;
 		this.savedView = null;
@@ -163,6 +169,8 @@ export class InboxController {
 		this.review = null;
 		// INVARIANT: Scope changes invalidate all old reads, selection and mutation feedback.
 		this.scope = scope === 'GlobalAllMail' ? undefined : scope;
+		// INVARIANT: a recipient filter is meaningless (and rejected by the backend) without an account scope.
+		this.recipient = this.scope ? recipient : undefined;
 		this.mutationError = '';
 		this.mutationNotice = '';
 		clearTimeout(this.refreshTimer);
@@ -175,6 +183,7 @@ export class InboxController {
 		limit: number;
 		offset: number;
 		scope?: MailboxScope;
+		recipient?: string;
 	}) {
 		if (this.conversations) {
 			const generation = this.generation;
@@ -211,7 +220,8 @@ export class InboxController {
 	}
 
 	private scopeField() {
-		return this.scope ? { scope: this.scope } : {};
+		if (!this.scope) return {};
+		return this.recipient ? { scope: this.scope, recipient: this.recipient } : { scope: this.scope };
 	}
 
 	async mutate(id: string, action: TriageAction) {

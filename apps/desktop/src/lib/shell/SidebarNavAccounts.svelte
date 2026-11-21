@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Archive, Inbox, Mail, Trash2 } from 'lucide-svelte';
+	import { Archive, AtSign, Inbox, Mail, Trash2 } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
 	import { appStore } from '$lib/stores/app.svelte';
 	import WdgAccountPlanBadge from '$lib/onboarding/WdgAccountPlanBadge.svelte';
@@ -54,6 +54,25 @@
 						{#if unread > 0}
 							<span class="font-mono text-[11px] tabular-nums text-foreground">{unread}</span>
 						{/if}
+					</button>
+				{/each}
+				{#each appStore.accountAliases[account.account_id] ?? [] as alias (alias.address)}
+					{@const aliasScope: ScopeFilter = { kind: 'alias', account_id: account.account_id, address: alias.address }}
+					<button
+						type="button"
+						title={alias.address}
+						aria-label="{t(appStore.locale, 'aliasMailbox')} {alias.address}"
+						onclick={() => void onSelectScope(aliasScope)}
+						class="flex min-h-11 w-full items-center rounded-md py-1 pl-6 pr-2 text-left transition-transform duration-100 ease-out active:scale-[0.98] md:min-h-0 {isScopeActive(
+							aliasScope
+						)
+							? 'bg-selection font-medium text-foreground'
+							: 'text-secondary hover:bg-field hover:text-foreground'}"
+					>
+						<span class="flex items-center gap-2 truncate">
+							<AtSign class="h-3.5 w-3.5 shrink-0" />
+							<span class="truncate">{alias.label || alias.address}</span>
+						</span>
 					</button>
 				{/each}
 			</div>

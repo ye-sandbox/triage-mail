@@ -124,6 +124,13 @@ greeting, and sends no credentials. A successful probe does not verify sign-in.
 typed domain (three-second deadline, at most 10 records, never the local part). It
 only selects a Google Workspace or Microsoft 365 preset and never runs automatically.
 
+When the MX records belong to Cloudflare Email Routing (a forward-only service with
+no IMAP host), the form shows a routing playbook instead of a preset: connect the
+destination (Hub) mailbox, then list the forwarded addresses under **Routed aliases /
+domains** on its account card. Each alias becomes a virtual mailbox in the sidebar that
+filters the Hub account to messages delivered to that address. Aliases are local labels
+stored in the encrypted database; they trigger no extra login or network request.
+
 Use **Advanced connection settings** for manual host/port, BYO OAuth, or Proton
 Bridge configuration. Manual edits and preset selections prevent automatic lookup
 from overwriting the form. Gmail has a direct App Passwords link. **Set up Microsoft

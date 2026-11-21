@@ -41,6 +41,9 @@
 		if (cur.kind === 'folder' && scope.kind === 'folder') {
 			return cur.account_id === scope.account_id && cur.folder === scope.folder;
 		}
+		if (cur.kind === 'alias' && scope.kind === 'alias') {
+			return cur.account_id === scope.account_id && cur.address === scope.address;
+		}
 		if (cur.kind === 'new_senders' && scope.kind === 'new_senders') {
 			return cur.status === scope.status;
 		}

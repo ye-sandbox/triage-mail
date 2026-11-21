@@ -55,6 +55,9 @@ pub struct SearchQueryDto {
     pub offset: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<MailboxScopeDto>,
+    /// Restricts an account-scoped search to messages delivered to this alias address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recipient: Option<String>,
 }
 
 impl SearchQueryDto {

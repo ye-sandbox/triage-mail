@@ -7,14 +7,18 @@
 	interface Props {
 		selectedMethod?: AuthMethod;
 		selectedPreset?: string;
+		/** True when discovery detected a forward-only provider (Cloudflare Email Routing). */
+		routing?: boolean;
 	}
 
-	let { selectedMethod, selectedPreset }: Props = $props();
+	let { selectedMethod, selectedPreset, routing = false }: Props = $props();
 	let open = $state(false);
-	let activeTab = $state<AuthMethod>('AppPassword');
+	let activeTab = $state<AuthMethod | 'EmailRouting'>('AppPassword');
 
 	$effect(() => {
-		if (selectedMethod) {
+		if (routing) {
+			activeTab = 'EmailRouting';
+		} else if (selectedMethod) {
 			activeTab = selectedMethod;
 		}
 	});
@@ -26,6 +30,7 @@
 		{ id: 'OAuth2PublicPkce' as const, label: t.oauthPublic.title },
 		{ id: 'OAuth2ByoCredentials' as const, label: t.oauthByo.title },
 		{ id: 'ProtonBridgeLocal' as const, label: t.proton.title },
+		{ id: 'EmailRouting' as const, label: t.routing.title },
 		{ id: 'LocalArchive' as const, label: t.localArchive.title }
 	]);
 
@@ -60,6 +65,16 @@
 					isWarning: true,
 					fields: t.proton.fields,
 					playbooks: t.proton.playbooks
+				};
+			case 'EmailRouting':
+				return {
+					summary: t.routing.summary,
+					requirements: t.routing.requirements,
+					services: t.routing.services,
+					note: t.routing.note,
+					isWarning: false,
+					fields: t.routing.fields,
+					playbooks: t.routing.playbooks
 				};
 			case 'LocalArchive':
 				return {
