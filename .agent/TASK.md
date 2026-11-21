@@ -19,7 +19,7 @@ No task is `RUNNING`. Queue **Cloudflare Email Routing & Alias Hub Virtual Mailb
 
 ### Task [02.13]: Cloudflare MX Detection & Forwarding Header Recipient Extraction (`crates/mail-engine`)
 
-- **Status:** DONE (2026-11-21) — commit `HASH`. Delivered routing-header recipient extraction (`Delivered-To`, `X-Forwarded-To`, `X-Original-To`, `Envelope-To`, `X-Envelope-To`, `Resent-To`; bounded, validated, deduped) and Cloudflare Email Routing MX classification (`imap_host: None`). All gates exit 0.
+- **Status:** DONE (2026-11-21) — commit `7c6f5f7`. Delivered routing-header recipient extraction (`Delivered-To`, `X-Forwarded-To`, `X-Original-To`, `Envelope-To`, `X-Envelope-To`, `Resent-To`; bounded, validated, deduped) and Cloudflare Email Routing MX classification (`imap_host: None`). All gates exit 0.
 - **Priority:** 1 of 3
 - **Scope:**
   1. `[02.13.1]` **Forwarding & Envelope Recipient Extraction (`crates/mail-engine/src/mime_parser.rs`):** Extend `StalwartMimeParser::parse_with_uid_and_modseq` recipient collection beyond `To`/`Cc`/`Bcc` to inspect routing/forwarding headers (`Delivered-To`, `X-Forwarded-To`, `X-Original-To`, `Envelope-To`, `X-Envelope-To`, `Resent-To`) and append normalized, deduplicated mailbox addresses into `ParsedInboundMessage.recipients` so forwarded and Bcc-routed Cloudflare Email Routing messages retain their target alias address in `messages.recipients`.
