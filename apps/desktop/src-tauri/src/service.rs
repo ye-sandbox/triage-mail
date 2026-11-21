@@ -291,11 +291,10 @@ impl DesktopService {
         mut config: AccountConfigDto,
         mut credentials: IncomingCredentials,
     ) -> Result<String, IpcError> {
-        credentials.normalize();
         if config.account_id.is_empty() {
             config.account_id = opaque_id()?;
         }
-        validate_config(&config, &credentials.0)?;
+        normalize_and_validate_credentials(&config, &mut credentials)?;
         self.blocking(move |s| {
             let _guard = s.account_gate.lock().map_err(|_| IpcError::Internal)?;
             if let Some((id, _)) = s
@@ -437,7 +436,6 @@ impl DesktopService {
         mut config: AccountConfigDto,
         mut credentials: IncomingCredentials,
     ) -> Result<ConnectionTestResultDto, IpcError> {
-        credentials.normalize();
         if config.auth_method == AuthMethod::LocalArchive {
             return Err(IpcError::InvalidRequest);
         }
@@ -446,7 +444,7 @@ impl DesktopService {
         if config.account_id.is_empty() {
             config.account_id = String::from("transient-test");
         }
-        validate_config(&config, &credentials.0)?;
+        normalize_and_validate_credentials(&config, &mut credentials)?;
         match self.remote.test_connection(&config, &credentials).await {
             Ok(()) => Ok(ConnectionTestResultDto {
                 ok: true,
@@ -527,11 +525,10 @@ impl DesktopService {
         config: AccountConfigDto,
         mut credentials: IncomingCredentials,
     ) -> Result<(), IpcError> {
-        credentials.normalize();
         if config.account_id.is_empty() {
             return Err(IpcError::InvalidRequest);
         }
-        validate_config(&config, &credentials.0)?;
+        normalize_and_validate_credentials(&config, &mut credentials)?;
         self.blocking(move |s| {
             let _guard = s.account_gate.lock().map_err(|_| IpcError::Internal)?;
             let json = s
@@ -1049,6 +1046,18 @@ pub(crate) fn opaque_id() -> Result<String, IpcError> {
     getrandom::getrandom(&mut bytes).map_err(|_| IpcError::Internal)?;
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
+fn normalize_and_validate_credentials(
+    config: &AccountConfigDto,
+    credentials: &mut IncomingCredentials,
+) -> Result<(), IpcError> {
+    // INVARIANT: validate control characters before whitespace normalization so CRLF/control
+    // injection attempts are rejected instead of silently stripped, then re-validate after
+    // normalization so whitespace-only AppPasswords are rejected.
+    validate_config(config, &credentials.0)?;
+    credentials.normalize();
+    validate_config(config, &credentials.0)
+}
+
 pub(crate) fn validate_config(
     config: &AccountConfigDto,
     material: &AccountAuthMaterial,
