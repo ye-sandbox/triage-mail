@@ -7,7 +7,7 @@
 
 ## Active Task
 
-No task is `RUNNING`. `[02.12]` is DONE. `[04.24]` and `[02.10]` are DONE. `[04.25]` is DONE. Next: `[02.12]` (`READY FOR PLANNING`). Remaining queue (`[02.12]`; `[02.11]` PAUSED) is `READY FOR PLANNING`; promote exactly one to `PLANNING` on `proceed`. `[02.11]` is paused awaiting an Azure `client_id`; `[02.12]` has its P0 amendment approved.
+No task is `RUNNING`. `[04.24]`, `[02.10]`, `[04.25]`, and `[02.12]` are DONE. `[02.11]` is `FROZEN` (awaiting a user-supplied Azure public-client `client_id`). Planned queue concluded; awaiting user selection for the next milestone.
 
 ---
 
@@ -49,7 +49,7 @@ No task is `RUNNING`. `[02.12]` is DONE. `[04.24]` and `[02.10]` are DONE. `[04.
 
 ### Task [02.11]: Built-In Public Microsoft `client_id` For One-Click Outlook Sign-In
 
-- **Status:** PAUSED (2026-11-20) — no Entra tenant available to register the Azure app (personal MSA has no tenant; Azure portal sign-in failed with AADSTS50058). P0 amendment stays approved (ADR-028). Resume when the user supplies a public-client `client_id`; the agent MUST NOT invent one. Meanwhile Outlook keeps the user-supplied `client_id` flow; improve its guide under `[04.25]` if needed.
+- **Status:** FROZEN (2026-11-21; previously PAUSED 2026-11-20) — frozen by user request until a user-supplied public-client `client_id` is available (no Entra tenant available to register the Azure app; personal MSA has no tenant; Azure portal sign-in failed with AADSTS50058). P0 amendment stays approved (ADR-028). Meanwhile Outlook keeps the user-supplied `client_id` flow.
 - **Covers:** audit item 1.
 - **Gate (user approval required before `PLANNING`):**
   1. Amend `AGENTS.md` P0: a publicly registered OAuth2 **public-client** `client_id` (no secret, PKCE only) MAY be embedded as a compile-time constant; `client_secret`, tokens and any confidential credential remain forbidden. Record in `docs/adr/decisions.md`.
@@ -59,7 +59,7 @@ No task is `RUNNING`. `[02.12]` is DONE. `[04.24]` and `[02.10]` are DONE. `[04.
 
 ### Task [02.12]: User-Initiated MX Detection For Workspace / Microsoft 365 Custom Domains
 
-- **Status:** DONE (commit `7e2b960`; hickory-resolver approved 2026-11-20, P0 ADR-028)
+- **Status:** DONE (2026-11-20 — commits `7e2b960`, `f7622ef`; closed 2026-11-21; hickory-resolver approved 2026-11-20, P0 ADR-028). Delivered `DiscoveryTransport::mx(domain)` (`hickory-resolver`, 3s deadline, ≤ 10 records, domain-only), Google Workspace / Microsoft 365 MX mapping, `DiscoverySource::Mx` (Rust + TS), explicit UI button, EN/PT-BR i18n, and README updates.
 - **Covers:** audit item 5.
 - **Gate:** amend P0 with an exception: user-initiated DNS MX lookup of the typed email's domain only, behind an explicit button, never automatic, same public-DNS/bounded-deadline rules as discovery. Recorded in ADR.
 - **Scope (after approval):** add `DiscoveryTransport::mx(domain)` (bounded 3s, ≤ 10 records, only the domain is resolved, no local part leaves the machine). Map `*.l.google.com`/`aspmx.*` → Google Workspace preset (BYO OAuth / App Password guidance) and `*.mail.protection.outlook.com` → Microsoft 365 preset; anything else → existing ISPDB/manual path. Result source `DiscoverySource::Mx` (additive enum variant; verify TS union and serde compatibility, P1).
