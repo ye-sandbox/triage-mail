@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-21
+
+### Added
+- **Offline MBOX & EML Local Archive Ingestion:** Added local archive account support for streaming `.mbox` and `.eml` ingestion with local-only triage and background worker skip.
+- **Guided Onboarding & MX Provider Detection:** Reworked first-run vault creation and account discovery, added expanded offline presets with provider-aware authentication hints, a guided sign-in method recommendation card, and user-initiated DNS MX provider detection.
+- **Connection Diagnostics, OAuth Reauth & IMAP Quota:** Added actionable connection diagnostics with OAuth re-authentication flows, IMAP quota detection, and account subscription badges.
+- **System Tray, Notifications & Streaming Attachments:** Added system tray integration, shell preferences, consent-bound notifications, streaming attachment save-as, and safe ephemeral attachment previews.
+
+### Changed
+- **In-Memory `int8` Vector Index:** Added a zeroized in-memory exact `int8` vector index to accelerate semantic search queries (`crates/storage`, `apps/desktop`).
+- **Validation Harness:** Optimized benchmark defaults and non-TTY test output.
+
+### Fixed
+- **App Password Validation & Normalization:** Validated credential control characters before whitespace normalization so CRLF/control-character injection is rejected prior to any vault write (`apps/desktop/src-tauri/src/service.rs`), and added Gmail pre-test hints.
+
 ## [0.2.1] - 2026-11-15
 
 ### Added
