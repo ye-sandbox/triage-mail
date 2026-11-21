@@ -7,7 +7,47 @@
 
 ## Active Task
 
-No task is `RUNNING`. `[04.24]`, `[02.10]`, `[04.25]`, and `[02.12]` are DONE. `[02.11]` is `FROZEN` (awaiting a user-supplied Azure public-client `client_id`). Planned queue concluded; awaiting user selection for the next milestone.
+No task is `RUNNING`. Queue **Cloudflare Email Routing & Alias Hub Virtual Mailboxes**: `[02.13]` DONE; `[01.12]` next, then `[04.26]` (`READY FOR PLANNING`). Previous queue (`[04.24]`, `[02.10]`, `[04.25]`, `[02.12]`) is DONE; `[02.11]` remains `FROZEN` (awaiting a user-supplied Azure public-client `client_id`).
+
+---
+
+## Planned Queue — Cloudflare Email Routing & Alias Hub Virtual Mailboxes (2026-11-21)
+
+- **Origin:** User request to support connecting a single Hub IMAP account that receives emails from multiple personal/domain aliases via **Cloudflare Email Routing** (`*@custom-domain`) or provider auto-forwarding (`Gmail`/`Outlook`/`SimpleLogin`/`Addy.io`), surfacing each alias as a virtual mailbox in the sidebar without requiring separate logins per address.
+- **Cost & Schema Constraints:** Zero monetary cost (Cloudflare Email Routing is free; 100% local-first evaluation); preserve `CURRENT_SCHEMA_VERSION = 11` and existing `P1` IPC wire contracts additively.
+- **Systems Involved (queue):** `crates/mail-engine/src/{mime_parser.rs,discovery/mx.rs}`, `crates/triage-ai/src/rules.rs`, `crates/storage/src/{desktop.rs,saved_views.rs,rules.rs}`, `apps/desktop/src-tauri/src/{dto.rs,service.rs,lib.rs}`, `apps/desktop/src/lib/{onboarding,shell,saved-views,i18n}`, `README.md`/`README.pt-br.md`.
+
+### Task [02.13]: Cloudflare MX Detection & Forwarding Header Recipient Extraction (`crates/mail-engine`)
+
+- **Status:** DONE (2026-11-21) — commit `HASH`. Delivered routing-header recipient extraction (`Delivered-To`, `X-Forwarded-To`, `X-Original-To`, `Envelope-To`, `X-Envelope-To`, `Resent-To`; bounded, validated, deduped) and Cloudflare Email Routing MX classification (`imap_host: None`). All gates exit 0.
+- **Priority:** 1 of 3
+- **Scope:**
+  1. `[02.13.1]` **Forwarding & Envelope Recipient Extraction (`crates/mail-engine/src/mime_parser.rs`):** Extend `StalwartMimeParser::parse_with_uid_and_modseq` recipient collection beyond `To`/`Cc`/`Bcc` to inspect routing/forwarding headers (`Delivered-To`, `X-Forwarded-To`, `X-Original-To`, `Envelope-To`, `X-Envelope-To`, `Resent-To`) and append normalized, deduplicated mailbox addresses into `ParsedInboundMessage.recipients` so forwarded and Bcc-routed Cloudflare Email Routing messages retain their target alias address in `messages.recipients`.
+  2. `[02.13.2]` **Cloudflare Email Routing MX Classification (`crates/mail-engine/src/discovery/mx.rs`):** Extend `mx::classify` to detect Cloudflare Email Routing MX exchanges (`*.mx.cloudflare.net`, e.g., `route1.mx.cloudflare.net`, `route2.mx.cloudflare.net`, `route3.mx.cloudflare.net`) when all returned MX records belong to Cloudflare, returning a `DiscoveredProvider` (`provider_name: "Cloudflare Email Routing"`, `imap_host: None`, `recommended_auth: AuthMethod::AppPassword`, `source: DiscoverySource::Mx`) that guides the user to connect their destination Hub IMAP mailbox.
+- **Constraints:** `#![forbid(unsafe_code)]`; zero new network calls (reuses existing button-triggered `[02.12]` MX lookup); RFC 2606 domains (`@example.com`, `@example.org`) only in unit tests.
+- **Tests:** Unit tests for single/multiple forwarding headers, deduplication against `To`/`Cc`, malformed header resilience, and Cloudflare MX classification (`route1..3.mx.cloudflare.net` vs mixed MX records).
+
+### Task [01.12]: Additive Account Aliases Persistence & Recipient Filtering (`crates/storage`, `crates/triage-ai`, `apps/desktop/src-tauri`)
+
+- **Status:** READY FOR PLANNING (next)
+- **Priority:** 2 of 3
+- **Scope:**
+  1. `[01.12.1]` **Additive Account Aliases in `account_connections.config_json` (`crates/storage/src/desktop.rs`):** Add `AccountConnectionExtra::Aliases` (`$.aliases`) storing a bounded, validated list of `AccountAlias { address: String, label: Option<String> }` per connected Hub account (normalized lowercase RFC 5322 email address, max 64 aliases per account, no control chars) without changing `CURRENT_SCHEMA_VERSION = 11`.
+  2. `[01.12.2]` **Recipient & Recipient-Domain Filtering in Saved Views and Rules (`crates/storage`, `crates/triage-ai`):** Add optional `#[serde(default)]` `recipient: Option<String>` and `recipient_domain: Option<String>` to `saved_views::ViewFilters` (matching against normalized mailbox addresses in `messages.recipients`) and additive `Condition::Recipient(String)` / `Condition::RecipientDomain(String)` variants in `triage_ai::rules` + `storage::rules::facts`.
+  3. `[01.12.3]` **Desktop IPC Commands (`apps/desktop/src-tauri`):** Expose additive `cmd_account_aliases() -> HashMap<String, Vec<AccountAliasDto>>` and `cmd_set_account_aliases(accountId: String, aliases: Vec<AccountAliasDto>) -> Vec<AccountAliasDto>` with input validation and integration tests in `ipc_service`.
+- **Constraints:** Preserve all existing IPC wire shapes and `SavedView`/`Rule` backward compatibility (`#[serde(default)]`); `#![forbid(unsafe_code)]` in `triage-ai`, `#![deny(unsafe_code)]` in `storage`.
+- **Tests:** Storage unit tests for alias CRUD in `config_json`, saved-view recipient/domain filtering, rule evaluation on forwarded recipients, and `ipc_service` integration tests.
+
+### Task [04.26]: Cloudflare Email Routing & Alias Hub Onboarding + Sidebar Virtual Mailboxes (`apps/desktop`)
+
+- **Status:** READY FOR PLANNING
+- **Priority:** 3 of 3
+- **Scope:**
+  1. `[04.26.1]` **Cloudflare Email Routing Onboarding Guidance & Playbook (`apps/desktop/src/lib/onboarding`):** Update `recommendation.ts`, `WdgMethodRecommendationCard.svelte`, and `WdgAccountHelpGuide.svelte` to recognize `"Cloudflare Email Routing"` (from MX detection or a dedicated guide tab/preset) and display a step-by-step EN/PT-BR playbook explaining how to point Cloudflare Email Routing (`Custom addresses` or `Catch-all`) and Gmail/Outlook auto-forwarding to a single Hub IMAP account.
+  2. `[04.26.2]` **Connected Account Alias Manager (`WdgConnectedAccountList.svelte`):** Add an inline **"Routed Aliases / Domains"** manager on each connected account card allowing users to add, label, and remove aliases (e.g., `billing@example.com`, `dev@example.com`) forwarded into that Hub account.
+  3. `[04.26.3]` **Sidebar Virtual Alias Mailboxes (`SidebarNavAccounts.svelte`, `app.svelte.ts`, `workspace.svelte.ts`):** Render configured aliases under their parent Hub account in the sidebar so clicking an alias filters the message list to messages delivered to that alias address. Sync `README.md` and `README.pt-br.md` (`readme-standard`).
+- **Constraints:** Svelte 5 Runes only (`svelte-dev`); keep `WdgAccountDiscoveryForm.svelte` and `WdgConnectedAccountList.svelte` modular by extracting a dedicated `WdgAccountAliasesControl.svelte` widget; full EN/PT-BR i18n parity.
+- **Tests:** Vitest unit tests for Cloudflare recommendation mapping, alias validation/CRUD controller, sidebar alias scope selection, and i18n parity.
 
 ---
 

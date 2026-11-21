@@ -24,6 +24,7 @@ pub(super) fn classify(domain: &str, exchanges: &[String]) -> Option<DiscoveredP
     let google = |h: &str| {
         h.ends_with(".l.google.com") || h.ends_with(".googlemail.com") || h.starts_with("aspmx.")
     };
+    let cloudflare = |h: &str| h.ends_with(".mx.cloudflare.net");
     let microsoft = |h: &str| h.ends_with(".mail.protection.outlook.com");
     // INVARIANT: Require every exchange to agree, so a mixed/forwarding setup is not mislabeled.
     if exchanges.is_empty() {
@@ -38,8 +39,25 @@ pub(super) fn classify(domain: &str, exchanges: &[String]) -> Option<DiscoveredP
             "outlook.office365.com",
             true,
         ))
+    } else if exchanges.iter().all(|h| cloudflare(h)) {
+        Some(cloudflare_provider(domain))
     } else {
         None
+    }
+}
+
+/// Cloudflare Email Routing only forwards; the user connects the destination mailbox instead.
+fn cloudflare_provider(domain: &str) -> DiscoveredProvider {
+    DiscoveredProvider {
+        domain: domain.into(),
+        provider_name: "Cloudflare Email Routing".into(),
+        imap_host: None,
+        imap_port: 993,
+        use_ssl: true,
+        recommended_auth: AuthMethod::AppPassword,
+        oauth_endpoints: None,
+        help_url: None,
+        source: DiscoverySource::Mx,
     }
 }
 
@@ -72,5 +90,39 @@ fn build(domain: &str, name: &str, host: &str, microsoft: bool) -> DiscoveredPro
         oauth_endpoints: Some(oauth),
         help_url: (!microsoft).then(|| "https://myaccount.google.com/apppasswords".to_owned()),
         source: DiscoverySource::Mx,
+    }
+}
+
+#[cfg(test)]
+mod cloudflare_tests {
+    use super::classify;
+
+    fn hosts(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| (*s).to_owned()).collect()
+    }
+
+    #[test]
+    fn cloudflare_routes_classify() {
+        let p = classify(
+            "example.com",
+            &hosts(&[
+                "route1.mx.cloudflare.net",
+                "route2.mx.cloudflare.net",
+                "route3.mx.cloudflare.net",
+            ]),
+        )
+        .expect("cloudflare");
+        assert_eq!(p.provider_name, "Cloudflare Email Routing");
+        assert!(p.imap_host.is_none());
+    }
+
+    #[test]
+    fn mixed_or_lookalike_is_not_cloudflare() {
+        assert!(classify(
+            "example.com",
+            &hosts(&["route1.mx.cloudflare.net", "aspmx.l.google.com"])
+        )
+        .is_none());
+        assert!(classify("example.com", &hosts(&["mx.cloudflare.net.example.com"])).is_none());
     }
 }

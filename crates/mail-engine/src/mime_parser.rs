@@ -75,6 +75,7 @@ impl StalwartMimeParser {
         collect_addresses(message.to(), &mut recipients);
         collect_addresses(message.cc(), &mut recipients);
         collect_addresses(message.bcc(), &mut recipients);
+        collect_routing_recipients(&message, &mut recipients);
 
         let date_epoch_ms = message.date().map(|d| d.to_timestamp() * 1000);
 
@@ -198,6 +199,71 @@ fn collect_addresses(list: Option<AddressList<'_>>, out: &mut Vec<String>) {
             }
         }
     }
+}
+
+const ROUTING_HEADERS: [&str; 6] = [
+    "delivered-to",
+    "x-forwarded-to",
+    "x-original-to",
+    "envelope-to",
+    "x-envelope-to",
+    "resent-to",
+];
+const MAX_ROUTING_ADDRESSES: usize = 32;
+const MAX_ADDRESS_LEN: usize = 254;
+
+/// Appends alias addresses found in routing/forwarding headers.
+// INVARIANT: Forwarded/catch-all mail (e.g. Cloudflare Email Routing) often lacks the alias in
+// To/Cc; retaining it keeps `messages.recipients` filterable per alias. Already-present
+// mailboxes (case-insensitive, bare or with display name) are never duplicated.
+fn collect_routing_recipients(message: &Message<'_>, out: &mut Vec<String>) {
+    let mut added = 0usize;
+    for header in message.headers() {
+        if !ROUTING_HEADERS.contains(&header.raw_name().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let Ok(raw) = std::str::from_utf8(header.raw_value()) else {
+            continue;
+        };
+        for part in raw.split(',') {
+            if added >= MAX_ROUTING_ADDRESSES {
+                return;
+            }
+            let Some(addr) = parse_routing_address(part) else {
+                continue;
+            };
+            if !out.iter().any(|existing| mailbox_matches(existing, &addr)) {
+                out.push(addr);
+                added += 1;
+            }
+        }
+    }
+}
+
+fn parse_routing_address(part: &str) -> Option<String> {
+    let part = part.trim();
+    let inner = match (part.rfind('<'), part.rfind('>')) {
+        (Some(l), Some(r)) if l < r => &part[l + 1..r],
+        _ => part,
+    }
+    .trim();
+    let (local, domain) = inner.split_once('@')?;
+    let valid = !local.is_empty()
+        && inner.len() <= MAX_ADDRESS_LEN
+        && domain.contains('.')
+        && !inner[local.len() + 1..].contains('@')
+        && !inner
+            .chars()
+            .any(|c| c.is_control() || c.is_whitespace() || "<>(),;:\\\"".contains(c));
+    valid.then(|| inner.to_ascii_lowercase())
+}
+
+fn mailbox_matches(existing: &str, addr: &str) -> bool {
+    let bare = match (existing.rfind('<'), existing.rfind('>')) {
+        (Some(l), Some(r)) if l < r => &existing[l + 1..r],
+        _ => existing,
+    };
+    bare.trim().eq_ignore_ascii_case(addr)
 }
 
 /// Extracts RFC 2369 / RFC 8058 unsubscribe descriptors.
@@ -711,5 +777,41 @@ mod tests {
         assert!(logo.is_inline);
         assert_eq!(logo.content_id.as_deref(), Some("logo_cid_99@example.org"));
         assert!(logo.size_bytes > 0);
+    }
+
+    fn recipients_of(raw: &str) -> Vec<String> {
+        StalwartMimeParser::new()
+            .parse_with_uid_and_modseq(raw.as_bytes(), 1, None)
+            .expect("parse")
+            .recipients
+    }
+
+    #[test]
+    fn routing_headers_add_alias_and_dedupe() {
+        let r = recipients_of(
+            "From: a@example.org\r\nTo: Hub <hub@example.com>\r\nDelivered-To: HUB@example.com\r\nX-Original-To: Billing@Example.com\r\nX-Forwarded-To: billing@example.com, <dev@example.org>\r\nSubject: x\r\n\r\nbody",
+        );
+        assert_eq!(
+            r,
+            vec![
+                "Hub <hub@example.com>",
+                "billing@example.com",
+                "dev@example.org"
+            ]
+        );
+    }
+
+    #[test]
+    fn routing_headers_ignore_malformed_values() {
+        let r = recipients_of(
+            "From: a@example.org\r\nEnvelope-To: not-an-address, a@@example.com, x@localhost, \r\nResent-To: ok@example.com\r\nSubject: x\r\n\r\nb",
+        );
+        assert_eq!(r, vec!["ok@example.com"]);
+    }
+
+    #[test]
+    fn routing_headers_work_without_to() {
+        let r = recipients_of("From: a@example.org\r\nX-Envelope-To: alias@example.com\r\n\r\nb");
+        assert_eq!(r, vec!["alias@example.com"]);
     }
 }
