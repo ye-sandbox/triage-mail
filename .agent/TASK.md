@@ -29,7 +29,7 @@ No task is `RUNNING`. Queue **Cloudflare Email Routing & Alias Hub Virtual Mailb
 
 ### Task [01.12]: Additive Account Aliases Persistence & Recipient Filtering (`crates/storage`, `crates/triage-ai`, `apps/desktop/src-tauri`)
 
-- **Status:** DONE (2026-11-21) — commit `PENDING`. Delivered `AccountConnectionExtra::Aliases` + `normalize_aliases` (≤64, lowercase bare mailbox, no dupes), `recipient`/`recipient_domain` saved-view filters (`saved_facts_match` now 4-arg; RAM fast path excluded), `Condition::Recipient`/`RecipientDomain` + `MessageFacts.recipients` + `recipient_addresses`, and `cmd_account_aliases`/`cmd_set_account_aliases`. All gates exit 0.
+- **Status:** DONE (2026-11-21) — commit `48bb5a0`. Delivered `AccountConnectionExtra::Aliases` + `normalize_aliases` (≤64, lowercase bare mailbox, no dupes), `recipient`/`recipient_domain` saved-view filters (`saved_facts_match` now 4-arg; RAM fast path excluded), `Condition::Recipient`/`RecipientDomain` + `MessageFacts.recipients` + `recipient_addresses`, and `cmd_account_aliases`/`cmd_set_account_aliases`. All gates exit 0.
 - **Priority:** 2 of 3
 - **Scope:**
   1. `[01.12.1]` **Additive Account Aliases in `account_connections.config_json` (`crates/storage/src/desktop.rs`):** Add `AccountConnectionExtra::Aliases` (`$.aliases`) storing a bounded, validated list of `AccountAlias { address: String, label: Option<String> }` per connected Hub account (normalized lowercase RFC 5322 email address, max 64 aliases per account, no control chars) without changing `CURRENT_SCHEMA_VERSION = 11`.
