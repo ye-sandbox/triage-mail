@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-11-22
+
+### Added
+- **Appearance Themes & Typography:** Added appearance themes, typography options, text scale, zoom, and density controls (`apps/desktop`).
+
+### Changed
+- **Settings & Inbox Component Split:** Extracted automation, onboarding, inbox, reminder, and settings UI into smaller reusable components, and enforced warning-free Svelte checks (`apps/desktop`).
+
 ## [0.2.4] - 2026-11-21
 
 ### Changed
