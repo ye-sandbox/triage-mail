@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-21
+
+### Added
+- **Cloudflare Email Routing Detection:** Detects Cloudflare Email Routing MX records and extracts forwarding recipients from mail headers (`crates/mail-engine`).
+- **Account Aliases:** Persisted account aliases with recipient-based filtering in the local store (`crates/storage`).
+- **Cloudflare Routing Onboarding & Alias Manager:** Added a Cloudflare routing onboarding flow, an alias manager, and alias mailboxes in the sidebar (`apps/desktop`).
+
 ## [0.2.2] - 2026-11-21
 
 ### Added

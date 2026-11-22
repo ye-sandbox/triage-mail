@@ -2792,7 +2792,7 @@ checksum = "fc04a4c58212d57930a24bf47d3fa87485264a3a054e9c10e042eb373573ad3c"
 
 [[package]]
 name = "mail-engine"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -4701,7 +4701,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "storage"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "rusqlite",
  "serde",
@@ -4796,7 +4796,7 @@ dependencies = [
 
 [[package]]
 name = "sync-runtime"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-trait",
  "getrandom 0.2.17",
@@ -5530,7 +5530,7 @@ dependencies = [
 
 [[package]]
 name = "triage-ai"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "mail-parser",
  "ort",
@@ -5547,7 +5547,7 @@ dependencies = [
 
 [[package]]
 name = "triage-mail-cli"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "mail-engine",
  "serde",
@@ -5562,7 +5562,7 @@ dependencies = [
 
 [[package]]
 name = "triage-mail-desktop"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5713,7 +5713,7 @@ dependencies = [
 
 [[package]]
 name = "vault"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "aes-gcm",
  "argon2",
