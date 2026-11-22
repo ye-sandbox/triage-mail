@@ -3,6 +3,9 @@ import { INBOX_FIXTURES } from '$lib/inbox/inbox.fixtures';
 import { nativeAvailable, nativeTransport } from '$lib/inbox/transport';
 import type { InboxTransport } from '$lib/inbox/types';
 import type { AccountAliasMap } from '$lib/onboarding/aliases';
+import { avatarToDataUrl } from '$lib/onboarding/avatar-controller.svelte';
+import { nativeAvatarTransport } from '$lib/onboarding/avatar-transport';
+import type { AvatarTransport } from '$lib/onboarding/avatar-types';
 import type { AccountSubscription } from '$lib/onboarding/subscriptions';
 import { nativeAccountTransport } from '$lib/onboarding/transport';
 import type { AccountConfig, AccountTransport } from '$lib/onboarding/types';
@@ -37,6 +40,7 @@ const THEME_STORAGE_KEY = 'triage_mail_theme';
 export interface NativeShellHydrationDeps {
 	isNative?: () => boolean;
 	accountTransport?: Pick<AccountTransport, 'list' | 'subscriptions' | 'aliases'>;
+	avatarTransport?: Pick<AvatarTransport, 'get'>;
 	inboxTransport?: Pick<InboxTransport, 'listFolders' | 'search' | 'savedViews'>;
 	remindersTransport?: Pick<RemindersTransport, 'listDueDates'>;
 	settingsTransport?: Pick<SettingsTransport, 'shellPreferences'>;
@@ -172,6 +176,42 @@ class AppStore {
 
 	accountSubscriptions = $state<Record<string, AccountSubscription>>({});
 	accountAliases = $state<AccountAliasMap>({});
+	accountAvatars = $state<Record<string, string>>({});
+
+	setAccountAvatarSrc(accountId: string, src: string): void {
+		if (src) {
+			this.accountAvatars = { ...this.accountAvatars, [accountId]: src };
+		} else if (accountId in this.accountAvatars) {
+			const next = { ...this.accountAvatars };
+			delete next[accountId];
+			this.accountAvatars = next;
+		}
+	}
+
+	private async loadAccountAvatars(
+		accounts: AccountConfig[],
+		transport: Pick<AvatarTransport, 'get'>,
+		generation: number
+	): Promise<void> {
+		if (accounts.length === 0) return;
+		const results = await Promise.allSettled(
+			accounts.map(async (acct) => {
+				const avatar = await transport.get(acct.account_id);
+				return {
+					accountId: acct.account_id,
+					src: avatar ? avatarToDataUrl(avatar) : ''
+				};
+			})
+		);
+		if (generation !== this.hydrationGeneration) return;
+		const next: Record<string, string> = {};
+		for (const result of results) {
+			if (result.status === 'fulfilled' && result.value.src) {
+				next[result.value.accountId] = result.value.src;
+			}
+		}
+		this.accountAvatars = next;
+	}
 	savedViews = $state<SavedView[]>(
 		nativeAvailable() ? [] : structuredClone(SHELL_SAVED_VIEW_FIXTURES)
 	);
@@ -327,6 +367,7 @@ class AppStore {
 
 		const generation = ++this.hydrationGeneration;
 		const accountTransport = deps.accountTransport ?? nativeAccountTransport;
+		const avatarTransport = deps.avatarTransport ?? nativeAvatarTransport;
 		const inboxTransport = deps.inboxTransport ?? nativeTransport;
 		const remindersTransport = deps.remindersTransport ?? nativeRemindersTransport;
 		const settingsTransport = deps.settingsTransport ?? nativeSettingsTransport;
@@ -343,6 +384,7 @@ class AppStore {
 		this.accounts = accountConfigs.map(mapAccountToShellAccount);
 		void this.loadAccountSubscriptions(accountTransport, generation);
 		void this.loadAccountAliases(accountTransport, generation);
+		void this.loadAccountAvatars(accountConfigs, avatarTransport, generation);
 		const shellPrefsPromise = this.loadShellPreferences(settingsTransport, generation);
 
 		if (accountConfigs.length === 0) {

@@ -75,6 +75,21 @@
 	let archiveFormat = $state<LocalArchiveFormat>('Mbox');
 	let advancedExpanded = $state(false);
 	let showAllMethods = $state(false);
+	let showAllPresets = $state(false);
+	let guideOpen = $state(false);
+	let guideTab = $state<AuthMethod | 'EmailRouting'>('AppPassword');
+
+	const PRIMARY_PRESET_NAMES = new Set(['Gmail', 'Outlook', 'iCloud', 'Proton', 'Other IMAP']);
+
+	function isPresetVisible(name: string): boolean {
+		return showAllPresets || PRIMARY_PRESET_NAMES.has(name) || discovery.selectedPreset === name;
+	}
+
+	function openAliasGuide() {
+		guideTab = 'EmailRouting';
+		guideOpen = true;
+		document.getElementById('account-help-guide')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+	}
 
 	const discovery = new DiscoveryController(
 		untrack(() => discoveryTransport),
@@ -531,36 +546,36 @@
 
 	<form bind:this={form} onsubmit={submit} class="flex flex-col gap-5" autocomplete="off">
 		<fieldset disabled={controller.busy || controller.testing} class="flex flex-col gap-5">
-			<div class="flex flex-col gap-2">
+			<div class="flex flex-col gap-2.5">
 				<label for="discovery-email" class="text-xs font-medium text-foreground">
 					{isArchive ? t.localArchiveEmailLabel : isBridge ? t.emailLabelBridge : t.emailLabel}
 				</label>
-				<div class="flex flex-col gap-2 sm:flex-row">
-					<input
-						id="discovery-email"
-						bind:this={emailInput}
-						name="email"
-						type="text"
-						required
-						maxlength="320"
-						autocomplete="off"
-						placeholder="alex.work@example.com"
-						oninput={(event) => {
-							clearCredentialInputs(form);
-							controller.clearDiagnostics();
-							if (!isArchive) discovery.input(demoMode ? undefined : event.currentTarget.value);
-						}}
-						onblur={(event) => {
-							if (!demoMode && !isArchive) discovery.blur(event.currentTarget.value);
-						}}
-						class="{INPUT_CLS} flex-1"
-					/>
-					{#if !isArchive}
+				<input
+					id="discovery-email"
+					bind:this={emailInput}
+					name="email"
+					type="text"
+					required
+					maxlength="320"
+					autocomplete="off"
+					placeholder="alex.work@example.com"
+					oninput={(event) => {
+						clearCredentialInputs(form);
+						controller.clearDiagnostics();
+						if (!isArchive) discovery.input(demoMode ? undefined : event.currentTarget.value);
+					}}
+					onblur={(event) => {
+						if (!demoMode && !isArchive) discovery.blur(event.currentTarget.value);
+					}}
+					class="{INPUT_CLS} w-full"
+				/>
+				{#if !isArchive}
+					<div class="flex flex-wrap items-center gap-2">
 						<button
 							type="button"
 							disabled={discovery.busy}
 							onclick={handleLookupClick}
-							class="flex min-h-[40px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-separator bg-surface px-3.5 py-2 text-xs font-medium text-foreground whitespace-nowrap hover:bg-field disabled:opacity-50"
+							class="flex min-h-[34px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-foreground whitespace-nowrap hover:bg-field disabled:opacity-50"
 						>
 							<Search class="h-3.5 w-3.5 shrink-0 text-secondary" />
 							<span>{t.onlineLookup}</span>
@@ -571,7 +586,7 @@
 								title={t.detectMxHelp}
 								disabled={discovery.busy}
 								onclick={handleMxClick}
-								class="flex min-h-[40px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-separator bg-surface px-3.5 py-2 text-xs font-medium text-foreground whitespace-nowrap hover:bg-field disabled:opacity-50"
+								class="flex min-h-[34px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-foreground whitespace-nowrap hover:bg-field disabled:opacity-50"
 							>
 								<Search class="h-3.5 w-3.5 shrink-0 text-secondary" />
 								<span>{t.detectMx}</span>
@@ -582,14 +597,14 @@
 								type="button"
 								disabled={discovery.busy}
 								onclick={handleProbeClick}
-								class="flex min-h-[40px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-separator bg-surface px-3.5 py-2 text-xs font-medium text-foreground whitespace-nowrap hover:bg-field disabled:opacity-50"
+								class="flex min-h-[34px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-foreground whitespace-nowrap hover:bg-field disabled:opacity-50"
 							>
 								<ShieldCheck class="h-3.5 w-3.5 shrink-0 text-secondary" />
 								<span>{t.confirmProbe} {discovery.settings.host || '993'}:993</span>
 							</button>
 						{/if}
-					{/if}
-				</div>
+					</div>
+				{/if}
 
 				{#if !isArchive}
 					<div class="flex flex-wrap items-center gap-1.5 pt-1">
@@ -597,6 +612,7 @@
 						{#each providerPresets as preset (preset.name)}
 							<button
 								type="button"
+								hidden={!isPresetVisible(preset.name)}
 								aria-pressed={discovery.selectedPreset === preset.name}
 								onclick={() => applyPreset(preset)}
 								class="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors {discovery.selectedPreset ===
@@ -607,6 +623,23 @@
 								{preset.name}
 							</button>
 						{/each}
+						<button
+							type="button"
+							aria-expanded={showAllPresets}
+							onclick={() => (showAllPresets = !showAllPresets)}
+							class="rounded-md border border-dashed border-separator px-2.5 py-1 text-[11px] font-medium text-secondary transition-colors hover:border-foreground/30 hover:text-foreground"
+						>
+							{showAllPresets ? t.fewerPresets : t.morePresets}
+						</button>
+					</div>
+					<div class="flex flex-wrap items-center justify-between gap-2">
+						<button
+							type="button"
+							onclick={openAliasGuide}
+							class="text-left text-[11px] font-medium text-accent hover:underline"
+						>
+							{t.aliasGuideCta}
+						</button>
 					</div>
 
 					<p role="status" class="min-h-4 text-xs text-secondary">
@@ -655,10 +688,11 @@
 					/>
 				{/if}
 
-				<div class="flex flex-wrap items-center gap-2">
+				<div class="flex flex-wrap items-center justify-between gap-2">
 					<div
 						role="tablist"
 						aria-label={t.methodLabel}
+						hidden={providerKind !== 'custom' && !showAllMethods}
 						class="flex flex-1 flex-wrap gap-1 rounded-md border border-separator bg-field p-1"
 					>
 						{#each authTabs as tab (tab.id)}
@@ -682,7 +716,7 @@
 							type="button"
 							aria-expanded={showAllMethods}
 							onclick={() => (showAllMethods = !showAllMethods)}
-							class="min-h-[38px] shrink-0 rounded-md border border-separator bg-surface px-3 py-1.5 text-[11px] font-medium text-secondary whitespace-nowrap hover:bg-field hover:text-foreground"
+							class="text-[11px] font-medium text-secondary whitespace-nowrap hover:text-foreground hover:underline"
 						>
 							{showAllMethods ? t.fewerSignInMethods : t.allSignInMethods}
 						</button>
@@ -788,7 +822,7 @@
 						</div>
 					{/if}
 
-					<div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-separator bg-field px-3.5 py-2.5">
+					<div class="flex flex-wrap items-center justify-between gap-2 px-0.5">
 						<span class="min-w-0 truncate font-mono text-[11px] text-secondary">
 							{discovery.settings.host.trim()
 								? `${t.resolvedServerSummary} · ${discovery.settings.host}:${discovery.settings.port}`
@@ -799,7 +833,7 @@
 							aria-expanded={showAdvanced}
 							aria-controls="advanced-connection-settings"
 							onclick={() => (advancedExpanded = !showAdvanced)}
-							class="flex min-h-[32px] shrink-0 items-center gap-1.5 rounded-md border border-separator bg-surface px-2.5 py-1 text-xs font-medium text-foreground whitespace-nowrap hover:bg-selection-soft"
+							class="flex shrink-0 items-center gap-1 text-xs font-medium text-secondary whitespace-nowrap hover:text-foreground"
 						>
 							<span>{t.advancedSettings}</span>
 							<ChevronDown
@@ -1083,9 +1117,13 @@
 		</p>
 	{/if}
 
-	<WdgAccountHelpGuide
-		selectedMethod={method}
-		selectedPreset={discovery.selectedPreset}
-		routing={providerKind === 'cloudflare'}
-	/>
+	<div id="account-help-guide">
+		<WdgAccountHelpGuide
+			selectedMethod={method}
+			selectedPreset={discovery.selectedPreset}
+			routing={providerKind === 'cloudflare'}
+			bind:open={guideOpen}
+			bind:activeTab={guideTab}
+		/>
+	</div>
 </section>

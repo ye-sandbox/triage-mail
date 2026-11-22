@@ -259,6 +259,9 @@ export interface Translations {
 		providerGuidanceProton: string;
 		providerGuidanceCustom: string;
 		providerGuidanceCloudflare: string;
+		morePresets: string;
+		fewerPresets: string;
+		aliasGuideCta: string;
 	};
 	guide: {
 		title: string;

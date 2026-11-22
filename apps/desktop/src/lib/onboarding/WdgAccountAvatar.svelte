@@ -5,6 +5,7 @@
 	import { AvatarController, avatarFallback } from './avatar-controller.svelte';
 	import { nativeAvatarTransport } from './avatar-transport';
 	import type { AvatarTransport } from './avatar-types';
+	import { appStore } from '../stores/app.svelte';
 
 	interface Props {
 		accountId: string;
@@ -20,7 +21,9 @@
 	const fallback = $derived(avatarFallback(accountId, label));
 
 	$effect(() => {
-		const photo = new AvatarController(accountId, transport);
+		const photo = new AvatarController(accountId, transport, (src) => {
+			appStore.setAccountAvatarSrc(accountId, src);
+		});
 		controller = photo;
 		untrack(() => void photo.load());
 		return () => photo.dispose();

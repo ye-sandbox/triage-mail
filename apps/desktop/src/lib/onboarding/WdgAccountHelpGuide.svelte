@@ -9,11 +9,17 @@
 		selectedPreset?: string;
 		/** True when discovery detected a forward-only provider (Cloudflare Email Routing). */
 		routing?: boolean;
+		open?: boolean;
+		activeTab?: AuthMethod | 'EmailRouting';
 	}
 
-	let { selectedMethod, selectedPreset, routing = false }: Props = $props();
-	let open = $state(false);
-	let activeTab = $state<AuthMethod | 'EmailRouting'>('AppPassword');
+	let {
+		selectedMethod,
+		selectedPreset,
+		routing = false,
+		open = $bindable(false),
+		activeTab = $bindable<AuthMethod | 'EmailRouting'>('AppPassword')
+	}: Props = $props();
 
 	$effect(() => {
 		if (routing) {

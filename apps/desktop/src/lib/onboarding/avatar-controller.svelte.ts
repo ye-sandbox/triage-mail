@@ -12,14 +12,18 @@ export class AvatarController {
 	private revision = 0;
 	constructor(
 		readonly accountId: string,
-		readonly transport: AvatarTransport
+		readonly transport: AvatarTransport,
+		private readonly onChange?: (src: string) => void
 	) {}
 
 	async load() {
 		const revision = ++this.revision;
 		try {
 			const avatar = await this.transport.get(this.accountId);
-			if (this.active && revision === this.revision) this.src = avatar ? source(avatar) : '';
+			if (this.active && revision === this.revision) {
+				this.src = avatar ? avatarToDataUrl(avatar) : '';
+				this.onChange?.(this.src);
+			}
 		} catch {
 			if (this.active && revision === this.revision) this.error = 'loadError';
 		} finally {
@@ -37,7 +41,7 @@ export class AvatarController {
 			// INVARIANT: Never preview original bytes or send file paths/names across IPC.
 			const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
 			if (!this.active) return this.src;
-			return source(await this.transport.set(this.accountId, bytes));
+			return avatarToDataUrl(await this.transport.set(this.accountId, bytes));
 		});
 	}
 
@@ -55,7 +59,10 @@ export class AvatarController {
 		++this.revision;
 		try {
 			const src = await operation();
-			if (this.active) this.src = src;
+			if (this.active) {
+				this.src = src;
+				this.onChange?.(src);
+			}
 		} catch {
 			if (this.active) this.error = 'saveError';
 		} finally {
@@ -70,7 +77,7 @@ export class AvatarController {
 	}
 }
 
-function source(avatar: AccountAvatar): string {
+export function avatarToDataUrl(avatar: AccountAvatar): string {
 	if (
 		avatar.mime_type !== 'image/png' ||
 		avatar.width !== 128 ||

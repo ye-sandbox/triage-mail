@@ -141,8 +141,6 @@
 			<div>
 				<h1 class="font-display text-lg font-semibold text-foreground">{t.pageTitle}</h1>
 				<div class="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-secondary">
-					<span>SQLCipher + OS Keyring</span>
-					<span aria-hidden="true">·</span>
 					<span class="font-mono tabular-nums">{indexedCount} {t.accountsIndexed}</span>
 					<span aria-hidden="true">·</span>
 					{#if isNative}

@@ -322,7 +322,10 @@ export const translations: Record<SupportedLocale, Translations> = {
 			providerGuidanceCustom:
 				'Configure your IMAP server host and port below, or choose an offline .mbox/.eml import.',
 			providerGuidanceCloudflare:
-				'This domain uses Cloudflare Email Routing, which only forwards mail. Connect the destination mailbox that receives it (the Hub), then add your aliases to that account.'
+				'This domain uses Cloudflare Email Routing, which only forwards mail. Connect the destination mailbox that receives it (the Hub), then add your aliases to that account.',
+			morePresets: 'More providers',
+			fewerPresets: 'Fewer providers',
+			aliasGuideCta: 'Using a custom domain alias (Cloudflare Email Routing)? See setup guide'
 		},
 		guide: {
 			title: 'How sign-in methods work & step-by-step setup',
@@ -993,7 +996,10 @@ export const translations: Record<SupportedLocale, Translations> = {
 			providerGuidanceCustom:
 				'Configure o host e a porta IMAP abaixo ou escolha uma importação .mbox/.eml offline.',
 			providerGuidanceCloudflare:
-				'Este domínio usa o Cloudflare Email Routing, que apenas encaminha e-mails. Conecte a caixa de destino que os recebe (o Hub) e depois adicione seus aliases a essa conta.'
+				'Este domínio usa o Cloudflare Email Routing, que apenas encaminha e-mails. Conecte a caixa de destino que os recebe (o Hub) e depois adicione seus aliases a essa conta.',
+			morePresets: 'Mais provedores',
+			fewerPresets: 'Menos provedores',
+			aliasGuideCta: 'Usa alias de domínio próprio (Cloudflare Email Routing)? Ver guia de configuração'
 		},
 		guide: {
 			title: 'Como funcionam os métodos de login e passo a passo',

@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { Archive, AtSign, Inbox, Mail, Trash2 } from 'lucide-svelte';
+	import { Archive, AtSign, Inbox, Trash2 } from 'lucide-svelte';
 	import { t } from '$lib/i18n';
+	import { avatarFallback } from '$lib/onboarding/avatar-controller.svelte';
 	import { appStore } from '$lib/stores/app.svelte';
 	import WdgAccountPlanBadge from '$lib/onboarding/WdgAccountPlanBadge.svelte';
 	import type { FolderId, ScopeFilter } from '$lib/types';
@@ -25,9 +26,28 @@
 			{t(appStore.locale, 'accounts')}
 		</div>
 		{#each appStore.accounts as account (account.account_id)}
+			{@const avatarSrc = appStore.accountAvatars[account.account_id] ?? ''}
+			{@const fallback = avatarFallback(account.account_id, account.address)}
 			<div class="flex flex-col gap-0.5">
-				<div class="flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium text-foreground">
-					<Mail class="h-3 w-3 shrink-0 text-secondary" />
+				<div class="flex items-center gap-2 px-2 py-1 text-[11px] font-medium text-foreground">
+					{#if avatarSrc}
+						<img
+							src={avatarSrc}
+							alt=""
+							referrerpolicy="no-referrer"
+							class="h-5 w-5 shrink-0 rounded-full border border-separator object-cover"
+						/>
+					{:else}
+						<span
+							aria-hidden="true"
+							class="grid h-5 w-5 shrink-0 place-items-center rounded-full border border-separator font-display text-[9px] font-semibold {fallback.color ===
+							0
+								? 'bg-accent text-accent-foreground'
+								: 'bg-field text-foreground'}"
+						>
+							{fallback.initials}
+						</span>
+					{/if}
 					<span class="truncate">{account.address}</span>
 					<WdgAccountPlanBadge
 						label={appStore.accountSubscriptions[account.account_id]?.effective_badge ?? null}
