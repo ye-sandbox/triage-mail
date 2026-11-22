@@ -6,29 +6,24 @@
 	import Folder from '@lucide/svelte/icons/folder';
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import Layers from '@lucide/svelte/icons/layers';
+	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 	import Star from '@lucide/svelte/icons/star';
+	import Tag from '@lucide/svelte/icons/tag';
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import UserX from '@lucide/svelte/icons/user-x';
-	import { formatCategoryLabel, t } from '$lib/i18n';
+	import { t } from '$lib/i18n';
 	import { appStore } from '$lib/stores/app.svelte';
 	import type { MessageCategory, ScopeFilter } from '$lib/types';
 	import SidebarNavAccounts from './SidebarNavAccounts.svelte';
 	import SidebarNavRoutes from './SidebarNavRoutes.svelte';
+	import WdgLocalCategoriesDialog from './WdgLocalCategoriesDialog.svelte';
 
 	type Props = {
 		onNavigate?: () => void;
 	};
 
 	let { onNavigate }: Props = $props();
-
-	const CATEGORIES: MessageCategory[] = [
-		'Security',
-		'Financial',
-		'Shopping',
-		'Newsletter',
-		'Notifications',
-		'Personal'
-	];
+	let customizeCategoriesOpen = $state(false);
 
 	const pathname = $derived(page.url.pathname);
 
@@ -47,6 +42,9 @@
 		}
 		if (cur.kind === 'category' && scope.kind === 'category') {
 			return cur.category === scope.category;
+		}
+		if (cur.kind === 'custom_category' && scope.kind === 'custom_category') {
+			return cur.category_id === scope.category_id;
 		}
 		if (cur.kind === 'saved_view' && scope.kind === 'saved_view') {
 			return cur.view_id === scope.view_id;
@@ -173,11 +171,24 @@
 			</span>
 		</button>
 
-		<div class="mt-2 px-2 py-1 font-display text-[11px] font-semibold tracking-wide text-secondary">
-			{t(appStore.locale, 'localCategories')}
+		<div class="mt-2 flex items-center justify-between px-2 py-1">
+			<span class="font-display text-[11px] font-semibold tracking-wide text-secondary">
+				{t(appStore.locale, 'localCategories')}
+			</span>
+			<button
+				type="button"
+				onclick={() => (customizeCategoriesOpen = true)}
+				aria-label={t(appStore.locale, 'customizeCategories')}
+				title={t(appStore.locale, 'customizeCategories')}
+				class="grid h-6 w-6 place-items-center rounded text-secondary transition-colors hover:bg-field hover:text-foreground"
+			>
+				<SlidersHorizontal class="h-3 w-3" aria-hidden="true" />
+			</button>
 		</div>
-		{#each CATEGORIES as cat (cat)}
-			{@const scope: ScopeFilter = { kind: 'category', category: cat }}
+		{#each appStore.visibleLocalCategories as item (item.id)}
+			{@const scope: ScopeFilter = item.kind === 'builtin'
+				? { kind: 'category', category: item.id as MessageCategory }
+				: { kind: 'custom_category', category_id: item.id, tag: item.tag ?? item.id }}
 			<button
 				type="button"
 				onclick={() => void selectScope(scope)}
@@ -187,8 +198,12 @@
 					? 'bg-selection font-medium text-foreground'
 					: 'text-secondary hover:bg-field hover:text-foreground'}"
 			>
-				<Folder class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-				<span class="truncate">{formatCategoryLabel(appStore.locale, cat)}</span>
+				{#if item.kind === 'custom'}
+					<Tag class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+				{:else}
+					<Folder class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+				{/if}
+				<span class="truncate">{appStore.formatCategoryDisplay(item.id)}</span>
 			</button>
 		{/each}
 
@@ -218,3 +233,8 @@
 
 	<SidebarNavRoutes {onNavigate} />
 </nav>
+
+<WdgLocalCategoriesDialog
+	open={customizeCategoriesOpen}
+	onOpenChange={(next) => (customizeCategoriesOpen = next)}
+/>

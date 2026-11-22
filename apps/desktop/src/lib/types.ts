@@ -126,6 +126,7 @@ export type ScopeFilter =
 	| { kind: 'alias'; account_id: string; address: string }
 	| { kind: 'new_senders'; status: 'Pending' | 'Declined' }
 	| { kind: 'category'; category: MessageCategory }
+	| { kind: 'custom_category'; category_id: string; tag: string }
 	| { kind: 'saved_view'; view_id: string };
 
 export interface SavedView {

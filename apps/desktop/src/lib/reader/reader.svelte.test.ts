@@ -3,6 +3,7 @@ import { flushSync, mount, tick, unmount } from 'svelte';
 import { InboxController } from '../inbox/controller.svelte';
 import WdgMessageReader from '../inbox/WdgMessageReader.svelte';
 import { createLiveWorkspace } from '../inbox/workspace.svelte';
+import { appStore } from '../stores/app.svelte';
 import type { MessageRowDto } from '../inbox/types';
 import type { CategoryMetadata } from '../categories/types';
 import type { Settings, SettingsTransport } from '../settings/types';
@@ -559,4 +560,79 @@ it('normalizes filenames, enforces preview MIME/size allowlists, and wipes ephem
 	handle.release();
 	expect(revoke).toHaveBeenCalledOnce();
 	expect(Array.from(raw)).toEqual([0, 0, 0, 0]);
+});
+
+it('displays recipients and navigates to the owning account inbox on click', async () => {
+	const priorScope = appStore.activeScope;
+	const priorAccounts = appStore.accounts;
+	appStore.setScope({ kind: 'all' });
+
+	const target = document.body.appendChild(document.createElement('div'));
+	const inbox = new InboxController({
+		search: async () => [],
+		triage: async () => {},
+		subscribe: async () => () => {}
+	});
+	inbox.rows = [row('first')];
+	inbox.selectedId = 'first';
+
+	const workspace = createLiveWorkspace(inbox, {
+		accounts: [
+			{
+				account_id: 'local',
+				email_display: 'mailbox@example.com',
+				imap_host: 'imap.example.com',
+				imap_port: 993,
+				auth_method: 'AppPassword'
+			}
+		],
+		readerTransport: {
+			body: async () => ({
+				...detail('first'),
+				recipients: 'Alice <alice@example.org>, list@example.org'
+			}),
+			attachment: async () => ({ bytes: [] })
+		},
+		settingsTransport: {
+			get: async () => ({
+				ai: { enabled: false, provider: 'Ollama', endpoint: 'http://127.0.0.1:11434', model: 'llama3.2' },
+				tokenizer: 'Unicode61RemoveDiacritics',
+				has_api_key: false,
+				model_cached: false,
+				experimental_semantic_search: false
+			}),
+			save: async () => {},
+			tokenizer: async () => {},
+			setExperimentalSemanticSearch: async () => {},
+			download: async () => {},
+			summarize: async () => 'Summary'
+		}
+	});
+	const onBackToList = vi.fn();
+	const component = mount(WdgMessageReader, { target, props: { workspace, onBackToList } });
+
+	try {
+		await vi.waitFor(() => {
+			expect(target.textContent).toContain('Alice <alice@example.org>, list@example.org');
+			expect(target.textContent).toContain('(mailbox@example.com)');
+		});
+		const btn = target.querySelector<HTMLButtonElement>(
+			'button[aria-label*="mailbox@example.com"]'
+		);
+		expect(btn).not.toBeNull();
+		btn!.click();
+		flushSync();
+		expect(appStore.activeScope).toEqual({
+			kind: 'folder',
+			account_id: 'local',
+			folder: 'INBOX'
+		});
+		expect(onBackToList).toHaveBeenCalledOnce();
+	} finally {
+		await unmount(component);
+		inbox.dispose();
+		target.remove();
+		appStore.setScope(priorScope);
+		appStore.accounts = priorAccounts;
+	}
 });

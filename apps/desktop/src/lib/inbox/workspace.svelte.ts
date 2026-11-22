@@ -230,6 +230,10 @@ export class InboxWorkspace {
 				await this.inbox.selectCategory(scope.category);
 				return;
 			}
+			if (scope.kind === 'custom_category') {
+				await this.inbox.selectCustomTag(scope.tag);
+				return;
+			}
 			if (scope.kind === 'saved_view') {
 				const found = appStore.savedViews.find((v) => v.id === scope.view_id);
 				if (found) {
@@ -300,6 +304,10 @@ export class InboxWorkspace {
 		}
 		if (scope.kind === 'category') {
 			await this.inbox.selectCategory(scope.category);
+			return;
+		}
+		if (scope.kind === 'custom_category') {
+			await this.inbox.selectCustomTag(scope.tag);
 			return;
 		}
 		if (scope.kind === 'saved_view') {

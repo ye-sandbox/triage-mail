@@ -179,7 +179,13 @@
 		</div>
 	{:else}
 		{#key identity}
-			<WdgReaderHeader {message} {workspace} fallbackCategory={detail?.triage_result.category} {onBackToList} />
+			<WdgReaderHeader
+				{message}
+				{workspace}
+				fallbackCategory={detail?.triage_result.category}
+				recipients={detail?.recipients ?? ''}
+				{onBackToList}
+			/>
 
 			<div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
 				{#if conversationRow}

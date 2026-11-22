@@ -404,6 +404,7 @@ async fn lexical_semantic_hybrid_and_details_map_existing_storage_contracts() {
         );
     }
     let body = service.get_message_body("m-1".into()).await.unwrap();
+    assert_eq!(body.recipients, "reader@example.com");
     assert!(body.headers.contains("List-Unsubscribe"));
     assert_eq!(body.html_raw.as_deref(), Some("<p>Invoice</p>"));
     assert_eq!(body.triage_badges, body.triage_result.badges);

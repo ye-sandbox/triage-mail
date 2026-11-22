@@ -377,6 +377,7 @@ export function createDemoBackend(): DemoBackend {
 				id: msg.id,
 				subject: msg.subject,
 				sender: `${msg.sender_name} <${msg.sender_email}>`,
+				recipients: appStore.accounts.find((a) => a.account_id === msg.account_id)?.address ?? '',
 				headers: `From: ${msg.sender_name} <${msg.sender_email}>\nSubject: ${msg.subject}`,
 				text_plain: msg.text_fallback,
 				html_raw: msg.html_raw,

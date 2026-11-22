@@ -24,6 +24,7 @@ export type MessageDetailDto = {
 	id: string;
 	subject: string;
 	sender: string;
+	recipients?: string;
 	headers: string;
 	text_plain: string | null;
 	html_raw: string | null;

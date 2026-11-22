@@ -14,6 +14,13 @@ import type {
 	ThemeScheme,
 	UiZoom
 } from '$lib/appearance/types';
+import {
+	createDefaultLocalCategories,
+	makeCustomCategory,
+	normalizeLocalCategories,
+	type LocalCategoryItem
+} from '$lib/categories/custom';
+import { formatCategoryLabel } from '$lib/i18n';
 import { i18n, type SupportedLocale } from '$lib/i18n/index.svelte';
 import { INBOX_FIXTURES } from '$lib/inbox/inbox.fixtures';
 import { nativeAvailable, nativeTransport } from '$lib/inbox/transport';
@@ -53,6 +60,41 @@ import {
 
 const THEME_STORAGE_KEY = 'triage_mail_theme';
 const APPEARANCE_STORAGE_KEY = 'triage_mail_appearance_v1';
+const COLLAPSED_ACCOUNTS_STORAGE_KEY = 'triage_mail_collapsed_accounts_v1';
+const LOCAL_CATEGORIES_STORAGE_KEY = 'triage_mail_local_categories_v1';
+
+function getInitialCollapsedAccounts(): Record<string, boolean> {
+	if (typeof localStorage !== 'undefined') {
+		try {
+			const raw = localStorage.getItem(COLLAPSED_ACCOUNTS_STORAGE_KEY);
+			if (raw) {
+				const parsed = JSON.parse(raw) as unknown;
+				if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+					const clean: Record<string, boolean> = {};
+					for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+						if (typeof value === 'boolean') clean[key] = value;
+					}
+					return clean;
+				}
+			}
+		} catch {
+			// Ignore malformed persisted state.
+		}
+	}
+	return {};
+}
+
+function getInitialLocalCategories(): LocalCategoryItem[] {
+	if (typeof localStorage !== 'undefined') {
+		try {
+			const raw = localStorage.getItem(LOCAL_CATEGORIES_STORAGE_KEY);
+			if (raw) return normalizeLocalCategories(JSON.parse(raw) as unknown);
+		} catch {
+			// Ignore malformed persisted categories.
+		}
+	}
+	return createDefaultLocalCategories();
+}
 
 export interface NativeShellHydrationDeps {
 	isNative?: () => boolean;
@@ -172,6 +214,15 @@ class AppStore {
 
 	accounts = $state<MailAccount[]>(
 		nativeAvailable() ? [] : structuredClone(SHELL_ACCOUNT_FIXTURES)
+	);
+	collapsedAccounts = $state<Record<string, boolean>>(getInitialCollapsedAccounts());
+	localCategories = $state<LocalCategoryItem[]>(getInitialLocalCategories());
+	visibleLocalCategories = $derived(this.localCategories.filter((c) => !c.hidden));
+	hiddenBuiltinCategories = $derived(
+		this.localCategories.filter((c) => c.kind === 'builtin' && c.hidden)
+	);
+	customLocalCategories = $derived(
+		this.localCategories.filter((c) => c.kind === 'custom' && !c.hidden)
 	);
 	private async loadAccountSubscriptions(
 		transport: Pick<AccountTransport, "subscriptions">,
@@ -421,6 +472,107 @@ class AppStore {
 
 	toggleSidebar() {
 		this.sidebarOpen = !this.sidebarOpen;
+	}
+
+	isAccountCollapsed(accountId: string): boolean {
+		return Boolean(this.collapsedAccounts[accountId]);
+	}
+
+	toggleAccountCollapsed(accountId: string) {
+		const next = {
+			...this.collapsedAccounts,
+			[accountId]: !this.collapsedAccounts[accountId]
+		};
+		this.collapsedAccounts = next;
+		if (typeof localStorage !== 'undefined') {
+			try {
+				localStorage.setItem(COLLAPSED_ACCOUNTS_STORAGE_KEY, JSON.stringify(next));
+			} catch {
+				// Ignore storage quota errors.
+			}
+		}
+	}
+
+	private persistLocalCategories(next: LocalCategoryItem[]) {
+		this.localCategories = next;
+		if (typeof localStorage !== 'undefined') {
+			try {
+				localStorage.setItem(LOCAL_CATEGORIES_STORAGE_KEY, JSON.stringify(next));
+			} catch {
+				// Ignore storage quota errors.
+			}
+		}
+	}
+
+	formatCategoryDisplay(id: string): string {
+		const item = this.localCategories.find((c) => c.id === id);
+		if (item?.customLabel) return item.customLabel;
+		if (
+			id === 'Security' ||
+			id === 'Financial' ||
+			id === 'Shopping' ||
+			id === 'Newsletter' ||
+			id === 'Notifications' ||
+			id === 'Personal'
+		) {
+			return formatCategoryLabel(this.locale, id);
+		}
+		return id;
+	}
+
+	addLocalCategory(name: string): LocalCategoryItem | null {
+		const item = makeCustomCategory(name);
+		if (!item) return null;
+		const duplicate = this.localCategories.some(
+			(c) => !c.hidden && this.formatCategoryDisplay(c.id).toLowerCase() === item.customLabel?.toLowerCase()
+		);
+		if (duplicate) return null;
+		this.persistLocalCategories([...this.localCategories, item]);
+		return item;
+	}
+
+	renameLocalCategory(id: string, nextName: string) {
+		const trimmed = nextName.trim();
+		const target = this.localCategories.find((c) => c.id === id);
+		if (!target) return;
+		if (target.kind === 'custom' && !trimmed) return;
+		const next = this.localCategories.map((c) =>
+			c.id === id ? { ...c, customLabel: trimmed ? trimmed.slice(0, 64) : null } : c
+		);
+		this.persistLocalCategories(next);
+	}
+
+	removeLocalCategory(id: string) {
+		const target = this.localCategories.find((c) => c.id === id);
+		if (!target) return;
+		const next =
+			target.kind === 'custom'
+				? this.localCategories.filter((c) => c.id !== id)
+				: this.localCategories.map((c) => (c.id === id ? { ...c, hidden: true } : c));
+		this.persistLocalCategories(next);
+	}
+
+	restoreLocalCategory(id: string) {
+		const next = this.localCategories.map((c) => (c.id === id ? { ...c, hidden: false } : c));
+		this.persistLocalCategories(next);
+	}
+
+	moveLocalCategory(id: string, direction: 'up' | 'down') {
+		const visible = this.localCategories.filter((c) => !c.hidden);
+		const pos = visible.findIndex((c) => c.id === id);
+		if (pos === -1) return;
+		const swapPos = direction === 'up' ? pos - 1 : pos + 1;
+		if (swapPos < 0 || swapPos >= visible.length) return;
+		const aIdx = this.localCategories.findIndex((c) => c.id === visible[pos].id);
+		const bIdx = this.localCategories.findIndex((c) => c.id === visible[swapPos].id);
+		if (aIdx === -1 || bIdx === -1) return;
+		const next = [...this.localCategories];
+		[next[aIdx], next[bIdx]] = [next[bIdx], next[aIdx]];
+		this.persistLocalCategories(next);
+	}
+
+	resetLocalCategories() {
+		this.persistLocalCategories(createDefaultLocalCategories());
 	}
 
 	setScope(scope: ScopeFilter) {

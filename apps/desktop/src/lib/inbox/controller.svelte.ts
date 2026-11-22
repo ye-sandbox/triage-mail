@@ -63,6 +63,7 @@ export class InboxController {
 	async selectReview(state: ReviewFilter | null) {
 		this.review = state;
 		this.category = null;
+		this.customTag = null;
 		this.savedView = null;
 		this.recipient = undefined;
 		this.mutationError = '';
@@ -72,13 +73,27 @@ export class InboxController {
 	}
 
 	category = $state<Category | null>(null);
+	customTag = $state<string | null>(null);
 	get categoryTransport() {
 		return this.transport.categories;
 	}
 	async selectCategory(category: Category | null) {
 		this.category = category;
+		this.customTag = null;
 		this.review = null;
 		this.savedView = null;
+		this.recipient = undefined;
+		this.mutationError = '';
+		this.mutationNotice = '';
+		clearTimeout(this.refreshTimer);
+		await this.search(this.query, this.mode);
+	}
+	async selectCustomTag(tag: string | null) {
+		this.customTag = tag;
+		this.category = null;
+		this.review = null;
+		this.savedView = null;
+		this.scope = undefined;
 		this.recipient = undefined;
 		this.mutationError = '';
 		this.mutationNotice = '';
@@ -122,6 +137,7 @@ export class InboxController {
 	async selectSavedView(view: SavedView) {
 		this.savedView = view;
 		this.category = null;
+		this.customTag = null;
 		this.review = null;
 		this.scope = undefined;
 		this.recipient = undefined;
@@ -159,6 +175,7 @@ export class InboxController {
 		if (
 			!this.review &&
 			!this.category &&
+			!this.customTag &&
 			!this.savedView &&
 			JSON.stringify(scope) === JSON.stringify(this.scope) &&
 			(recipient ?? undefined) === this.recipient
@@ -166,6 +183,7 @@ export class InboxController {
 			return;
 		this.savedView = null;
 		this.category = null;
+		this.customTag = null;
 		this.review = null;
 		// INVARIANT: Scope changes invalidate all old reads, selection and mutation feedback.
 		this.scope = scope === 'GlobalAllMail' ? undefined : scope;
@@ -216,6 +234,12 @@ export class InboxController {
 			return this.transport.categories
 				? this.transport.categories.search(page, this.category)
 				: Promise.reject('InvalidRequest');
+		if (this.customTag) {
+			const wanted = this.customTag;
+			return this.transport.search({ ...page, scope: 'GlobalAllMail' }).then((rows) =>
+				rows.filter((row) => (this.localTags[row.id] ?? row.tags).includes(wanted))
+			);
+		}
 		return this.transport.search(page);
 	}
 

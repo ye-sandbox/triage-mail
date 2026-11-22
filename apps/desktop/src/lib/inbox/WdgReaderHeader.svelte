@@ -7,7 +7,7 @@
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import UserX from '@lucide/svelte/icons/user-x';
 	import { toast } from 'svelte-sonner';
-	import { formatCategoryLabel, formatTimestamp, t } from '$lib/i18n';
+	import { formatTimestamp, t } from '$lib/i18n';
 	import { i18n } from '$lib/i18n/index.svelte';
 	import { categories, type Category, type CategoryMetadata } from '../categories/types';
 	import { labels as reviewLabels } from '../sender-review/labels';
@@ -16,12 +16,14 @@
 	import type { MessageCategory } from '$lib/types';
 	import type { MessageRowDto } from './types';
 	import WdgReaderActionsBar from './WdgReaderActionsBar.svelte';
+	import WdgReaderRecipients from './WdgReaderRecipients.svelte';
 	import { parseSender, workspaceRegistry, type InboxWorkspace } from './workspace.svelte';
 
 	type Props = {
 		message: MessageRowDto;
 		workspace?: InboxWorkspace;
 		fallbackCategory?: Category;
+		recipients?: string;
 		onBackToList?: () => void;
 	};
 
@@ -29,6 +31,7 @@
 		message,
 		workspace = workspaceRegistry.active!,
 		fallbackCategory,
+		recipients = '',
 		onBackToList
 	}: Props = $props();
 
@@ -95,7 +98,7 @@
 			inbox.badgeRevision++;
 			toast.success(
 				next
-					? `Category updated to ${formatCategoryLabel(appStore.locale, next as MessageCategory)}`
+					? `Category updated to ${appStore.formatCategoryDisplay(next)}`
 					: i18n.t.mailboxes.localSaved
 			);
 		} catch {
@@ -141,7 +144,7 @@
 					aria-label="Message category"
 					class="flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-separator bg-field px-3 py-1 text-xs font-medium text-foreground transition-transform duration-100 ease-out hover:bg-selection-soft active:scale-[0.98] disabled:opacity-50 md:min-h-8"
 				>
-					<span>{formatCategoryLabel(appStore.locale, effectiveCategory)}</span>
+					<span>{appStore.formatCategoryDisplay(effectiveCategory)}</span>
 					<ChevronDown class="h-3 w-3 text-secondary" aria-hidden="true" />
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Portal>
@@ -154,9 +157,20 @@
 								onSelect={() => void correctCategory(cat)}
 								class="cursor-pointer rounded px-3 py-2 text-xs text-foreground outline-none data-[highlighted]:bg-selection-soft"
 							>
-								{formatCategoryLabel(appStore.locale, cat as MessageCategory)}
+								{appStore.formatCategoryDisplay(cat)}
 							</DropdownMenu.Item>
 						{/each}
+						{#if appStore.customLocalCategories.length > 0}
+							<DropdownMenu.Separator class="my-1 h-px bg-separator" />
+							{#each appStore.customLocalCategories as customCat (customCat.id)}
+								<DropdownMenu.Item
+									onSelect={() => void workspace.mutate(message.id, { Tag: customCat.tag ?? customCat.id })}
+									class="cursor-pointer rounded px-3 py-2 text-xs text-foreground outline-none data-[highlighted]:bg-selection-soft"
+								>
+									#{appStore.formatCategoryDisplay(customCat.id)}
+								</DropdownMenu.Item>
+							{/each}
+						{/if}
 						{#if categoryMeta && categoryMeta.correction_revision > 0}
 							<DropdownMenu.Separator class="my-1 h-px bg-separator" />
 							<DropdownMenu.Item
@@ -205,6 +219,7 @@
 				{formatTimestamp(new Date(message.received_at_epoch_ms).toISOString(), appStore.locale)}
 			</time>
 		</div>
+		<WdgReaderRecipients {message} {workspace} {recipients} {onBackToList} />
 	</div>
 
 	{#if reviewChoice && (reviewChoice.state === 'Pending' || inbox.review)}

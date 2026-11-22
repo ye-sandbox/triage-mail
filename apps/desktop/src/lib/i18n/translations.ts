@@ -514,7 +514,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 				requirements:
 					'A destination mailbox with IMAP access (for example Gmail with an App Password) and a domain on Cloudflare, or a mailbox that can auto-forward.',
 				services: 'Cloudflare Email Routing, Gmail/Outlook auto-forwarding, SimpleLogin, Addy.io.',
-				note: 'Aliases are only labels stored locally; no extra login or network request is made for them.',
+				note: 'Aliases are only labels stored locally; no extra login or network request is made for them. Forwarding services (such as Cloudflare Email Routing) are receive-only: they forward incoming mail to your Hub and do not support sending/replying via SMTP from the alias.',
 				fields: [
 					'Connect the Hub: sign in to the destination IMAP mailbox, not to the alias addresses.',
 					'Routed aliases: after connecting, add each forwarded address under "Routed aliases / domains" on the account card.'
@@ -652,6 +652,8 @@ export const translations: Record<SupportedLocale, Translations> = {
 			downloaded: 'Downloaded',
 			noSubject: '(No subject)',
 			unknownSender: 'Unknown sender',
+			toRecipient: 'To:',
+			openAccountInbox: 'Open inbox',
 			loadingMessage: 'Loading message…',
 			loadMessageError: 'Message could not be loaded. Please try again.',
 			tryAgain: 'Try again',
@@ -669,7 +671,25 @@ export const translations: Record<SupportedLocale, Translations> = {
 			previewAttachmentUnsupported:
 				'Preview is only supported for safe images, text, and PDFs up to 10 MiB.',
 			previewAttachmentError: 'Preview failed. Save the file instead.',
-			previewEphemeralNotice: 'Ephemeral in-memory preview — cleared immediately on close.'
+			previewEphemeralNotice: 'Ephemeral in-memory preview — cleared immediately on close.',
+			collapseAccountOptions: 'Collapse account options',
+			expandAccountOptions: 'Expand account options',
+			customizeCategories: 'Customize local categories',
+			customizeCategoriesDesc:
+				'Rename, reorder, hide built-in categories, or create custom local tag-based categories.',
+			addCategory: 'Add category',
+			categoryNamePlaceholder: 'New category name…',
+			renameCategory: 'Rename category',
+			removeCategory: 'Remove category',
+			restoreCategory: 'Restore category',
+			restoreDefaultCategories: 'Restore defaults',
+			hiddenCategories: 'Hidden built-in categories',
+			moveUp: 'Move up',
+			moveDown: 'Move down',
+			customCategoryHint: 'Custom categories filter messages by local tag on this device.',
+			save: 'Save',
+			cancel: 'Cancel',
+			close: 'Close'
 		}
 	},
 	'pt-BR': {
@@ -1188,7 +1208,7 @@ export const translations: Record<SupportedLocale, Translations> = {
 				requirements:
 					'Uma caixa de destino com acesso IMAP (por exemplo Gmail com Senha de App) e um domínio no Cloudflare, ou uma caixa que encaminhe automaticamente.',
 				services: 'Cloudflare Email Routing, encaminhamento automático do Gmail/Outlook, SimpleLogin, Addy.io.',
-				note: 'Aliases são apenas rótulos guardados localmente; nenhum login ou requisição de rede extra é feito para eles.',
+				note: 'Aliases são apenas rótulos guardados localmente; nenhum login ou requisição de rede extra é feito para eles. Serviços de encaminhamento (como o Cloudflare Email Routing) são somente recebimento: encaminham e-mails recebidos para o Hub e não suportam envio/resposta via SMTP pelo alias.',
 				fields: [
 					'Conectar o Hub: entre na caixa IMAP de destino, não nos endereços de alias.',
 					'Aliases roteados: depois de conectar, adicione cada endereço encaminhado em "Aliases / domínios roteados" no cartão da conta.'
@@ -1325,6 +1345,8 @@ export const translations: Record<SupportedLocale, Translations> = {
 			downloaded: 'Baixado',
 			noSubject: '(Sem assunto)',
 			unknownSender: 'Remetente desconhecido',
+			toRecipient: 'Para:',
+			openAccountInbox: 'Abrir caixa de entrada',
 			loadingMessage: 'Carregando mensagem…',
 			loadMessageError: 'Não foi possível carregar a mensagem. Tente novamente.',
 			tryAgain: 'Tentar novamente',
@@ -1343,7 +1365,25 @@ export const translations: Record<SupportedLocale, Translations> = {
 				'A visualização é suportada apenas para imagens seguras, texto e PDFs de até 10 MiB.',
 			previewAttachmentError: 'Falha ao visualizar. Salve o arquivo em vez disso.',
 			previewEphemeralNotice:
-				'Visualização efêmera em memória — apagada imediatamente ao fechar.'
+				'Visualização efêmera em memória — apagada imediatamente ao fechar.',
+			collapseAccountOptions: 'Recolher opções da conta',
+			expandAccountOptions: 'Expandir opções da conta',
+			customizeCategories: 'Personalizar categorias locais',
+			customizeCategoriesDesc:
+				'Renomeie, reordene, oculte categorias padrão ou crie categorias locais personalizadas baseadas em tags.',
+			addCategory: 'Adicionar categoria',
+			categoryNamePlaceholder: 'Nome da nova categoria…',
+			renameCategory: 'Renomear categoria',
+			removeCategory: 'Remover categoria',
+			restoreCategory: 'Restaurar categoria',
+			restoreDefaultCategories: 'Restaurar padrão',
+			hiddenCategories: 'Categorias padrão ocultas',
+			moveUp: 'Mover para cima',
+			moveDown: 'Mover para baixo',
+			customCategoryHint: 'Categorias personalizadas filtram mensagens por tag local neste dispositivo.',
+			save: 'Salvar',
+			cancel: 'Cancelar',
+			close: 'Fechar'
 		}
 	}
 };

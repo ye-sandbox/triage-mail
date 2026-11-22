@@ -100,6 +100,8 @@ pub struct MessageDetailDto {
     pub id: String,
     pub subject: String,
     pub sender: String,
+    #[serde(default)]
+    pub recipients: String,
     pub headers: String,
     pub text_plain: Option<String>,
     pub html_raw: Option<String>,

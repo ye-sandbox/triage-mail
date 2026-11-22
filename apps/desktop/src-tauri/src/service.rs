@@ -676,6 +676,7 @@ impl DesktopService {
                 id: record.id,
                 subject: record.subject,
                 sender: record.sender,
+                recipients: record.recipients,
                 headers: record.raw_headers,
                 text_plain: record.text_body,
                 html_raw: record.html_body,

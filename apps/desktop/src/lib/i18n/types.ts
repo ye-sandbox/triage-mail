@@ -404,6 +404,8 @@ export interface Translations {
 		downloaded: string;
 		noSubject: string;
 		unknownSender: string;
+		toRecipient: string;
+		openAccountInbox: string;
 		loadingMessage: string;
 		loadMessageError: string;
 		tryAgain: string;
@@ -420,5 +422,22 @@ export interface Translations {
 		previewAttachmentUnsupported: string;
 		previewAttachmentError: string;
 		previewEphemeralNotice: string;
+		collapseAccountOptions: string;
+		expandAccountOptions: string;
+		customizeCategories: string;
+		customizeCategoriesDesc: string;
+		addCategory: string;
+		categoryNamePlaceholder: string;
+		renameCategory: string;
+		removeCategory: string;
+		restoreCategory: string;
+		restoreDefaultCategories: string;
+		hiddenCategories: string;
+		moveUp: string;
+		moveDown: string;
+		customCategoryHint: string;
+		save: string;
+		cancel: string;
+		close: string;
 	};
 }

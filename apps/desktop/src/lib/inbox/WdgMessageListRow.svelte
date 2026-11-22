@@ -2,12 +2,11 @@
 	import Clock from '@lucide/svelte/icons/clock';
 	import Paperclip from '@lucide/svelte/icons/paperclip';
 	import Star from '@lucide/svelte/icons/star';
-	import { formatCategoryLabel, formatTimestamp, t } from '$lib/i18n';
+	import { formatTimestamp, t } from '$lib/i18n';
 	import { i18n } from '$lib/i18n/index.svelte';
 	import { labels as conversationLabels } from '../conversations/labels';
 	import { categories, type Category } from '../categories/types';
 	import { appStore } from '$lib/stores/app.svelte';
-	import type { MessageCategory } from '$lib/types';
 	import type { MessageRowDto } from './types';
 	import WdgRowBadges from './WdgRowBadges.svelte';
 	import { parseSender, type InboxWorkspace } from './workspace.svelte';
@@ -33,7 +32,7 @@
 		const override = inbox.folderLabels[row.id];
 		if (override) return override;
 		if (row.category_badge && categories.includes(row.category_badge as Category)) {
-			return formatCategoryLabel(appStore.locale, row.category_badge as MessageCategory);
+			return appStore.formatCategoryDisplay(row.category_badge);
 		}
 		return row.category_badge || row.folder;
 	});
