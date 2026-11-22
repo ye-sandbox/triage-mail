@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-11-22
+
+### Added
+- **Customizable Local Categories:** Rename, reorder, and hide built-in local categories, and create custom tag-based categories from the sidebar (`apps/desktop`).
+- **Reader Recipients:** Show the message's recipients in the reader header, with a shortcut to the owning account inbox (`apps/desktop`, `apps/desktop/src-tauri`).
+
+### Changed
+- **Collapsible Account Sidebar:** Account folders and aliases can be collapsed per account, with the choice remembered on this device (`apps/desktop`).
+- **Forwarding Alias Note:** Clarified in the onboarding guide that forwarding services such as Cloudflare Email Routing are receive-only (EN and PT-BR) (`apps/desktop`).
+
 ## [0.2.5] - 2026-11-22
 
 ### Added
