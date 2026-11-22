@@ -4,7 +4,7 @@
 	import { t } from '$lib/i18n';
 	import { i18n } from '$lib/i18n/index.svelte';
 	import { appStore } from '$lib/stores/app.svelte';
-	import { ROW_HEIGHT, selectionTop, visibleRange } from './virtual';
+	import { selectionTop, visibleRange } from './virtual';
 	import WdgMessageListRow from './WdgMessageListRow.svelte';
 	import { workspaceRegistry, type InboxWorkspace } from './workspace.svelte';
 
@@ -25,7 +25,8 @@
 	});
 
 	const inbox = $derived(workspace.inbox);
-	const range = $derived(visibleRange(inbox.rows.length, top, height));
+	const rowHeight = $derived(appStore.rowHeight);
+	const range = $derived(visibleRange(inbox.rows.length, top, height, rowHeight));
 	const visibleRows = $derived(inbox.rows.slice(range.start, range.end));
 
 	$effect(() => {
@@ -45,14 +46,15 @@
 
 	$effect(() => {
 		const next = inbox.rows;
+		const currentRowHeight = rowHeight;
 		untrack(() => {
-			const index = Math.floor(top / ROW_HEIGHT);
+			const index = Math.floor(top / currentRowHeight);
 			const anchor = previousRows[index]?.id;
 			const moved = anchor ? next.findIndex((row) => row.id === anchor) : -1;
 			previousRows = next;
 			// INVARIANT: Keep the first visible message anchored when sync inserts rows above it.
 			if (moved >= 0 && moved !== index) {
-				top += (moved - index) * ROW_HEIGHT;
+				top += (moved - index) * currentRowHeight;
 				const anchoredTop = top;
 				// INVARIANT: Grow the spacer before restoring a position near the old bottom.
 				void tick().then(() => {
@@ -88,7 +90,7 @@
 						);
 		workspace.selectMessage(inbox.rows[index].id);
 		if (viewport) {
-			top = selectionTop(index, viewport.scrollTop, height);
+			top = selectionTop(index, viewport.scrollTop, height, rowHeight);
 			viewport.scrollTop = top;
 		}
 	}

@@ -5,6 +5,7 @@
 	import Cpu from '@lucide/svelte/icons/cpu';
 	import Database from '@lucide/svelte/icons/database';
 	import Lock from '@lucide/svelte/icons/lock';
+	import Palette from '@lucide/svelte/icons/palette';
 	import Settings2 from '@lucide/svelte/icons/settings-2';
 	import { demoAutomationBackend } from '$lib/automation/automation.fixtures';
 	import type { TransferTransport } from '$lib/backup/transport';
@@ -19,6 +20,7 @@
 	import { nativeSettingsTransport } from './transport';
 	import type { Settings, SettingsTransport } from './types';
 	import WdgAiModelsPanel from './WdgAiModelsPanel.svelte';
+	import WdgAppearancePanel from './WdgAppearancePanel.svelte';
 	import WdgBackupDefinitionsPanel from './WdgBackupDefinitionsPanel.svelte';
 	import WdgPrivacyPanel from './WdgPrivacyPanel.svelte';
 	import WdgSearchIndexPanel from './WdgSearchIndexPanel.svelte';
@@ -48,6 +50,7 @@
 
 	const NAV_ITEMS: { id: SettingsSectionId; icon: typeof Settings2 }[] = [
 		{ id: 'general', icon: Settings2 },
+		{ id: 'appearance', icon: Palette },
 		{ id: 'search', icon: Database },
 		{ id: 'ai', icon: Cpu },
 		{ id: 'privacy', icon: Lock },
@@ -184,6 +187,8 @@
 			<div class="min-w-0">
 				{#if activeSection === 'general'}
 					<WdgPrivacyPanel section="general" {transport} />
+				{:else if activeSection === 'appearance'}
+					<WdgAppearancePanel />
 				{:else if activeSection === 'privacy'}
 					<WdgPrivacyPanel section="privacy" />
 				{:else if activeSection === 'backup'}

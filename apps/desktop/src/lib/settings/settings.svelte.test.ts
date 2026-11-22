@@ -93,6 +93,7 @@ afterEach(() => {
 	vi.restoreAllMocks();
 	vi.useRealTimers();
 	i18n.setLocale('en');
+	appStore.resetAppearance();
 	appStore.setTheme('light');
 	appStore.semanticSearchEnabled = false;
 	appStore.setShellPreferences({ close_to_tray: true, minimize_to_tray: false });
@@ -660,6 +661,66 @@ describe('WdgBackupDefinitionsPanel local archive import', () => {
 		expect(archiveForm.querySelector('[role="alert"]')?.textContent).toContain(
 			'Email belongs to an existing IMAP or recovered account.'
 		);
+
+		await unmount(component);
+	});
+
+	it('renders the Appearance tab and updates palette, font, scale, zoom, density, and reset', async () => {
+		const { target, transport } = fixture();
+		const component = mount(WdgSettingsPage, {
+			target,
+			props: { transport, initialSection: 'appearance' }
+		});
+		await settle();
+
+		expect(target.querySelector('#appearance-heading')?.textContent).toContain(
+			'Appearance & Readability'
+		);
+
+		const nordBtn = [...target.querySelectorAll('[role="radio"]')].find((b) =>
+			b.textContent?.includes('Nord')
+		) as HTMLButtonElement;
+		nordBtn.click();
+		flushSync();
+		expect(appStore.appearance.palette).toBe('nord');
+		expect(document.documentElement.dataset.palette).toBe('nord');
+
+		const serifBtn = [...target.querySelectorAll('[role="radio"]')].find((b) =>
+			b.textContent?.includes('Editorial Serif')
+		) as HTMLButtonElement;
+		serifBtn.click();
+		flushSync();
+		expect(appStore.appearance.font).toBe('serif');
+		expect(document.documentElement.dataset.font).toBe('serif');
+
+		const scale125Btn = [...target.querySelectorAll('[role="radio"]')].find(
+			(b) => b.textContent?.trim() === '125%'
+		) as HTMLButtonElement;
+		scale125Btn.click();
+		flushSync();
+		expect(appStore.appearance.textScale).toBe(125);
+
+		const zoomInBtn = target.querySelector<HTMLButtonElement>('button[aria-label="Zoom in interface"]')!;
+		zoomInBtn.click();
+		flushSync();
+		expect(appStore.appearance.uiZoom).toBe(110);
+
+		const compactBtn = [...target.querySelectorAll('[role="radio"]')].find(
+			(b) => b.textContent?.trim() === 'Compact'
+		) as HTMLButtonElement;
+		compactBtn.click();
+		flushSync();
+		expect(appStore.appearance.density).toBe('compact');
+		expect(appStore.rowHeight).toBe(72);
+
+		const resetBtn = [...target.querySelectorAll('button')].find((b) =>
+			b.textContent?.includes('Reset defaults')
+		) as HTMLButtonElement;
+		resetBtn.click();
+		flushSync();
+		expect(appStore.appearance.palette).toBe('default');
+		expect(appStore.appearance.uiZoom).toBe(100);
+		expect(appStore.rowHeight).toBe(88);
 
 		await unmount(component);
 	});

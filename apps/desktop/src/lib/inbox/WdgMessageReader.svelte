@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy, untrack } from 'svelte';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import { getFontCssStack, getReaderPaletteColors } from '$lib/appearance/palettes';
 	import { t } from '$lib/i18n';
 	import { hasBlockedRemoteImages, sanitizeEmailHtml } from '$lib/security/sanitize';
 	import type { EphemeralAttachmentPreview } from '$lib/reader/preview';
@@ -122,7 +123,13 @@
 	const hasRemoteImages = $derived(Boolean(detail?.html_raw && hasBlockedRemoteImages(detail.html_raw)));
 	const safeSrcDoc = $derived(
 		detail?.html_raw
-			? sanitizeEmailHtml(detail.html_raw, { allowRemoteImages: imagesAllowed, theme: appStore.theme })
+			? sanitizeEmailHtml(detail.html_raw, {
+					allowRemoteImages: imagesAllowed,
+					theme: appStore.theme,
+					textScale: appStore.appearance.textScale,
+					fontFamily: getFontCssStack(appStore.appearance.font),
+					paletteColors: getReaderPaletteColors(appStore.appearance.palette, appStore.theme)
+				})
 			: ''
 	);
 

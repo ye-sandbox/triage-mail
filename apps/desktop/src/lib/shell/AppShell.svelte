@@ -49,7 +49,9 @@
 	});
 
 	function handleGlobalKeydown(event: KeyboardEvent) {
-		if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+		if (!(event.metaKey || event.ctrlKey)) return;
+		const key = event.key.toLowerCase();
+		if (key === 'k') {
 			event.preventDefault();
 			if (windowController.mode === 'minimized') {
 				windowController.restoreFromDock();
@@ -57,6 +59,17 @@
 				windowController.reopen();
 			}
 			appStore.commandOpen = !appStore.commandOpen;
+			return;
+		}
+		if (event.key === '=' || event.key === '+') {
+			event.preventDefault();
+			appStore.zoomIn();
+		} else if (event.key === '-') {
+			event.preventDefault();
+			appStore.zoomOut();
+		} else if (event.key === '0') {
+			event.preventDefault();
+			appStore.resetZoom();
 		}
 	}
 

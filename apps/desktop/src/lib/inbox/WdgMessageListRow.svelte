@@ -9,7 +9,6 @@
 	import { appStore } from '$lib/stores/app.svelte';
 	import type { MessageCategory } from '$lib/types';
 	import type { MessageRowDto } from './types';
-	import { ROW_HEIGHT } from './virtual';
 	import WdgRowBadges from './WdgRowBadges.svelte';
 	import { parseSender, type InboxWorkspace } from './workspace.svelte';
 
@@ -48,7 +47,7 @@
 	aria-label={`${row.is_read ? '' : 'Unread, '}${row.sender}, ${row.subject || t(appStore.locale, 'noSubject')}`}
 	aria-posinset={posinset}
 	aria-setsize={setsize}
-	style:height={`${ROW_HEIGHT}px`}
+	style:height={`${appStore.rowHeight}px`}
 	onclick={onSelect}
 	onkeydown={onKeydown}
 	class="flex cursor-pointer flex-col justify-between border-b border-separator px-3 py-2 transition-colors {selected

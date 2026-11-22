@@ -1,12 +1,28 @@
 import DOMPurify from 'dompurify';
+import type { ReaderPaletteColors } from '$lib/appearance/types';
 
 export interface SanitizeEmailOptions {
 	allowRemoteImages?: boolean;
 	theme?: 'light' | 'dark';
+	textScale?: number;
+	fontFamily?: string;
+	paletteColors?: ReaderPaletteColors;
 }
 
-function buildStylesheet(theme?: 'light' | 'dark'): string {
-	const lightPalette = `
+function buildStylesheet(options: SanitizeEmailOptions): string {
+	const { theme, textScale = 100, fontFamily, paletteColors } = options;
+	const lightPalette = paletteColors && theme === 'light'
+		? `
+	--reader-bg: ${paletteColors.bg};
+	--reader-fg: ${paletteColors.fg};
+	--reader-muted: ${paletteColors.muted};
+	--reader-border: ${paletteColors.border};
+	--reader-link: ${paletteColors.link};
+	--reader-code-bg: ${paletteColors.codeBg};
+	--reader-scrollbar-thumb: rgba(82, 93, 109, 0.24);
+	--reader-scrollbar-thumb-hover: rgba(82, 93, 109, 0.42);
+	--reader-scrollbar-thumb-active: rgba(82, 93, 109, 0.58);`
+		: `
 	--reader-bg: #ffffff;
 	--reader-fg: #111827;
 	--reader-muted: #525d6d;
@@ -17,7 +33,18 @@ function buildStylesheet(theme?: 'light' | 'dark'): string {
 	--reader-scrollbar-thumb-hover: rgba(82, 93, 109, 0.42);
 	--reader-scrollbar-thumb-active: rgba(82, 93, 109, 0.58);`;
 
-	const darkPalette = `
+	const darkPalette = paletteColors && theme !== 'light'
+		? `
+	--reader-bg: ${paletteColors.bg};
+	--reader-fg: ${paletteColors.fg};
+	--reader-muted: ${paletteColors.muted};
+	--reader-border: ${paletteColors.border};
+	--reader-link: ${paletteColors.link};
+	--reader-code-bg: ${paletteColors.codeBg};
+	--reader-scrollbar-thumb: rgba(152, 164, 184, 0.24);
+	--reader-scrollbar-thumb-hover: rgba(152, 164, 184, 0.42);
+	--reader-scrollbar-thumb-active: rgba(152, 164, 184, 0.58);`
+		: `
 	--reader-bg: #121721;
 	--reader-fg: #eef2f7;
 	--reader-muted: #98a4b8;
@@ -38,9 +65,12 @@ function buildStylesheet(theme?: 'light' | 'dark'): string {
 	const mediaFallback =
 		theme === undefined ? `@media (prefers-color-scheme: light) { :root {${lightPalette}\n} }` : '';
 
+	const resolvedFont = fontFamily || "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+	const bodyFontPx = Math.round((14 * textScale) / 100);
+
 	return `
 :root {${rootVars}
-	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	font-family: ${resolvedFont};
 	line-height: 1.6;
 }
 ${mediaFallback}
@@ -67,7 +97,7 @@ body {
 	padding: 16px;
 	background: var(--reader-bg);
 	color: var(--reader-fg);
-	font-size: 14px;
+	font-size: ${bodyFontPx}px;
 	overflow-wrap: anywhere;
 	word-break: break-word;
 }
@@ -170,6 +200,6 @@ export function sanitizeEmailHtml(rawHtml: string, options: SanitizeEmailOptions
 	// INVARIANT: CSP precedes sender content; the caller also uses an empty iframe sandbox.
 	const imgSources = options.allowRemoteImages ? 'data: https:' : 'data:';
 	const csp = `default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src ${imgSources}; connect-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'`;
-	const stylesheet = buildStylesheet(options.theme);
+	const stylesheet = buildStylesheet(options);
 	return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="referrer" content="no-referrer"><style>${stylesheet}</style></head><body>${container.innerHTML}</body></html>`;
 }

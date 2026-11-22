@@ -1,7 +1,7 @@
 import type { SupportedLocale } from '../i18n/types';
 import type { EmbeddingState } from './types';
 
-export type SettingsSectionId = 'general' | 'search' | 'ai' | 'privacy' | 'backup';
+export type SettingsSectionId = 'general' | 'appearance' | 'search' | 'ai' | 'privacy' | 'backup';
 
 export interface SettingsLabels {
 	pageTitle: string;
@@ -45,6 +45,39 @@ export interface SettingsLabels {
 		aboutTitle: string;
 		aboutBody: string;
 		aboutStack: string;
+	};
+	appearance: {
+		heading: string;
+		subtitle: string;
+		resetBtn: string;
+		schemeTitle: string;
+		schemeDesc: string;
+		schemeLight: string;
+		schemeDark: string;
+		schemeSystem: string;
+		paletteTitle: string;
+		paletteDesc: string;
+		accessibilityBadge: string;
+		fontTitle: string;
+		fontDesc: string;
+		textScaleTitle: string;
+		textScaleDesc: string;
+		uiZoomTitle: string;
+		uiZoomDesc: string;
+		zoomOutAria: string;
+		zoomInAria: string;
+		zoomReset: string;
+		densityTitle: string;
+		densityDesc: string;
+		densityCompact: string;
+		densityDefault: string;
+		densityComfortable: string;
+		a11yTitle: string;
+		a11yDesc: string;
+		underlineLinksLabel: string;
+		underlineLinksDesc: string;
+		reduceMotionLabel: string;
+		reduceMotionDesc: string;
 	};
 	privacy: {
 		heading: string;
@@ -206,6 +239,7 @@ export const settingsLabels: Record<SupportedLocale, SettingsLabels> = {
 		navAria: 'Settings categories',
 		tabs: {
 			general: 'General',
+			appearance: 'Appearance',
 			search: 'Search & Embeddings',
 			ai: 'AI & Local Models',
 			privacy: 'Privacy & Network',
@@ -253,6 +287,41 @@ export const settingsLabels: Record<SupportedLocale, SettingsLabels> = {
 			aboutBody:
 				'100% Local-First, Provider-Agnostic, Open-Source (AGPLv3) Email Aggregator & Triage Engine.',
 			aboutStack: 'Zero Electron, zero Python/Node sidecars, zero telemetry.'
+		},
+		appearance: {
+			heading: 'Appearance & Readability',
+			subtitle:
+				'Color palettes, offline typography, font scaling, interface zoom, list density, and accessibility.',
+			resetBtn: 'Reset defaults',
+			schemeTitle: 'Color mode',
+			schemeDesc: 'Choose Light, Dark, or automatically follow your operating system.',
+			schemeLight: 'Light',
+			schemeDark: 'Dark',
+			schemeSystem: 'System',
+			paletteTitle: 'Color palette',
+			paletteDesc:
+				'Preset themes with light and dark variants, including high-contrast and colorblind-safe modes.',
+			accessibilityBadge: 'A11y',
+			fontTitle: 'Typography',
+			fontDesc: '100% local font stacks with zero external network requests.',
+			textScaleTitle: 'Font size',
+			textScaleDesc: 'Scales interface text and email reader body typography.',
+			uiZoomTitle: 'Interface zoom',
+			uiZoomDesc: 'Scales the entire workspace (shortcuts: Ctrl/Cmd +, -, 0).',
+			zoomOutAria: 'Zoom out interface',
+			zoomInAria: 'Zoom in interface',
+			zoomReset: 'Reset',
+			densityTitle: 'Message list density',
+			densityDesc: 'Adjusts row height in the virtualized inbox list.',
+			densityCompact: 'Compact',
+			densityDefault: 'Default',
+			densityComfortable: 'Comfortable',
+			a11yTitle: 'Accessibility',
+			a11yDesc: 'Additional visual and motion adjustments.',
+			underlineLinksLabel: 'Always underline links',
+			underlineLinksDesc: 'Adds persistent underlines to links across the interface.',
+			reduceMotionLabel: 'Reduce motion',
+			reduceMotionDesc: 'Disables UI transitions and animations.'
 		},
 		privacy: {
 			heading: 'Privacy & Network Guarantees',
@@ -447,6 +516,7 @@ export const settingsLabels: Record<SupportedLocale, SettingsLabels> = {
 		navAria: 'Categorias de configurações',
 		tabs: {
 			general: 'Geral',
+			appearance: 'Aparência',
 			search: 'Busca e Embeddings',
 			ai: 'IA e Modelos Locais',
 			privacy: 'Privacidade e Rede',
@@ -495,6 +565,41 @@ export const settingsLabels: Record<SupportedLocale, SettingsLabels> = {
 			aboutBody:
 				'Agregador e motor de triagem de e-mail 100% local, independente de provedor e código aberto (AGPLv3).',
 			aboutStack: 'Zero Electron, zero sidecars Python/Node, zero telemetria.'
+		},
+		appearance: {
+			heading: 'Aparência e Legibilidade',
+			subtitle:
+				'Paletas de cores, tipografia offline, tamanho de fonte, zoom da interface, densidade e acessibilidade.',
+			resetBtn: 'Restaurar padrão',
+			schemeTitle: 'Modo de cor',
+			schemeDesc: 'Escolha Claro, Escuro ou acompanhe automaticamente o sistema operacional.',
+			schemeLight: 'Claro',
+			schemeDark: 'Escuro',
+			schemeSystem: 'Sistema',
+			paletteTitle: 'Tema predefinido (paleta)',
+			paletteDesc:
+				'Temas com variantes clara e escura, incluindo Alto Contraste e modo para Daltonismo.',
+			accessibilityBadge: 'Acess.',
+			fontTitle: 'Tipografia',
+			fontDesc: 'Famílias de fontes 100% locais, sem nenhuma requisição externa.',
+			textScaleTitle: 'Tamanho da fonte',
+			textScaleDesc: 'Escala o texto da interface e o corpo dos e-mails no leitor.',
+			uiZoomTitle: 'Zoom da interface',
+			uiZoomDesc: 'Escala toda a área de trabalho (atalhos: Ctrl/Cmd +, -, 0).',
+			zoomOutAria: 'Diminuir zoom da interface',
+			zoomInAria: 'Aumentar zoom da interface',
+			zoomReset: '100%',
+			densityTitle: 'Densidade da lista de mensagens',
+			densityDesc: 'Ajusta a altura das linhas na caixa de entrada virtualizada.',
+			densityCompact: 'Compacta',
+			densityDefault: 'Padrão',
+			densityComfortable: 'Confortável',
+			a11yTitle: 'Acessibilidade',
+			a11yDesc: 'Ajustes visuais e de movimento adicionais.',
+			underlineLinksLabel: 'Sempre sublinhar links',
+			underlineLinksDesc: 'Exibe sublinhado permanente nos links da interface.',
+			reduceMotionLabel: 'Reduzir animações',
+			reduceMotionDesc: 'Desativa transições e animações da interface.'
 		},
 		privacy: {
 			heading: 'Garantias de Privacidade e Rede',

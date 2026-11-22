@@ -7,7 +7,36 @@
 
 ## Active Task
 
-No task is `RUNNING`. Queue **Cloudflare Email Routing & Alias Hub Virtual Mailboxes**: `[02.13]` DONE; `[01.12]` DONE; `[04.26]` DONE (queue complete). Previous queue (`[04.24]`, `[02.10]`, `[04.25]`, `[02.12]`) is DONE; `[02.11]` remains `FROZEN` (awaiting a user-supplied Azure public-client `client_id`).
+No task is `RUNNING`. Queue **Interface Customization & Accessibility**: `[04.27]` DONE; `[04.28]` DONE (queue complete). Previous queue **Cloudflare Email Routing & Alias Hub Virtual Mailboxes** (`[02.13]`, `[01.12]`, `[04.26]`) is DONE; `[02.11]` remains `FROZEN` (awaiting a user-supplied Azure public-client `client_id`).
+
+---
+
+## Planned Queue — Interface Customization & Accessibility (2026-11-22)
+
+- **Origin:** User request to add richer UI customization (preset color themes, font families, font size/text scale, UI zoom, list density, and accessibility toggles) inspired by `tablyn` (`src/theme.js`, `src/theme.css`).
+- **Constraints:** 100% offline/local (`localStorage` + CSS custom properties + `data-*` attributes on `<html>`), zero external font/network requests (P0), preserve all existing IPC/DB contracts (P1), Svelte 5 Runes only (`svelte-dev`), full EN/PT-BR i18n parity.
+- **Systems Involved (queue):** `apps/desktop/src/app.css`, `apps/desktop/src/lib/appearance/`, `apps/desktop/src/lib/stores/app.svelte.ts`, `apps/desktop/src/lib/security/sanitize.ts`, `apps/desktop/src/lib/inbox/`, `apps/desktop/src/lib/settings/`, `apps/desktop/src/lib/shell/`.
+
+### Task [04.27]: Appearance Tokens, Theme Palettes, Font Presets & Scale/Zoom State (`apps/desktop`)
+
+- **Status:** DONE (2026-11-22)
+- **Priority:** 1 of 2
+- **Scope:**
+  1. `[04.27.1]` **Appearance State & Persistence (`apps/desktop/src/lib/appearance/`, `apps/desktop/src/lib/stores/app.svelte.ts`):** Add `ThemeScheme` (`light | dark | system` with live `prefers-color-scheme` tracking while keeping resolved `appStore.theme: 'light' | 'dark'`), 12 `ThemePalette` presets (`default`, `nord`, `dracula`, `catppuccin`, `solarized`, `gruvbox`, `tokyonight`, `onedark`, `github`, `rosepine`, `contrast`, `colorblind`), 7 offline `FontPreset` stacks (`default`, `system`, `modern`, `serif`, `rounded`, `mono`, `legible`), `TextScale` (`90 | 100 | 112 | 125`), `UiZoom` (`80 | 90 | 100 | 110 | 120 | 125`), `ListDensity` (`compact | default | comfortable`), and accessibility flags (`underlineLinks`, `reduceMotion`). Persist in `localStorage` (`triage_mail_appearance_v1`) while keeping `triage_mail_theme` synchronized.
+  2. `[04.27.2]` **Theme CSS Variables & Swatch Metadata (`apps/desktop/src/app.css`, `apps/desktop/src/lib/appearance/palettes.ts`):** Define light + dark CSS variable overrides for all 12 palettes (`[data-palette="..."]`), 7 font stacks (`[data-font="..."]`), `[data-underline-links]`, `[data-reduce-motion]`, and `[data-contrast="high"]` (plus `prefers-contrast: more` when on `default`).
+  3. `[04.27.3]` **Sandboxed Reader Integration (`apps/desktop/src/lib/security/sanitize.ts`, `WdgMessageReader.svelte`):** Extend `SanitizeEmailOptions` additively with `textScale`, `fontFamily`, and `paletteColors` so the `<iframe sandbox="">` email reader reflects the active theme palette, font, and text scale.
+- **Constraints:** Zero hardcoded colors in Svelte templates; keep `ROW_HEIGHT = 88` default and `appStore.theme` resolved `'light' | 'dark'` for backward compatibility.
+- **Tests:** Vitest unit tests for appearance state/persistence, `system` scheme tracking, zoom clamping, `sanitizeEmailHtml` customization options, and density row heights.
+
+### Task [04.28]: Appearance Settings UI, Keyboard Zoom Shortcuts & List Density (`apps/desktop`)
+
+- **Status:** DONE (2026-11-22)
+- **Priority:** 2 of 2
+- **Scope:**
+  1. `[04.28.1]` **Appearance Settings Panel (`apps/desktop/src/lib/settings/WdgAppearancePanel.svelte`, `WdgSettingsPage.svelte`, `WdgPrivacyPanel.svelte`, `labels.ts`):** Add `'appearance'` section tab in `WdgSettingsPage.svelte` with visual palette swatches, mode selector (`Light`/`Dark`/`System`), font family picker with preview, text scale selector, UI zoom controls, list density selector, accessibility toggles, and reset button; full EN/PT-BR i18n parity.
+  2. `[04.28.2]` **Zoom Shortcuts & Virtualized Density (`apps/desktop/src/lib/shell/AppShell.svelte`, `apps/desktop/src/lib/inbox/WdgMessageList.svelte`, `WdgMessageListRow.svelte`, `virtual.ts`):** Bind `Ctrl/Cmd + =/+`, `Ctrl/Cmd + -`, `Ctrl/Cmd + 0` for UI zoom; apply `ListDensity` row height to the virtualized inbox list.
+- **Constraints:** Svelte 5 Runes only (`svelte-dev`); `WdgAppearancePanel.svelte` ≤ 250 lines; no legacy Svelte 4 syntax.
+- **Tests:** Vitest component tests for Appearance settings tab/controls, zoom shortcuts, density virtualization, `pnpm --filter desktop check/test/build`, and `ci-guard`.
 
 ---
 

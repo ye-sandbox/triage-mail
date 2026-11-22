@@ -1,3 +1,19 @@
+import {
+	DEFAULT_APPEARANCE,
+	DENSITY_ROW_HEIGHT,
+	normalizeAppearance,
+	resolveEffectiveTheme,
+	stepUiZoom
+} from '$lib/appearance/palettes';
+import type {
+	AppearancePreferences,
+	FontPreset,
+	ListDensity,
+	TextScale,
+	ThemePalette,
+	ThemeScheme,
+	UiZoom
+} from '$lib/appearance/types';
 import { i18n, type SupportedLocale } from '$lib/i18n/index.svelte';
 import { INBOX_FIXTURES } from '$lib/inbox/inbox.fixtures';
 import { nativeAvailable, nativeTransport } from '$lib/inbox/transport';
@@ -36,6 +52,7 @@ import {
 } from './app.fixtures';
 
 const THEME_STORAGE_KEY = 'triage_mail_theme';
+const APPEARANCE_STORAGE_KEY = 'triage_mail_appearance_v1';
 
 export interface NativeShellHydrationDeps {
 	isNative?: () => boolean;
@@ -81,6 +98,13 @@ function buildDemoFolderUnreadCounts(): Record<string, number> {
 	return counts;
 }
 
+function getOsPrefersDark(): boolean {
+	if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+		return window.matchMedia('(prefers-color-scheme: dark)').matches;
+	}
+	return false;
+}
+
 function getInitialTheme(): ThemeMode {
 	if (typeof localStorage !== 'undefined') {
 		const saved = localStorage.getItem(THEME_STORAGE_KEY);
@@ -88,16 +112,32 @@ function getInitialTheme(): ThemeMode {
 			return saved;
 		}
 	}
-	if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-		if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-			return 'dark';
+	return getOsPrefersDark() ? 'dark' : 'light';
+}
+
+function getInitialAppearance(): AppearancePreferences {
+	const legacyTheme = getInitialTheme();
+	if (typeof localStorage !== 'undefined') {
+		try {
+			const raw = localStorage.getItem(APPEARANCE_STORAGE_KEY);
+			if (raw) {
+				return normalizeAppearance(JSON.parse(raw) as Partial<AppearancePreferences>, legacyTheme);
+			}
+		} catch {
+			// Ignore malformed persisted appearance JSON and fall back to defaults.
 		}
 	}
-	return 'light';
+	return normalizeAppearance(null, legacyTheme);
 }
 
 class AppStore {
-	theme = $state<ThemeMode>(getInitialTheme());
+	osPrefersDark = $state<boolean>(getOsPrefersDark());
+	appearance = $state<AppearancePreferences>(getInitialAppearance());
+	theme = $derived<ThemeMode>(
+		resolveEffectiveTheme(this.appearance.scheme, this.osPrefersDark)
+	);
+	rowHeight = $derived<number>(DENSITY_ROW_HEIGHT[this.appearance.density]);
+	private schemeListenerBound = false;
 	syncStatus = $state<SyncStatus>('Idle');
 	embeddingErrors = $state<number>(0);
 	sidebarOpen = $state<boolean>(true);
@@ -236,24 +276,139 @@ class AppStore {
 		};
 	}
 
-	setTheme(next: ThemeMode) {
-		this.theme = next;
-		if (typeof document !== 'undefined') {
-			document.documentElement.classList.toggle('dark', next === 'dark');
-		}
-		if (typeof localStorage !== 'undefined') {
-			try {
-				localStorage.setItem(THEME_STORAGE_KEY, next);
-			} catch {
-				// Storage unavailable; in-memory theme persists.
-			}
+	private persistAppearance() {
+		if (typeof localStorage === 'undefined') return;
+		try {
+			localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(this.appearance));
+			localStorage.setItem(THEME_STORAGE_KEY, this.theme);
+		} catch {
+			// Storage unavailable; in-memory appearance persists.
 		}
 	}
 
+	private bindOsSchemeListener() {
+		if (this.schemeListenerBound || typeof window === 'undefined' || !window.matchMedia) return;
+		this.schemeListenerBound = true;
+		const media = window.matchMedia('(prefers-color-scheme: dark)');
+		this.osPrefersDark = media.matches;
+		media.addEventListener?.('change', (event) => {
+			this.osPrefersDark = event.matches;
+			this.syncDocumentTheme();
+		});
+	}
+
+	setTheme(next: ThemeMode) {
+		this.appearance = { ...this.appearance, scheme: next };
+		this.syncDocumentTheme();
+		this.persistAppearance();
+	}
+
+	setScheme(next: ThemeScheme) {
+		this.appearance = { ...this.appearance, scheme: next };
+		this.syncDocumentTheme();
+		this.persistAppearance();
+	}
+
+	setPalette(next: ThemePalette) {
+		this.appearance = { ...this.appearance, palette: next };
+		this.syncDocumentTheme();
+		this.persistAppearance();
+	}
+
+	setFont(next: FontPreset) {
+		this.appearance = { ...this.appearance, font: next };
+		this.syncDocumentTheme();
+		this.persistAppearance();
+	}
+
+	setTextScale(next: TextScale) {
+		this.appearance = { ...this.appearance, textScale: next };
+		this.syncDocumentTheme();
+		this.persistAppearance();
+	}
+
+	setUiZoom(next: UiZoom) {
+		this.appearance = { ...this.appearance, uiZoom: next };
+		this.syncDocumentTheme();
+		this.persistAppearance();
+	}
+
+	zoomIn() {
+		this.setUiZoom(stepUiZoom(this.appearance.uiZoom, 1));
+	}
+
+	zoomOut() {
+		this.setUiZoom(stepUiZoom(this.appearance.uiZoom, -1));
+	}
+
+	resetZoom() {
+		this.setUiZoom(100);
+	}
+
+	setDensity(next: ListDensity) {
+		this.appearance = { ...this.appearance, density: next };
+		this.syncDocumentTheme();
+		this.persistAppearance();
+	}
+
+	setUnderlineLinks(next: boolean) {
+		this.appearance = { ...this.appearance, underlineLinks: next };
+		this.syncDocumentTheme();
+		this.persistAppearance();
+	}
+
+	setReduceMotion(next: boolean) {
+		this.appearance = { ...this.appearance, reduceMotion: next };
+		this.syncDocumentTheme();
+		this.persistAppearance();
+	}
+
+	resetAppearance() {
+		this.appearance = { ...DEFAULT_APPEARANCE };
+		this.syncDocumentTheme();
+		this.persistAppearance();
+	}
+
 	syncDocumentTheme() {
-		if (typeof document !== 'undefined') {
-			document.documentElement.classList.toggle('dark', this.theme === 'dark');
+		this.bindOsSchemeListener();
+		if (typeof document === 'undefined') return;
+		const root = document.documentElement;
+		const effective = resolveEffectiveTheme(this.appearance.scheme, this.osPrefersDark);
+		root.classList.toggle('dark', effective === 'dark');
+
+		if (this.appearance.palette === 'default') delete root.dataset.palette;
+		else root.dataset.palette = this.appearance.palette;
+
+		if (this.appearance.palette === 'contrast') root.dataset.contrast = 'high';
+		else delete root.dataset.contrast;
+
+		if (this.appearance.font === 'default') delete root.dataset.font;
+		else root.dataset.font = this.appearance.font;
+
+		if (this.appearance.textScale === 100) {
+			delete root.dataset.textScale;
+			root.style.fontSize = '';
+		} else {
+			root.dataset.textScale = String(this.appearance.textScale);
+			root.style.fontSize = `${this.appearance.textScale}%`;
 		}
+
+		if (this.appearance.uiZoom === 100) {
+			delete root.dataset.uiZoom;
+			root.style.removeProperty('--ui-zoom');
+		} else {
+			root.dataset.uiZoom = String(this.appearance.uiZoom);
+			root.style.setProperty('--ui-zoom', String(this.appearance.uiZoom / 100));
+		}
+
+		if (this.appearance.density === 'default') delete root.dataset.density;
+		else root.dataset.density = this.appearance.density;
+
+		if (this.appearance.underlineLinks) root.dataset.underlineLinks = 'true';
+		else delete root.dataset.underlineLinks;
+
+		if (this.appearance.reduceMotion) root.dataset.reduceMotion = 'true';
+		else delete root.dataset.reduceMotion;
 	}
 
 	toggleTheme() {
