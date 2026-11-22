@@ -1,19 +1,18 @@
 <script lang="ts">
 	import { Dialog } from 'bits-ui';
-	import { X } from 'lucide-svelte';
+	import X from '@lucide/svelte/icons/x';
 	import { i18n } from '$lib/i18n/index.svelte';
 	import type { Definitions, Mapping } from '$lib/backup/transport';
 	import type { AccountConfig } from '$lib/onboarding/types';
 	import { settingsLabels } from './labels';
 	import type { PortableImportPreview } from './settings.fixtures';
+	import WdgNativeImportPreview from './WdgNativeImportPreview.svelte';
 
 	interface Props {
 		open: boolean;
-		// Demo fixture preview mode
 		preview?: PortableImportPreview | null;
 		onResolveConflict?: (id: string, resolution: 'keep_local' | 'overwrite') => void;
 		onCommit?: () => void;
-		// Native TransferTransport mode
 		nativePreview?: Definitions | null;
 		accounts?: AccountConfig[];
 		destinations?: { id: string; name: string }[];
@@ -47,22 +46,6 @@
 
 	const t = $derived(settingsLabels[i18n.locale]);
 
-	function updateAccountMapping(placeholder: string, targetId: string) {
-		onMappingChange?.({
-			accounts: { ...mapping.accounts, [placeholder]: targetId },
-			destinations: { ...mapping.destinations }
-		});
-		onConsentChange?.(false);
-	}
-
-	function updateDestinationMapping(placeholder: string, targetId: string) {
-		onMappingChange?.({
-			accounts: { ...mapping.accounts },
-			destinations: { ...mapping.destinations, [placeholder]: targetId }
-		});
-		onConsentChange?.(false);
-	}
-
 	function closeDialog() {
 		if (busy) return;
 		open = false;
@@ -90,11 +73,11 @@
 						{nativePreview ? t.backup.reviewHeading : t.importDialog.title}
 					</Dialog.Title>
 					{#if preview && !nativePreview}
-						<p class="mt-0.5 font-mono text-[11px] text-secondary">
+						<p class="mt-1 font-mono text-[11px] text-secondary">
 							{preview.source_filename} · {preview.schema_version}
 						</p>
 					{:else if nativePreview}
-						<p class="mt-0.5 font-mono text-[11px] text-secondary">
+						<p class="mt-1 font-mono text-[11px] text-secondary">
 							schema v{nativePreview.version} · {t.importDialog.rulesCount}: {nativePreview.rules.length} · {t.importDialog.viewsCount}: {nativePreview.views.length}
 						</p>
 					{/if}
@@ -104,91 +87,24 @@
 					aria-label={t.importDialog.closeAria}
 					class="rounded p-1 text-secondary hover:bg-field hover:text-foreground disabled:opacity-40"
 				>
-					<X class="h-4 w-4" />
+					<X class="h-4 w-4" aria-hidden="true" />
 				</Dialog.Close>
 			</div>
 
 			{#if nativePreview}
-				<div class="my-4 space-y-4">
-					<pre
-						class="max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-md border border-separator bg-field p-3 font-mono text-[11px] text-foreground">{JSON.stringify(
-							nativePreview,
-							null,
-							2
-						)}</pre>
-
-					{#if nativePreview.accounts.length > 0 || nativePreview.destinations.length > 0}
-						<div class="space-y-3 rounded-md border border-separator bg-field p-3">
-							<h3 class="text-xs font-semibold text-foreground">{t.backup.mappingHeading}</h3>
-
-							{#each nativePreview.accounts as placeholder (placeholder)}
-								<label class="flex flex-col gap-1.5 text-xs">
-									<span class="font-mono text-secondary">{placeholder}</span>
-									<select
-										value={mapping.accounts[placeholder] ?? ''}
-										disabled={busy}
-										onchange={(e) =>
-											updateAccountMapping(placeholder, e.currentTarget.value)}
-										class="h-9 rounded-md border border-separator bg-surface px-2.5 text-xs text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
-									>
-										<option value="">{t.backup.chooseTarget}</option>
-										{#each accounts as account (account.account_id)}
-											<option value={account.account_id}>{account.email_display}</option>
-										{/each}
-									</select>
-								</label>
-							{/each}
-
-							{#each nativePreview.destinations as placeholder (placeholder)}
-								<label class="flex flex-col gap-1.5 text-xs">
-									<span class="font-mono text-secondary">{placeholder}</span>
-									<select
-										value={mapping.destinations[placeholder] ?? ''}
-										disabled={busy}
-										onchange={(e) =>
-											updateDestinationMapping(placeholder, e.currentTarget.value)}
-										class="h-9 rounded-md border border-separator bg-surface px-2.5 text-xs text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
-									>
-										<option value="">{t.backup.chooseTarget}</option>
-										{#each destinations as destination (destination.id)}
-											<option value={destination.id}>{destination.name}</option>
-										{/each}
-									</select>
-								</label>
-							{/each}
-						</div>
-					{/if}
-
-					<label class="flex cursor-pointer items-start gap-2 text-xs text-secondary">
-						<input
-							type="checkbox"
-							checked={consent}
-							disabled={busy}
-							onchange={(e) => onConsentChange?.(e.currentTarget.checked)}
-							class="mt-0.5 h-3.5 w-3.5 accent-accent"
-						/>
-						<span>{t.backup.approveImport}</span>
-					</label>
-				</div>
-
-				<div class="mt-4 flex justify-end gap-2 border-t border-separator pt-3">
-					<button
-						type="button"
-						disabled={busy}
-						onclick={closeDialog}
-						class="min-h-[36px] rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-secondary hover:text-foreground disabled:opacity-50"
-					>
-						{t.importDialog.cancel}
-					</button>
-					<button
-						type="button"
-						disabled={busy || !complete || !consent}
-						onclick={() => onCommitNative?.()}
-						class="min-h-[36px] rounded-md bg-accent px-4 py-1.5 text-xs font-medium text-accent-foreground hover:opacity-95 disabled:opacity-50"
-					>
-						{busy ? t.backup.busy : t.backup.applyImportBtn}
-					</button>
-				</div>
+				<WdgNativeImportPreview
+					{nativePreview}
+					{accounts}
+					{destinations}
+					{mapping}
+					{consent}
+					{busy}
+					{complete}
+					{onMappingChange}
+					{onConsentChange}
+					{onCommitNative}
+					onClose={closeDialog}
+				/>
 			{:else if preview}
 				<div class="my-4 grid grid-cols-3 gap-3 rounded-md border border-separator bg-field p-3">
 					<div>
@@ -214,7 +130,7 @@
 				<div class="divide-y divide-separator rounded-md border border-separator">
 					{#each preview.items as item (item.id)}
 						<div class="flex flex-wrap items-center justify-between gap-3 p-3 text-xs">
-							<div class="min-w-0 flex-1 space-y-0.5">
+							<div class="min-w-0 flex-1 space-y-1">
 								<div class="flex items-center gap-2 font-medium text-foreground">
 									<span class="font-mono text-[11px] text-secondary">{item.kind}</span>
 									<span aria-hidden="true">·</span>
@@ -223,7 +139,7 @@
 								<p class="text-[11px] text-secondary">{item.summary}</p>
 							</div>
 							{#if item.action === 'conflicting'}
-								<div class="flex shrink-0 items-center gap-1 rounded border border-separator bg-field p-0.5">
+								<div class="flex shrink-0 items-center gap-1 rounded border border-separator bg-field p-1">
 									<button
 										type="button"
 										onclick={() => onResolveConflict?.(item.id, 'keep_local')}
@@ -262,14 +178,14 @@
 					<button
 						type="button"
 						onclick={closeDialog}
-						class="min-h-[36px] rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-secondary hover:text-foreground"
+						class="min-h-[36px] rounded-md border border-separator bg-surface px-3 py-2 text-xs font-medium text-secondary hover:text-foreground"
 					>
 						{t.importDialog.cancel}
 					</button>
 					<button
 						type="button"
 						onclick={() => onCommit?.()}
-						class="min-h-[36px] rounded-md bg-accent px-4 py-1.5 text-xs font-medium text-accent-foreground hover:opacity-95"
+						class="min-h-[36px] rounded-md bg-accent px-4 py-2 text-xs font-medium text-accent-foreground hover:opacity-95"
 					>
 						{t.importDialog.commit}
 					</button>

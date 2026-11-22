@@ -1,15 +1,13 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
-	import {
-		AlertTriangle,
-		CheckCircle2,
-		Command,
-		Menu,
-		RefreshCw,
-		RotateCw,
-		ShieldAlert
-	} from 'lucide-svelte';
+	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
+	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
+	import Command from '@lucide/svelte/icons/command';
+	import Menu from '@lucide/svelte/icons/menu';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+	import RotateCw from '@lucide/svelte/icons/rotate-cw';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import { Drawer } from 'vaul-svelte';
 	import { formatSyncStatus, t } from '$lib/i18n';
 	import { appStore } from '$lib/stores/app.svelte';
@@ -107,16 +105,16 @@
 			>
 				<header
 					aria-label={t(appStore.locale, 'appTitle')}
-					class="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-separator bg-toolbar px-2.5 sm:px-3"
+					class="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-separator bg-toolbar px-3 sm:px-3"
 				>
-					<div class="window-no-drag flex shrink-0 items-center gap-1.5 sm:gap-2">
+					<div class="window-no-drag flex shrink-0 items-center gap-2 sm:gap-2">
 						<button
 							type="button"
 							onclick={() => (appStore.mobileDrawerOpen = true)}
 							aria-label={t(appStore.locale, 'openDrawer')}
 							class="flex min-h-9 min-w-9 items-center justify-center rounded-md text-secondary hover:bg-field hover:text-foreground md:hidden"
 						>
-							<Menu class="h-4 w-4" />
+							<Menu class="h-4 w-4" aria-hidden="true" />
 						</button>
 						<a
 							href="/"
@@ -141,21 +139,21 @@
 						class="window-drag-region h-full min-w-4 flex-1 cursor-grab active:cursor-grabbing"
 					></div>
 
-					<div class="window-no-drag flex shrink-0 items-center gap-1.5 sm:gap-2">
+					<div class="window-no-drag flex shrink-0 items-center gap-2 sm:gap-2">
 						<button
 							type="button"
 							onclick={() => appStore.triggerSync()}
-							class="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-separator bg-surface px-2 py-1 text-xs font-medium transition-transform duration-100 ease-out hover:bg-field active:scale-[0.98] sm:px-2.5 md:h-7"
+							class="flex h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-separator bg-surface px-2 py-1 text-xs font-medium transition-transform duration-100 ease-out hover:bg-field active:scale-[0.98] sm:px-3 md:h-7"
 							title={t(appStore.locale, 'syncNow')}
 						>
 							{#if appStore.syncStatus === 'Idle'}
-								<CheckCircle2 class="h-3.5 w-3.5 {syncColorClass}" />
+								<CheckCircle2 class="h-3.5 w-3.5 {syncColorClass}" aria-hidden="true" />
 							{:else if appStore.syncStatus === 'Syncing' || appStore.syncStatus === 'MutationPending'}
-								<RefreshCw class="h-3.5 w-3.5 animate-spin {syncColorClass}" />
+								<RefreshCw class="h-3.5 w-3.5 animate-spin {syncColorClass}" aria-hidden="true" />
 							{:else if appStore.syncStatus === 'MutationFailed'}
-								<ShieldAlert class="h-3.5 w-3.5 {syncColorClass}" />
+								<ShieldAlert class="h-3.5 w-3.5 {syncColorClass}" aria-hidden="true" />
 							{:else}
-								<AlertTriangle class="h-3.5 w-3.5 {syncColorClass}" />
+								<AlertTriangle class="h-3.5 w-3.5 {syncColorClass}" aria-hidden="true" />
 							{/if}
 							<span class="hidden sm:inline {syncColorClass}"
 								>{formatSyncStatus(appStore.locale, appStore.syncStatus)}</span
@@ -166,9 +164,9 @@
 							type="button"
 							onclick={() => (appStore.commandOpen = true)}
 							aria-label={t(appStore.locale, 'commandPalette')}
-							class="flex h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-separator bg-surface px-2 py-1 text-xs text-secondary transition-transform duration-100 ease-out hover:text-foreground active:scale-[0.98] sm:px-2.5 md:h-7"
+							class="flex h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-separator bg-surface px-2 py-1 text-xs text-secondary transition-transform duration-100 ease-out hover:text-foreground active:scale-[0.98] sm:px-3 md:h-7"
 						>
-							<Command class="h-3.5 w-3.5 shrink-0" />
+							<Command class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 							<span class="hidden lg:inline">{t(appStore.locale, 'commandPalette')}</span>
 							<kbd class="hidden font-mono text-[10px] text-secondary sm:inline">Ctrl+K</kbd>
 						</button>
@@ -219,7 +217,7 @@
 					aria-label={t(appStore.locale, 'syncNow')}
 					class="flex min-h-11 min-w-11 items-center justify-center rounded-md text-secondary hover:text-foreground"
 				>
-					<RotateCw class="h-4 w-4" />
+					<RotateCw class="h-4 w-4" aria-hidden="true" />
 				</button>
 			</div>
 			<div class="min-h-0 flex-1 overflow-y-auto">

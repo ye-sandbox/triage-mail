@@ -19,12 +19,12 @@
 	const t = $derived(i18n.t.accountForm);
 	const options = $derived(recommendedOptions(kind));
 	const BTN =
-		'rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-accent';
+		'rounded-md border px-3 py-1 text-[11px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-accent';
 	const ON = 'border-accent bg-selection-soft text-accent';
 	const OFF = 'border-separator bg-surface text-foreground hover:bg-selection-soft';
 </script>
 
-<div class="space-y-2.5 rounded-md border border-separator bg-field/70 px-3.5 py-3">
+<div class="space-y-3 rounded-md border border-separator bg-field/70 px-4 py-3">
 	<p class="text-xs leading-relaxed text-secondary">{t[guidanceKey(kind)]}</p>
 	<div class="flex flex-wrap items-center gap-2">
 		{#each options as opt (opt.label)}

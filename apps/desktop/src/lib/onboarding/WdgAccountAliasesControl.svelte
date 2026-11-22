@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X } from 'lucide-svelte';
+	import X from '@lucide/svelte/icons/x';
 	import { i18n } from '../i18n/index.svelte';
 	import {
 		MAX_ALIAS_ADDRESS_CHARS,
@@ -111,7 +111,7 @@
 		<button
 			type="submit"
 			disabled={saving || !address.trim()}
-			class="h-8 rounded-md border border-separator bg-surface px-2.5 text-xs font-medium text-foreground hover:bg-field disabled:opacity-50"
+			class="h-8 rounded-md border border-separator bg-surface px-3 text-xs font-medium text-foreground hover:bg-field disabled:opacity-50"
 			>{t.aliasAdd}</button
 		>
 	</form>

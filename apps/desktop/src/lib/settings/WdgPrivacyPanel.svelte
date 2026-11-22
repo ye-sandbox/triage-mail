@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import { Switch } from 'bits-ui';
-	import { Globe, Lock, Monitor, PanelBottomClose, Power, ShieldCheck } from 'lucide-svelte';
+	import Globe from '@lucide/svelte/icons/globe';
+	import Monitor from '@lucide/svelte/icons/monitor';
 	import { toast } from 'svelte-sonner';
 	import { i18n } from '$lib/i18n/index.svelte';
 	import type { SupportedLocale } from '$lib/i18n/types';
@@ -12,6 +12,8 @@
 	import { createDemoSettingsTransport } from './settings.fixtures';
 	import { nativeSettingsTransport } from './transport';
 	import type { SettingsTransport, ShellPreferences } from './types';
+	import WdgPrivacyGuaranteesSection from './WdgPrivacyGuaranteesSection.svelte';
+	import WdgTrayPreferencesCard from './WdgTrayPreferencesCard.svelte';
 
 	interface Props {
 		section: 'general' | 'privacy';
@@ -69,10 +71,6 @@
 		appStore.setLocale(next);
 	}
 
-	function syncWithOsScheme() {
-		appStore.setTheme(osScheme);
-	}
-
 	async function updateTrayPreference(key: keyof ShellPreferences, value: boolean) {
 		if (savingTray || quitting || !transport.saveShellPreferences) return;
 		const previous = { ...shellPrefs };
@@ -122,14 +120,14 @@
 			<h2 id="general-heading" class="font-display text-base font-semibold text-foreground">
 				{t.general.heading}
 			</h2>
-			<p class="mt-0.5 text-xs text-secondary">{t.general.subtitle}</p>
+			<p class="mt-1 text-xs text-secondary">{t.general.subtitle}</p>
 		</div>
 
 		<div class="divide-y divide-separator rounded-lg border border-separator bg-surface">
 			<div class="flex flex-wrap items-center justify-between gap-4 p-4">
 				<div class="max-w-lg space-y-1">
 					<div class="flex items-center gap-2 text-sm font-medium text-foreground">
-						<Globe class="h-4 w-4 text-secondary" />
+						<Globe class="h-4 w-4 text-secondary" aria-hidden="true" />
 						<span>{t.general.languageTitle}</span>
 					</div>
 					<p class="text-xs text-secondary">{t.general.languageDesc}</p>
@@ -146,7 +144,7 @@
 						aria-checked={i18n.locale === 'en'}
 						aria-label={t.general.english}
 						onclick={() => selectLocale('en')}
-						class="min-h-[36px] shrink-0 whitespace-nowrap rounded px-3 py-1.5 text-xs font-medium transition-colors {i18n.locale ===
+						class="min-h-[36px] shrink-0 whitespace-nowrap rounded px-3 py-2 text-xs font-medium transition-colors {i18n.locale ===
 						'en'
 							? 'bg-surface text-foreground shadow-sm'
 							: 'text-secondary hover:text-foreground'}"
@@ -159,7 +157,7 @@
 						aria-checked={i18n.locale === 'pt-BR'}
 						aria-label={t.general.portuguese}
 						onclick={() => selectLocale('pt-BR')}
-						class="min-h-[36px] shrink-0 whitespace-nowrap rounded px-3 py-1.5 text-xs font-medium transition-colors {i18n.locale ===
+						class="min-h-[36px] shrink-0 whitespace-nowrap rounded px-3 py-2 text-xs font-medium transition-colors {i18n.locale ===
 						'pt-BR'
 							? 'bg-surface text-foreground shadow-sm'
 							: 'text-secondary hover:text-foreground'}"
@@ -172,7 +170,7 @@
 			<div class="flex flex-wrap items-center justify-between gap-4 p-4">
 				<div class="max-w-lg space-y-1">
 					<div class="flex items-center gap-2 text-sm font-medium text-foreground">
-						<Monitor class="h-4 w-4 text-secondary" />
+						<Monitor class="h-4 w-4 text-secondary" aria-hidden="true" />
 						<span>{t.general.themeTitle}</span>
 					</div>
 					<p class="text-xs leading-relaxed text-secondary">
@@ -186,85 +184,33 @@
 				<div class="flex shrink-0 items-center gap-2">
 					<button
 						type="button"
-						onclick={syncWithOsScheme}
-						class="min-h-[36px] shrink-0 whitespace-nowrap rounded-md border border-separator bg-field px-3 py-1.5 text-xs font-medium text-foreground hover:bg-selection-soft"
+						onclick={() => appStore.setTheme(osScheme)}
+						class="min-h-[36px] shrink-0 whitespace-nowrap rounded-md border border-separator bg-field px-3 py-2 text-xs font-medium text-foreground hover:bg-selection-soft"
 					>
 						{t.general.matchOs(osScheme)}
 					</button>
 					<button
 						type="button"
 						onclick={() => appStore.toggleTheme()}
-						class="min-h-[36px] shrink-0 whitespace-nowrap rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-secondary hover:text-foreground"
+						class="min-h-[36px] shrink-0 whitespace-nowrap rounded-md border border-separator bg-surface px-3 py-2 text-xs font-medium text-secondary hover:text-foreground"
 					>
 						{t.general.previewTheme(appStore.theme === 'dark' ? t.general.light : t.general.dark)}
 					</button>
 				</div>
 			</div>
 
-			<div class="space-y-4 p-4">
-				<div class="space-y-1">
-					<div class="flex items-center gap-2 text-sm font-medium text-foreground">
-						<PanelBottomClose class="h-4 w-4 text-secondary" />
-						<span>{t.general.trayTitle}</span>
-					</div>
-					<p class="text-xs text-secondary">{t.general.trayDesc}</p>
-				</div>
+			<WdgTrayPreferencesCard
+				{shellPrefs}
+				{savingTray}
+				{quitting}
+				{trayError}
+				canSave={Boolean(transport.saveShellPreferences)}
+				canQuit={Boolean(transport.quitApp)}
+				onUpdateTray={updateTrayPreference}
+				onQuit={handleQuitCompletely}
+			/>
 
-				<div class="flex flex-col gap-3 rounded-md border border-separator bg-field p-3">
-					<div class="flex items-center justify-between gap-4">
-						<div class="space-y-0.5">
-							<div class="text-xs font-medium text-foreground">{t.general.closeToTrayLabel}</div>
-							<p class="text-xs text-secondary">{t.general.closeToTrayDesc}</p>
-						</div>
-						<Switch.Root
-							checked={shellPrefs.close_to_tray}
-							disabled={savingTray || quitting || !transport.saveShellPreferences}
-							onCheckedChange={(checked) => void updateTrayPreference('close_to_tray', checked)}
-							aria-label={t.general.closeToTrayLabel}
-							class="inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-separator p-0.5 transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-accent data-[state=unchecked]:bg-surface"
-						>
-							<Switch.Thumb class="pointer-events-none block h-3.5 w-3.5 rounded-full bg-surface shadow-sm transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0" />
-						</Switch.Root>
-					</div>
-
-					<div class="h-px bg-separator"></div>
-
-					<div class="flex items-center justify-between gap-4">
-						<div class="space-y-0.5">
-							<div class="text-xs font-medium text-foreground">{t.general.minimizeToTrayLabel}</div>
-							<p class="text-xs text-secondary">{t.general.minimizeToTrayDesc}</p>
-						</div>
-						<Switch.Root
-							checked={shellPrefs.minimize_to_tray}
-							disabled={savingTray || quitting || !transport.saveShellPreferences}
-							onCheckedChange={(checked) => void updateTrayPreference('minimize_to_tray', checked)}
-							aria-label={t.general.minimizeToTrayLabel}
-							class="inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-separator p-0.5 transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-accent data-[state=unchecked]:bg-surface"
-						>
-							<Switch.Thumb class="pointer-events-none block h-3.5 w-3.5 rounded-full bg-surface shadow-sm transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0" />
-						</Switch.Root>
-					</div>
-				</div>
-
-				{#if trayError}
-					<p role="alert" class="text-xs text-status-danger">{trayError}</p>
-				{/if}
-
-				<div class="flex flex-wrap items-center justify-between gap-4 pt-1">
-					<p class="text-xs text-secondary">{t.general.quitCompletelyHint}</p>
-					<button
-						type="button"
-						onclick={() => void handleQuitCompletely()}
-						disabled={quitting || !transport.quitApp}
-						class="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-status-danger/40 bg-status-danger/10 px-3 py-1.5 text-xs font-medium text-status-danger hover:bg-status-danger/15 disabled:opacity-50"
-					>
-						<Power class="h-3.5 w-3.5" />
-						<span>{t.general.quitCompletelyBtn}</span>
-					</button>
-				</div>
-			</div>
-
-			<div class="space-y-1.5 p-4">
+			<div class="space-y-2 p-4">
 				<h3 class="text-sm font-medium text-foreground">{t.general.aboutTitle}</h3>
 				<p class="text-xs text-secondary">{t.general.aboutBody}</p>
 				<p class="font-mono text-[11px] text-secondary">{t.general.aboutStack}</p>
@@ -272,61 +218,5 @@
 		</div>
 	</section>
 {:else}
-	<section class="flex flex-col gap-5" aria-label={t.privacy.heading} aria-labelledby="privacy-heading">
-		<div class="border-b border-separator pb-3">
-			<h2 id="privacy-heading" class="font-display text-base font-semibold text-foreground">
-				{t.privacy.heading}
-			</h2>
-			<p class="mt-0.5 text-xs text-secondary">{t.privacy.subtitle}</p>
-		</div>
-
-		<div class="divide-y divide-separator rounded-lg border border-separator bg-surface">
-			<div class="flex flex-wrap items-start justify-between gap-4 p-4">
-				<div class="max-w-xl space-y-1">
-					<div class="flex items-center gap-2 text-sm font-medium text-foreground">
-						<ShieldCheck class="h-4 w-4 text-status-healthy" />
-						<span>{t.privacy.zeroTelemetryTitle}</span>
-					</div>
-					<p class="text-xs leading-relaxed text-secondary">{t.privacy.zeroTelemetryBody}</p>
-				</div>
-				<span class="shrink-0 whitespace-nowrap font-mono text-xs font-medium text-status-healthy">
-					{t.privacy.zeroTelemetryBadge}
-				</span>
-			</div>
-
-			<div class="flex flex-wrap items-start justify-between gap-4 p-4">
-				<div class="max-w-xl space-y-1">
-					<div class="flex items-center gap-2 text-sm font-medium text-foreground">
-						<Lock class="h-4 w-4 text-status-healthy" />
-						<span>{t.privacy.remoteImagesTitle}</span>
-					</div>
-					<p class="text-xs leading-relaxed text-secondary">{t.privacy.remoteImagesBody}</p>
-				</div>
-				<span
-					class="shrink-0 whitespace-nowrap rounded border border-status-healthy/40 bg-status-healthy/10 px-2 py-0.5 font-mono text-xs font-medium text-status-healthy"
-				>
-					{t.privacy.remoteImagesBadge}
-				</span>
-			</div>
-
-			<div class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
-				<div class="space-y-1">
-					<div class="text-xs font-medium text-foreground">{t.privacy.vaultEncryptionTitle}</div>
-					<p class="text-xs text-secondary">{t.privacy.vaultEncryptionBody}</p>
-				</div>
-				<div class="space-y-1">
-					<div class="text-xs font-medium text-foreground">{t.privacy.htmlSanitizationTitle}</div>
-					<p class="text-xs text-secondary">{t.privacy.htmlSanitizationBody}</p>
-				</div>
-				<div class="space-y-1">
-					<div class="text-xs font-medium text-foreground">{t.privacy.offlineTransportTitle}</div>
-					<p class="text-xs text-secondary">{t.privacy.offlineTransportBody}</p>
-				</div>
-				<div class="space-y-1">
-					<div class="text-xs font-medium text-foreground">{t.privacy.onDemandAttachmentsTitle}</div>
-					<p class="text-xs text-secondary">{t.privacy.onDemandAttachmentsBody}</p>
-				</div>
-			</div>
-		</div>
-	</section>
+	<WdgPrivacyGuaranteesSection />
 {/if}

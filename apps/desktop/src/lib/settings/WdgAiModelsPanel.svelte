@@ -1,13 +1,15 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { Switch } from 'bits-ui';
-	import { CheckCircle2, Cpu, KeyRound, Lock } from 'lucide-svelte';
+	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
+	import KeyRound from '@lucide/svelte/icons/key-round';
 	import { toast } from 'svelte-sonner';
 	import { i18n } from '$lib/i18n/index.svelte';
 	import { clearCredentialInputs } from '$lib/onboarding/forms';
 	import type { SettingsFormGuard } from './guards';
 	import { settingsLabels } from './labels';
 	import type { AiSettings, Settings, SettingsTransport } from './types';
+	import WdgAiProviderSelector from './WdgAiProviderSelector.svelte';
 
 	interface Props {
 		settings: Settings;
@@ -121,10 +123,10 @@
 			<h2 id="ai-models-heading" class="font-display text-base font-semibold text-foreground">
 				{t.heading}
 			</h2>
-			<p class="mt-0.5 text-xs text-secondary">{t.subtitle}</p>
+			<p class="mt-1 text-xs text-secondary">{t.subtitle}</p>
 		</div>
 
-		<div class="flex shrink-0 items-center gap-2.5">
+		<div class="flex shrink-0 items-center gap-3">
 			<span class="font-mono text-xs {enabled ? 'text-status-healthy' : 'text-secondary'}">
 				{enabled ? t.enabledBadge : t.disabledBadge}
 			</span>
@@ -133,7 +135,7 @@
 				disabled={saving || busy}
 				onCheckedChange={(checked) => (enabled = checked)}
 				aria-label={t.enableAria}
-				class="inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-separator p-0.5 transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-accent data-[state=unchecked]:bg-field"
+				class="inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-separator p-1 transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-accent data-[state=unchecked]:bg-field"
 			>
 				<Switch.Thumb class="pointer-events-none block h-3.5 w-3.5 rounded-full bg-surface shadow-sm transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0" />
 			</Switch.Root>
@@ -149,53 +151,10 @@
 	>
 		<p class="text-xs leading-relaxed text-secondary">{t.disclosure}</p>
 
-		<div class="flex flex-col gap-2">
-			<span class="text-xs font-medium text-foreground">{t.providerLabel}</span>
-			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-				<button
-					type="button"
-					disabled={saving || busy}
-					aria-pressed={provider === 'Ollama'}
-					onclick={() => selectProvider('Ollama')}
-					class="flex flex-col items-start gap-1 rounded-md border p-3 text-left transition-colors disabled:cursor-not-allowed {provider ===
-					'Ollama'
-						? 'border-accent bg-selection-soft'
-						: 'border-separator bg-field hover:bg-selection-soft/40'}"
-				>
-					<div class="flex w-full items-center justify-between gap-2">
-						<span class="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-							<Cpu class="h-3.5 w-3.5 text-secondary" />
-							<span>{t.ollamaTitle}</span>
-						</span>
-						<span class="font-mono text-[11px] text-status-healthy">{t.ollamaBadge}</span>
-					</div>
-					<span class="font-mono text-[11px] text-secondary">{t.ollamaDesc}</span>
-				</button>
-
-				<button
-					type="button"
-					disabled={saving || busy}
-					aria-pressed={provider === 'Byok'}
-					onclick={() => selectProvider('Byok')}
-					class="flex flex-col items-start gap-1 rounded-md border p-3 text-left transition-colors disabled:cursor-not-allowed {provider ===
-					'Byok'
-						? 'border-accent bg-selection-soft'
-						: 'border-separator bg-field hover:bg-selection-soft/40'}"
-				>
-					<div class="flex w-full items-center justify-between gap-2">
-						<span class="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-							<Lock class="h-3.5 w-3.5 text-secondary" />
-							<span>{t.byokTitle}</span>
-						</span>
-						<span class="font-mono text-[11px] text-status-warning">{t.byokBadge}</span>
-					</div>
-					<span class="font-mono text-[11px] text-secondary">{t.byokDesc}</span>
-				</button>
-			</div>
-		</div>
+		<WdgAiProviderSelector {provider} disabled={saving || busy} onSelect={selectProvider} />
 
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-			<label class="flex flex-col gap-1.5">
+			<label class="flex flex-col gap-2">
 				<span class="text-xs font-medium text-foreground">{t.endpointLabel}</span>
 				<input
 					name="endpoint"
@@ -208,7 +167,7 @@
 				/>
 			</label>
 
-			<label class="flex flex-col gap-1.5">
+			<label class="flex flex-col gap-2">
 				<span class="text-xs font-medium text-foreground">{t.modelLabel}</span>
 				<input
 					name="model"
@@ -227,14 +186,14 @@
 
 		<div class="flex flex-col gap-3 border-t border-separator pt-4">
 			<div class="flex flex-wrap items-center justify-between gap-2">
-				<label for="ai-vault-api-key" class="flex items-center gap-1.5 text-xs font-medium text-foreground">
-					<KeyRound class="h-3.5 w-3.5 text-secondary" />
+				<label for="ai-vault-api-key" class="flex items-center gap-2 text-xs font-medium text-foreground">
+					<KeyRound class="h-3.5 w-3.5 text-secondary" aria-hidden="true" />
 					<span>{t.apiKeyLabel}</span>
 				</label>
 
 				{#if settings.has_api_key}
-					<span class="flex items-center gap-1.5 font-mono text-xs font-medium text-status-healthy">
-						<CheckCircle2 class="h-3.5 w-3.5 shrink-0" />
+					<span class="flex items-center gap-2 font-mono text-xs font-medium text-status-healthy">
+						<CheckCircle2 class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 						<span>{t.keyStored}</span>
 					</span>
 				{:else}
@@ -270,7 +229,7 @@
 			<button
 				type="submit"
 				disabled={saving || busy}
-				class="min-h-[36px] shrink-0 whitespace-nowrap rounded-md bg-accent px-4 py-1.5 text-xs font-medium text-accent-foreground hover:opacity-95 disabled:opacity-50"
+				class="min-h-[36px] shrink-0 whitespace-nowrap rounded-md bg-accent px-4 py-2 text-xs font-medium text-accent-foreground hover:opacity-95 disabled:opacity-50"
 			>
 				{saving ? t.savingBtn : t.saveBtn}
 			</button>

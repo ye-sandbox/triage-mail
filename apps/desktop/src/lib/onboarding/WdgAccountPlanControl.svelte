@@ -85,7 +85,7 @@
 				type="button"
 				disabled={!pending}
 				onclick={() => void apply()}
-				class="h-8 rounded-md border border-separator bg-surface px-2.5 text-xs font-medium text-foreground hover:bg-field disabled:opacity-50"
+				class="h-8 rounded-md border border-separator bg-surface px-3 text-xs font-medium text-foreground hover:bg-field disabled:opacity-50"
 				>{t.planApply}</button
 			>
 		{/if}

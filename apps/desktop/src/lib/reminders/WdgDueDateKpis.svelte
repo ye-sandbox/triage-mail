@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { AlertCircle, CalendarCheck2, Clock } from 'lucide-svelte';
+	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import CalendarCheck2 from '@lucide/svelte/icons/calendar-check-2';
+	import Clock from '@lucide/svelte/icons/clock';
 	import { formatBrl } from '$lib/i18n';
 	import { i18n } from '$lib/i18n/index.svelte';
 	import { appStore } from '$lib/stores/app.svelte';
@@ -75,12 +77,12 @@
 				: 'border-separator bg-surface hover:bg-field'}"
 		>
 			<div class="flex items-center justify-between gap-2">
-				<span class="flex items-center gap-1.5 text-xs font-semibold {bucket.tokenClass}">
+				<span class="flex items-center gap-2 text-xs font-semibold {bucket.tokenClass}">
 					<BucketIcon class="h-4 w-4 shrink-0" />
 					<span class="whitespace-nowrap">{bucket.label}</span>
 				</span>
 				<span
-					class="rounded-md border px-2 py-0.5 font-mono text-xs font-semibold tabular-nums {bucket.badgeBgClass}"
+					class="rounded-md border px-2 py-1 font-mono text-xs font-semibold tabular-nums {bucket.badgeBgClass}"
 				>
 					{bucket.count}
 				</span>

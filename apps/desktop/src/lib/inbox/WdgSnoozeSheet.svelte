@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Dialog } from 'bits-ui';
-	import { Clock } from 'lucide-svelte';
+	import Clock from '@lucide/svelte/icons/clock';
 	import { Drawer } from 'vaul-svelte';
 	import { i18n } from '$lib/i18n/index.svelte';
 	import type { TriageAction } from './triage';
@@ -130,7 +130,7 @@
 					bind:this={deadlineInput}
 					bind:value={deadline}
 					required
-					class="mt-1.5 block h-9 w-full rounded-md border border-separator bg-field px-3 text-xs text-foreground focus:border-accent focus:outline-none"
+					class="mt-2 block h-9 w-full rounded-md border border-separator bg-field px-3 text-xs text-foreground focus:border-accent focus:outline-none"
 				/>
 			</label>
 			{#if invalid}
@@ -140,13 +140,13 @@
 				<button
 					type="button"
 					onclick={() => setOpen(false)}
-					class="min-h-11 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-secondary hover:text-foreground md:min-h-8"
+					class="min-h-11 rounded-md border border-separator bg-surface px-3 py-2 text-xs font-medium text-secondary hover:text-foreground md:min-h-8"
 				>
 					{tMailboxes.close}
 				</button>
 				<button
 					type="submit"
-					class="min-h-11 rounded-md bg-accent px-4 py-1.5 text-xs font-medium text-accent-foreground md:min-h-8"
+					class="min-h-11 rounded-md bg-accent px-4 py-2 text-xs font-medium text-accent-foreground md:min-h-8"
 				>
 					{tMailboxes.saveSnooze}
 				</button>
@@ -164,7 +164,7 @@
 			>
 				<div class="space-y-1">
 					<div class="flex items-center gap-2">
-						<Clock class="h-4 w-4 text-status-warning" />
+						<Clock class="h-4 w-4 text-status-warning" aria-hidden="true" />
 						<h2 class="font-display text-sm font-semibold">{tMailboxes.snooze}</h2>
 					</div>
 					<p class="text-xs text-secondary">{tMailboxes.snoozeHelp}</p>
@@ -185,7 +185,7 @@
 				class="fixed top-1/2 left-1/2 z-50 w-[min(92vw,520px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-separator bg-surface p-5 text-foreground shadow-xl outline-none"
 			>
 				<Dialog.Title class="flex items-center gap-2 font-display text-sm font-semibold">
-					<Clock class="h-4 w-4 text-status-warning" />
+					<Clock class="h-4 w-4 text-status-warning" aria-hidden="true" />
 					<span>{tMailboxes.snooze}</span>
 				</Dialog.Title>
 				<Dialog.Description class="mt-1 mb-4 text-xs text-secondary">

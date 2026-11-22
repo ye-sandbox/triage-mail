@@ -1,23 +1,20 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { Select } from 'bits-ui';
-	import {
-		AlertCircle,
-		ChevronDown,
-		Layers,
-		MessageSquare,
-		PanelLeftClose,
-		PanelLeftOpen,
-		Search,
-		Settings,
-		X
-	} from 'lucide-svelte';
-	import { formatCategoryLabel, formatSyncStatus, t } from '$lib/i18n';
-	import { i18n } from '$lib/i18n/index.svelte';
-	import { labels as reviewLabels } from '../sender-review/labels';
+	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import Layers from '@lucide/svelte/icons/layers';
+	import MessageSquare from '@lucide/svelte/icons/message-square';
+	import PanelLeftClose from '@lucide/svelte/icons/panel-left-close';
+	import PanelLeftOpen from '@lucide/svelte/icons/panel-left-open';
+	import Search from '@lucide/svelte/icons/search';
+	import Settings from '@lucide/svelte/icons/settings';
+	import X from '@lucide/svelte/icons/x';
+	import { t } from '$lib/i18n';
 	import { appStore } from '$lib/stores/app.svelte';
-	import type { MessageCategory } from '$lib/types';
+	import { resolveInboxScopeLabel } from './scope-label';
 	import type { SearchMode } from './types';
+	import WdgInboxTelemetryStrip from './WdgInboxTelemetryStrip.svelte';
 	import { workspaceRegistry, type InboxWorkspace } from './workspace.svelte';
 
 	type Props = {
@@ -63,37 +60,7 @@
 		return () => clearTimeout(timer);
 	});
 
-	const scopeLabel = $derived.by(() => {
-		const inbox = workspace.inbox;
-		if (inbox.review) {
-			return `${reviewLabels[i18n.locale].title} · ${reviewLabels[i18n.locale][inbox.review]}`;
-		}
-		if (inbox.savedView) return inbox.savedView.name;
-		if (inbox.category) return formatCategoryLabel(appStore.locale, inbox.category as MessageCategory);
-		const s = appStore.activeScope;
-		switch (s.kind) {
-			case 'all':
-				return t(appStore.locale, 'globalAllMail');
-			case 'inbox':
-				return t(appStore.locale, 'inbox');
-			case 'starred':
-				return t(appStore.locale, 'starred');
-			case 'snoozed':
-				return t(appStore.locale, 'snoozed');
-			case 'folder': {
-				const acct = appStore.accounts.find((a) => a.account_id === s.account_id);
-				return `${acct?.address ?? s.account_id} / ${s.folder}`;
-			}
-			case 'new_senders':
-				return `${t(appStore.locale, 'newSendersReview')} · ${s.status}`;
-			case 'category':
-				return formatCategoryLabel(appStore.locale, s.category);
-			case 'saved_view': {
-				const v = appStore.savedViews.find((item) => item.id === s.view_id);
-				return v?.name ?? t(appStore.locale, 'savedViews');
-			}
-		}
-	});
+	const scopeLabel = $derived(resolveInboxScopeLabel(workspace));
 
 	const showOnnxHint = $derived(
 		!workspace.inbox.experimentalSemanticSearch && mode !== 'Lexical'
@@ -116,13 +83,13 @@
 				class="hidden min-h-9 min-w-9 items-center justify-center rounded-md border border-separator bg-surface text-secondary transition-transform duration-100 ease-out hover:text-foreground active:scale-[0.98] md:flex"
 			>
 				{#if appStore.sidebarOpen}
-					<PanelLeftClose class="h-4 w-4" />
+					<PanelLeftClose class="h-4 w-4" aria-hidden="true" />
 				{:else}
-					<PanelLeftOpen class="h-4 w-4" />
+					<PanelLeftOpen class="h-4 w-4" aria-hidden="true" />
 				{/if}
 			</button>
 
-			<div class="flex items-center gap-1.5 truncate text-xs font-medium text-foreground">
+			<div class="flex items-center gap-2 truncate text-xs font-medium text-foreground">
 				<span class="text-secondary">{t(appStore.locale, 'navInbox')}</span>
 				<span aria-hidden="true" class="text-secondary">/</span>
 				<span class="truncate font-display font-semibold">{scopeLabel}</span>
@@ -131,7 +98,7 @@
 
 		<div class="flex w-full min-w-0 flex-none flex-wrap items-center justify-end gap-2 sm:w-auto sm:min-w-[240px] sm:flex-1">
 			<div class="relative flex w-full min-w-0 basis-full items-center sm:w-auto sm:min-w-[180px] sm:max-w-md sm:flex-1 sm:basis-auto">
-				<Search class="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-secondary" />
+				<Search class="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-secondary" aria-hidden="true" />
 				<input
 					type="search"
 					bind:value={query}
@@ -145,9 +112,9 @@
 						type="button"
 						onclick={clearSearch}
 						aria-label="Clear search"
-						class="absolute right-2 rounded p-0.5 text-secondary hover:text-foreground"
+						class="absolute right-2 rounded p-1 text-secondary hover:text-foreground"
 					>
-						<X class="h-3.5 w-3.5" />
+						<X class="h-3.5 w-3.5" aria-hidden="true" />
 					</button>
 				{/if}
 			</div>
@@ -165,7 +132,7 @@
 				<Select.Trigger
 					aria-label="Search mode"
 					disabled={!workspace.connected || workspace.inbox.loading}
-					class="flex h-9 min-w-[140px] shrink-0 items-center justify-between gap-2 whitespace-nowrap rounded-md border border-separator bg-surface px-2.5 text-xs text-foreground hover:bg-field disabled:opacity-50"
+					class="flex h-9 min-w-[140px] shrink-0 items-center justify-between gap-2 whitespace-nowrap rounded-md border border-separator bg-surface px-3 text-xs text-foreground hover:bg-field disabled:opacity-50"
 				>
 					<span class="truncate">
 						{t(
@@ -173,7 +140,7 @@
 							SEARCH_MODES.find((m) => m.value === mode)?.labelKey ?? 'lexical'
 						)}
 					</span>
-					<ChevronDown class="h-3.5 w-3.5 shrink-0 text-secondary" />
+					<ChevronDown class="h-3.5 w-3.5 shrink-0 text-secondary" aria-hidden="true" />
 				</Select.Trigger>
 				<Select.Portal>
 					<Select.Content
@@ -184,7 +151,7 @@
 							<Select.Item
 								value={option.value}
 								label={t(appStore.locale, option.labelKey)}
-								class="flex cursor-pointer items-center justify-between rounded px-2.5 py-2 text-xs text-foreground outline-none data-[highlighted]:bg-selection-soft"
+								class="flex cursor-pointer items-center justify-between rounded px-3 py-2 text-xs text-foreground outline-none data-[highlighted]:bg-selection-soft"
 							>
 								<span>{t(appStore.locale, option.labelKey)}</span>
 								{#if option.value !== 'Lexical' && !workspace.inbox.experimentalSemanticSearch}
@@ -201,13 +168,13 @@
 				onclick={() => void workspace.inbox.toggleConversations()}
 				aria-pressed={workspace.inbox.conversations}
 				disabled={!workspace.connected}
-				class="flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-separator bg-surface px-2.5 py-1 text-xs font-medium text-foreground transition-transform duration-100 ease-out hover:bg-field active:scale-[0.98] disabled:opacity-50"
+				class="flex min-h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-separator bg-surface px-3 py-1 text-xs font-medium text-foreground transition-transform duration-100 ease-out hover:bg-field active:scale-[0.98] disabled:opacity-50"
 			>
 				{#if workspace.inbox.conversations}
-					<Layers class="h-3.5 w-3.5 text-accent" />
+					<Layers class="h-3.5 w-3.5 text-accent" aria-hidden="true" />
 					<span class="hidden lg:inline">{t(appStore.locale, 'threadedConversations')}</span>
 				{:else}
-					<MessageSquare class="h-3.5 w-3.5 text-secondary" />
+					<MessageSquare class="h-3.5 w-3.5 text-secondary" aria-hidden="true" />
 					<span class="hidden lg:inline">{t(appStore.locale, 'individualMessages')}</span>
 				{/if}
 			</button>
@@ -218,9 +185,9 @@
 					onclick={openSettings}
 					aria-label="Settings"
 					title={t(appStore.locale, 'navSettings')}
-					class="flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-separator bg-surface px-2.5 py-1 text-xs font-medium text-foreground transition-transform duration-100 ease-out hover:bg-field active:scale-[0.98]"
+					class="flex min-h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-separator bg-surface px-3 py-1 text-xs font-medium text-foreground transition-transform duration-100 ease-out hover:bg-field active:scale-[0.98]"
 				>
-					<Settings class="h-3.5 w-3.5 text-secondary" />
+					<Settings class="h-3.5 w-3.5 text-secondary" aria-hidden="true" />
 					<span class="hidden lg:inline">{t(appStore.locale, 'navSettings')}</span>
 				</button>
 			{/if}
@@ -230,10 +197,10 @@
 	{#if showOnnxHint}
 		<div
 			role="status"
-			class="flex items-center justify-between gap-2 border-t border-separator bg-selection-soft px-3 py-1.5 text-xs text-status-warning"
+			class="flex items-center justify-between gap-2 border-t border-separator bg-selection-soft px-3 py-2 text-xs text-status-warning"
 		>
-			<span class="flex items-center gap-1.5">
-				<AlertCircle class="h-3.5 w-3.5 shrink-0" />
+			<span class="flex items-center gap-2">
+				<AlertCircle class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 				<span>{t(appStore.locale, 'onnxDisabledHint')}</span>
 			</span>
 			{#if openSettings}
@@ -248,35 +215,5 @@
 		</div>
 	{/if}
 
-	<div
-		class="grid grid-cols-2 gap-2 border-t border-separator bg-surface px-3 py-1.5 text-xs sm:grid-cols-4"
-	>
-		<div class="flex items-center justify-between gap-2 border-r border-separator pr-2">
-			<span class="truncate text-secondary">{t(appStore.locale, 'loadedMessages')}</span>
-			<span class="font-mono font-medium tabular-nums text-foreground">
-				{workspace.inbox.rows.length.toLocaleString()}{workspace.inbox.hasMore ? '+' : ''}
-			</span>
-		</div>
-		<div class="flex items-center justify-between gap-2 sm:border-r sm:border-separator sm:pr-2">
-			<span class="truncate text-secondary">{t(appStore.locale, 'unreadCount')}</span>
-			<span class="font-mono font-medium tabular-nums text-foreground">
-				{appStore.unreadTotal}
-			</span>
-		</div>
-		<div class="flex items-center justify-between gap-2 border-r border-separator pr-2">
-			<span class="truncate text-secondary">{t(appStore.locale, 'pendingBoletos')}</span>
-			<span class="font-mono font-medium tabular-nums text-status-warning">
-				{workspace.pendingBoletosCount}
-			</span>
-		</div>
-		<div class="flex items-center justify-between gap-2">
-			<span class="truncate text-secondary">{t(appStore.locale, 'syncWorker')}</span>
-			<span class="flex items-center gap-1.5 font-mono font-medium tabular-nums text-foreground">
-				<span>{formatSyncStatus(appStore.locale, appStore.syncStatus)}</span>
-				{#if workspace.inbox.totalEmbeddingErrors > 0}
-					<span class="text-status-danger">({workspace.inbox.totalEmbeddingErrors} err)</span>
-				{/if}
-			</span>
-		</div>
-	</div>
+	<WdgInboxTelemetryStrip {workspace} />
 </div>

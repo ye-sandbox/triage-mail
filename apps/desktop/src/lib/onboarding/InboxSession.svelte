@@ -15,11 +15,16 @@
 		workspaceRegistry
 	} from '$lib/inbox/workspace.svelte';
 	import { nativeRemindersTransport } from '$lib/reminders/transport';
-	import { countOverdueAndDueToday, type RemindersTransport } from '$lib/reminders/types';
+	import type { RemindersTransport } from '$lib/reminders/types';
 	import { nativeSettingsTransport } from '$lib/settings/transport';
 	import type { SettingsTransport } from '$lib/settings/types';
 	import { appStore } from '$lib/stores/app.svelte';
 	import type { AccountController } from './controller.svelte';
+	import {
+		refreshDueDateBadgeCount,
+		syncSavedViewsFromTransport,
+		syncSettingsFromTransport
+	} from './inbox-session';
 
 	let {
 		connected,
@@ -49,69 +54,21 @@
 		}
 	}
 
-	function openSettings() {
-		navigateTo('/settings');
-	}
-
-	function createRule(id: string) {
-		appStore.requestCreateRule(id);
-		navigateTo('/automation');
-	}
-
 	const workspace = untrack(() =>
 		connected
 			? createLiveWorkspace(new InboxController(inboxTransport), {
 					connected: true,
 					settingsTransport,
 					accounts: accountController?.accounts ?? [],
-					createRule
+					createRule: (id: string) => {
+						appStore.requestCreateRule(id);
+						navigateTo('/automation');
+					}
 				})
 			: createDemoWorkspace()
 	);
 
 	const inbox = workspace.inbox;
-
-	function refreshDueDateBadgeCount() {
-		if (!nativeAvailable()) return;
-		void remindersTransport
-			.listDueDates()
-			.then((items) => {
-				const activeCount = countOverdueAndDueToday(items);
-				workspace.dueCount = activeCount;
-				appStore.overdueAndDueTodayCount = activeCount;
-			})
-			.catch(() => {});
-	}
-
-	function syncSettingsFromTransport() {
-		if (!connected) return;
-		void settingsTransport
-			.get()
-			.then((settings) => {
-				inbox.setExperimentalSemanticSearch(settings.experimental_semantic_search);
-			})
-			.catch(() => {});
-	}
-
-	function syncSavedViewsFromTransport() {
-		if (
-			!connected ||
-			!inbox.savedTransport ||
-			(inboxTransport === nativeTransport && !nativeAvailable())
-		) {
-			return;
-		}
-		void inbox.savedTransport
-			.list()
-			.then((views) => {
-				appStore.savedViews = views.map((v) => ({
-					id: v.id,
-					name: v.name,
-					query: v.query
-				}));
-			})
-			.catch(() => {});
-	}
 
 	$effect(() => {
 		const list = accountController?.accounts ?? [];
@@ -144,14 +101,10 @@
 		if (!connected) {
 			untrack(() => {
 				const pendingId = appStore.pendingSelectMessageId;
-				if (pendingId) {
-					workspace.ensureDemoDueDateMessage(pendingId);
-				}
+				if (pendingId) workspace.ensureDemoDueDateMessage(pendingId);
 				void workspace.applyShellScope(appStore.activeScope).then(() => {
 					const targetId = appStore.consumePendingSelectMessage();
-					if (targetId) {
-						workspace.selectMessage(targetId, true);
-					}
+					if (targetId) workspace.selectMessage(targetId, true);
 				});
 			});
 			return () => {
@@ -167,15 +120,15 @@
 				inbox.scope = 'GlobalAllMail';
 			}
 			void inbox.connect();
-			syncSettingsFromTransport();
-			syncSavedViewsFromTransport();
-			if (nativeAvailable()) {
-				refreshDueDateBadgeCount();
-			}
+			syncSettingsFromTransport(connected, settingsTransport, workspace);
+			syncSavedViewsFromTransport(connected, inboxTransport, workspace);
+			if (nativeAvailable()) refreshDueDateBadgeCount(remindersTransport, workspace);
 		});
 
-		const onSettingsUpdated = () => syncSettingsFromTransport();
-		const onDefinitionsImported = () => syncSavedViewsFromTransport();
+		const onSettingsUpdated = () =>
+			syncSettingsFromTransport(connected, settingsTransport, workspace);
+		const onDefinitionsImported = () =>
+			syncSavedViewsFromTransport(connected, inboxTransport, workspace);
 		window.addEventListener('triage-settings-updated', onSettingsUpdated);
 		window.addEventListener('triage-definitions-imported', onDefinitionsImported);
 
@@ -202,16 +155,13 @@
 	});
 
 	$effect(() => {
-		if (!connected) return;
-		const revision = inbox.badgeRevision;
-		if (revision === 0) return;
-		untrack(() => refreshDueDateBadgeCount());
+		if (!connected || inbox.badgeRevision === 0) return;
+		untrack(() => refreshDueDateBadgeCount(remindersTransport, workspace));
 	});
 
 	$effect(() => {
 		if (!connected || !inbox.savedView) return;
-		const revision = inbox.badgeRevision;
-		void revision;
+		void inbox.badgeRevision;
 		const now = Date.now();
 		const timer = setTimeout(() => void inbox.refresh(), 86400000 - (now % 86400000) + 1);
 		return () => clearTimeout(timer);
@@ -245,43 +195,24 @@
 	}
 
 	function handleWindowKeydown(event: KeyboardEvent) {
-		if (
-			appStore.commandOpen ||
-			workspace.snoozeOpen ||
-			workspace.tagDialogOpen ||
-			inbox.mutating ||
-			inbox.loading
-		) {
-			return;
-		}
+		if (appStore.commandOpen || workspace.snoozeOpen || workspace.tagDialogOpen || inbox.mutating || inbox.loading) return;
 		const selected = workspace.selected;
 		if (!selected) return;
 		const action = shortcut(event);
 		if (!action || action === 'palette') return;
 		event.preventDefault();
-		if (action === 'tag') {
-			workspace.openTagDialogFor(selected.id);
-		} else {
-			void workspace.mutate(selected.id, action);
-		}
+		if (action === 'tag') workspace.openTagDialogFor(selected.id);
+		else void workspace.mutate(selected.id, action);
 	}
 </script>
 
-<svelte:window
-	onkeydown={handleWindowKeydown}
-	onfocus={() => {
-		if (connected) void inbox.refresh();
-	}}
-/>
+<svelte:window onkeydown={handleWindowKeydown} onfocus={() => connected && void inbox.refresh()} />
 
 <div class="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
-	<WdgInboxStatsBar {workspace} {openSettings} />
+	<WdgInboxStatsBar {workspace} openSettings={() => navigateTo('/settings')} />
 
 	{#if inbox.mutationError}
-		<div
-			role="alert"
-			class="border-b border-separator bg-field px-4 py-2 text-xs text-status-danger"
-		>
+		<div role="alert" class="border-b border-separator bg-field px-4 py-2 text-xs text-status-danger">
 			{inbox.mutationError}
 		</div>
 	{/if}

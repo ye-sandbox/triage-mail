@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Dialog } from 'bits-ui';
-	import { Download, X } from 'lucide-svelte';
+	import Download from '@lucide/svelte/icons/download';
+	import X from '@lucide/svelte/icons/x';
 	import { formatBytes, t } from '$lib/i18n';
 	import { safeFilename } from '$lib/reader/download';
 	import type { EphemeralAttachmentPreview } from '$lib/reader/preview';
@@ -37,7 +38,7 @@
 						<Dialog.Title class="truncate font-display text-sm font-semibold text-foreground">
 							{filename}
 						</Dialog.Title>
-						<Dialog.Description class="mt-0.5 text-[11px] text-secondary">
+						<Dialog.Description class="mt-1 text-[11px] text-secondary">
 							<span class="font-mono">{preview.mimeType}</span>
 							<span> · </span>
 							<span class="font-mono tabular-nums">{formatBytes(preview.sizeBytes)}</span>
@@ -50,9 +51,9 @@
 								type="button"
 								disabled={saving}
 								onclick={onSaveAs}
-								class="flex min-h-8 items-center gap-1.5 rounded-md border border-separator bg-field px-2.5 py-1 text-xs font-medium text-foreground hover:bg-selection-soft disabled:opacity-50"
+								class="flex min-h-8 items-center gap-2 rounded-md border border-separator bg-field px-3 py-1 text-xs font-medium text-foreground hover:bg-selection-soft disabled:opacity-50"
 							>
-								<Download class="h-3.5 w-3.5" />
+								<Download class="h-3.5 w-3.5" aria-hidden="true" />
 								<span>
 									{saving ? t(appStore.locale, 'savingAttachment') : t(appStore.locale, 'saveAttachmentAs')}
 								</span>
@@ -63,7 +64,7 @@
 							onclick={onClose}
 							class="rounded p-1 text-secondary hover:bg-field hover:text-foreground"
 						>
-							<X class="h-4 w-4" />
+							<X class="h-4 w-4" aria-hidden="true" />
 						</Dialog.Close>
 					</div>
 				</div>

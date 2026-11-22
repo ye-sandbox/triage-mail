@@ -1,14 +1,12 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import {
-		Banknote,
-		Copy,
-		FileCheck2,
-		KeyRound,
-		MailMinus,
-		Package,
-		QrCode
-	} from 'lucide-svelte';
+	import Banknote from '@lucide/svelte/icons/banknote';
+	import Copy from '@lucide/svelte/icons/copy';
+	import FileCheck2 from '@lucide/svelte/icons/file-check-2';
+	import KeyRound from '@lucide/svelte/icons/key-round';
+	import MailMinus from '@lucide/svelte/icons/mail-minus';
+	import Package from '@lucide/svelte/icons/package';
+	import QrCode from '@lucide/svelte/icons/qr-code';
 	import { formatBrl } from '$lib/i18n';
 	import { appStore } from '$lib/stores/app.svelte';
 	import type { TriageBadge } from '../reader/types';
@@ -65,19 +63,19 @@
 				e.stopPropagation();
 				onCopy?.(badge.OtpCode.code, 'OTP Code');
 			}}
-			class="inline-flex shrink-0 items-center gap-1 rounded border border-separator bg-field px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums text-status-info hover:bg-surface"
+			class="inline-flex shrink-0 items-center gap-1 rounded border border-separator bg-field px-2 py-1 font-mono text-[10px] font-medium tabular-nums text-status-info hover:bg-surface"
 		>
-			<KeyRound class="h-2.5 w-2.5" />
+			<KeyRound class="h-2.5 w-2.5" aria-hidden="true" />
 			<span>{badge.OtpCode.code}</span>
-			<Copy class="h-2.5 w-2.5" />
+			<Copy class="h-2.5 w-2.5" aria-hidden="true" />
 		</button>
 	{:else if 'FebrabanBoleto' in badge}
 		{@const boleto = badge.FebrabanBoleto}
 		<span
 			aria-label={`${text.label}: ${text.value}`}
-			class="inline-flex shrink-0 items-center gap-1 rounded border border-separator bg-field px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums text-status-warning"
+			class="inline-flex shrink-0 items-center gap-1 rounded border border-separator bg-field px-2 py-1 font-mono text-[10px] font-medium tabular-nums text-status-warning"
 		>
-			<Banknote class="h-2.5 w-2.5" />
+			<Banknote class="h-2.5 w-2.5" aria-hidden="true" />
 			{#if boleto.amount_cents !== null}
 				<span>{formatBrl(boleto.amount_cents, appStore.locale)}</span>
 			{/if}
@@ -89,33 +87,33 @@
 	{:else if 'PixPayload' in badge}
 		<span
 			aria-label={`${text.label}: ${text.value}`}
-			class="inline-flex shrink-0 items-center gap-1 rounded border border-separator bg-field px-1.5 py-0.5 font-mono text-[10px] font-medium text-status-healthy"
+			class="inline-flex shrink-0 items-center gap-1 rounded border border-separator bg-field px-2 py-1 font-mono text-[10px] font-medium text-status-healthy"
 		>
-			<QrCode class="h-2.5 w-2.5" />
+			<QrCode class="h-2.5 w-2.5" aria-hidden="true" />
 			<span>Pix</span>
 		</span>
 	{:else if 'TrackingCode' in badge}
 		<span
 			aria-label={`${text.label}: ${text.value}`}
-			class="inline-flex shrink-0 items-center gap-1 rounded border border-separator bg-field px-1.5 py-0.5 font-mono text-[10px] text-foreground"
+			class="inline-flex shrink-0 items-center gap-1 rounded border border-separator bg-field px-2 py-1 font-mono text-[10px] text-foreground"
 		>
-			<Package class="h-2.5 w-2.5" />
+			<Package class="h-2.5 w-2.5" aria-hidden="true" />
 			<span>{badge.TrackingCode.carrier} {badge.TrackingCode.code}</span>
 		</span>
 	{:else if 'NfeInvoice' in badge}
 		<span
 			aria-label={`${text.label}: ${text.value}`}
-			class="inline-flex shrink-0 items-center gap-1 rounded border border-separator bg-field px-1.5 py-0.5 font-mono text-[10px] text-secondary"
+			class="inline-flex shrink-0 items-center gap-1 rounded border border-separator bg-field px-2 py-1 font-mono text-[10px] text-secondary"
 		>
-			<FileCheck2 class="h-2.5 w-2.5" />
+			<FileCheck2 class="h-2.5 w-2.5" aria-hidden="true" />
 			<span>NF-e</span>
 		</span>
 	{:else if 'UnsubscribeAvailable' in badge && badge.UnsubscribeAvailable.supports_one_click}
 		<span
 			aria-label={`${text.label}: ${text.value}`}
-			class="inline-flex shrink-0 items-center gap-1 rounded border border-separator bg-field px-1.5 py-0.5 text-[10px] text-secondary"
+			class="inline-flex shrink-0 items-center gap-1 rounded border border-separator bg-field px-2 py-1 text-[10px] text-secondary"
 		>
-			<MailMinus class="h-2.5 w-2.5" />
+			<MailMinus class="h-2.5 w-2.5" aria-hidden="true" />
 			<span>RFC 8058</span>
 		</span>
 	{/if}

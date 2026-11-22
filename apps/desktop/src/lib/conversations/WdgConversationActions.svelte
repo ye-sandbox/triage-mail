@@ -110,9 +110,9 @@
 	}
 </script>
 
-<div class="shrink-0 space-y-2 border-b border-separator pb-2.5 text-xs">
-	<div class="flex flex-wrap items-center gap-2.5">
-		<label class="flex items-center gap-1.5 text-secondary">
+<div class="shrink-0 space-y-2 border-b border-separator pb-3 text-xs">
+	<div class="flex flex-wrap items-center gap-3">
+		<label class="flex items-center gap-2 text-secondary">
 			<span>{t.action}</span>
 			<select
 				bind:value={kind}
@@ -132,7 +132,7 @@
 				bind:value={tag}
 				maxlength="128"
 				disabled={disabled || busy}
-				class="h-8 rounded-md border border-separator bg-field px-2.5 text-xs text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
+				class="h-8 rounded-md border border-separator bg-field px-3 text-xs text-foreground focus:border-accent focus:outline-none disabled:opacity-50"
 			/>
 		{/if}
 
@@ -140,7 +140,7 @@
 			type="button"
 			disabled={disabled || busy || inbox.loading || (kind === 'Tag' && !tag.trim())}
 			onclick={() => void prepare()}
-			class="min-h-[32px] rounded-md border border-separator bg-field px-2.5 py-1 text-xs font-medium text-accent hover:bg-selection-soft disabled:opacity-50"
+			class="min-h-[32px] rounded-md border border-separator bg-field px-3 py-1 text-xs font-medium text-accent hover:bg-selection-soft disabled:opacity-50"
 		>
 			{t.preview}
 		</button>
@@ -212,7 +212,7 @@
 						open = false;
 						preview = null;
 					}}
-					class="min-h-[36px] rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-secondary hover:text-foreground disabled:opacity-50"
+					class="min-h-[36px] rounded-md border border-separator bg-surface px-3 py-2 text-xs font-medium text-secondary hover:text-foreground disabled:opacity-50"
 				>
 					{t.cancel}
 				</button>
@@ -220,7 +220,7 @@
 					type="button"
 					disabled={busy || !preview || disabled}
 					onclick={() => void apply()}
-					class="min-h-[36px] rounded-md bg-accent px-4 py-1.5 text-xs font-medium text-accent-foreground hover:opacity-95 disabled:opacity-50"
+					class="min-h-[36px] rounded-md bg-accent px-4 py-2 text-xs font-medium text-accent-foreground hover:opacity-95 disabled:opacity-50"
 				>
 					{t.apply}
 				</button>

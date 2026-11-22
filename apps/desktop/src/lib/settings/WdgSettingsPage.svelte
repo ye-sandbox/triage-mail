@@ -1,14 +1,11 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { AlertDialog } from 'bits-ui';
-	import {
-		ArchiveRestore,
-		ArrowLeft,
-		Cpu,
-		Database,
-		Lock,
-		Settings2
-	} from 'lucide-svelte';
+	import ArchiveRestore from '@lucide/svelte/icons/archive-restore';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import Cpu from '@lucide/svelte/icons/cpu';
+	import Database from '@lucide/svelte/icons/database';
+	import Lock from '@lucide/svelte/icons/lock';
+	import Settings2 from '@lucide/svelte/icons/settings-2';
 	import { demoAutomationBackend } from '$lib/automation/automation.fixtures';
 	import type { TransferTransport } from '$lib/backup/transport';
 	import { i18n } from '$lib/i18n/index.svelte';
@@ -25,6 +22,7 @@
 	import WdgBackupDefinitionsPanel from './WdgBackupDefinitionsPanel.svelte';
 	import WdgPrivacyPanel from './WdgPrivacyPanel.svelte';
 	import WdgSearchIndexPanel from './WdgSearchIndexPanel.svelte';
+	import WdgUnsavedSettingsDialog from './WdgUnsavedSettingsDialog.svelte';
 
 	interface Props {
 		transport?: SettingsTransport;
@@ -59,7 +57,6 @@
 	let activeSection = $state<SettingsSectionId>(untrack(() => initialSection));
 	let pendingAction = $state<(() => void) | null>(null);
 	let unsavedDialogOpen = $state(false);
-
 	let settings = $state<Settings | null>(null);
 	let loadError = $state('');
 	let active = true;
@@ -81,9 +78,7 @@
 				appStore.semanticSearchEnabled = next.experimental_semantic_search;
 			}
 		} catch {
-			if (active && current === revision) {
-				loadError = t.loadError;
-			}
+			if (active && current === revision) loadError = t.loadError;
 		}
 	}
 
@@ -124,11 +119,6 @@
 		});
 	}
 
-	function requestBackToInbox() {
-		if (!onBackToInbox) return;
-		runGuarded(onBackToInbox);
-	}
-
 	function cancelSwitch() {
 		pendingAction = null;
 		unsavedDialogOpen = false;
@@ -154,10 +144,10 @@
 			{#if onBackToInbox}
 				<button
 					type="button"
-					onclick={requestBackToInbox}
-					class="flex min-h-[36px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium text-foreground hover:bg-field"
+					onclick={() => onBackToInbox && runGuarded(onBackToInbox)}
+					class="flex min-h-[36px] shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-separator bg-surface px-3 py-2 text-xs font-medium text-foreground hover:bg-field"
 				>
-					<ArrowLeft class="h-3.5 w-3.5 text-secondary" />
+					<ArrowLeft class="h-3.5 w-3.5 text-secondary" aria-hidden="true" />
 					<span>{t.backToInbox}</span>
 				</button>
 			{/if}
@@ -166,7 +156,7 @@
 		<div class="grid grid-cols-1 gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start">
 			<nav
 				aria-label={t.navAria}
-				class="flex flex-row gap-1 overflow-x-auto rounded-lg border border-separator bg-surface p-1.5 lg:flex-col"
+				class="flex flex-row gap-1 overflow-x-auto rounded-lg border border-separator bg-surface p-2 lg:flex-col"
 			>
 				{#each NAV_ITEMS as item (item.id)}
 					{@const Icon = item.icon}
@@ -180,8 +170,8 @@
 							? 'bg-selection text-foreground'
 							: 'text-secondary hover:bg-field hover:text-foreground'}"
 					>
-						<span class="flex items-center gap-2.5">
-							<Icon class="h-3.5 w-3.5 shrink-0" />
+						<span class="flex items-center gap-3">
+							<Icon class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 							<span>{t.tabs[item.id]}</span>
 						</span>
 						{#if activeTab && guard.dirty}
@@ -209,7 +199,7 @@
 							type="button"
 							aria-label={t.retryLoading}
 							onclick={() => void loadSettings()}
-							class="min-h-[36px] rounded-md border border-separator bg-field px-3.5 py-1.5 text-xs font-medium text-accent hover:bg-selection-soft"
+							class="min-h-[36px] rounded-md border border-separator bg-field px-4 py-2 text-xs font-medium text-accent hover:bg-selection-soft"
 						>
 							{t.retryLoading}
 						</button>
@@ -230,32 +220,8 @@
 	</div>
 </div>
 
-<AlertDialog.Root bind:open={unsavedDialogOpen}>
-	<AlertDialog.Portal>
-		<AlertDialog.Overlay class="fixed inset-0 z-50 bg-foreground/25" />
-		<AlertDialog.Content
-			class="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-separator bg-surface p-5 text-foreground shadow-xl outline-none"
-		>
-			<AlertDialog.Title class="font-display text-sm font-semibold text-foreground">
-				{t.unsavedTitle}
-			</AlertDialog.Title>
-			<AlertDialog.Description class="mt-2 text-xs leading-relaxed text-secondary">
-				{t.unsavedDescription}
-			</AlertDialog.Description>
-			<div class="mt-5 flex justify-end gap-2 border-t border-separator pt-3">
-				<AlertDialog.Cancel
-					onclick={cancelSwitch}
-					class="min-h-[36px] rounded-md border border-separator bg-surface px-3.5 py-1.5 text-xs font-medium text-foreground hover:bg-field"
-				>
-					{t.stay}
-				</AlertDialog.Cancel>
-				<AlertDialog.Action
-					onclick={confirmDiscardAndSwitch}
-					class="min-h-[36px] rounded-md bg-status-danger px-3.5 py-1.5 text-xs font-medium text-white hover:opacity-95"
-				>
-					{t.discard}
-				</AlertDialog.Action>
-			</div>
-		</AlertDialog.Content>
-	</AlertDialog.Portal>
-</AlertDialog.Root>
+<WdgUnsavedSettingsDialog
+	bind:open={unsavedDialogOpen}
+	onStay={cancelSwitch}
+	onDiscard={confirmDiscardAndSwitch}
+/>

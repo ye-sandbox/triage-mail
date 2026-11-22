@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { Dialog } from 'bits-ui';
-	import { Bell, Plus, Trash2, X } from 'lucide-svelte';
+	import Bell from '@lucide/svelte/icons/bell';
+	import X from '@lucide/svelte/icons/x';
 	import { toast } from 'svelte-sonner';
 	import { Drawer } from 'vaul-svelte';
 	import { nativeAlertsTransport } from '$lib/alerts/transport';
@@ -16,6 +17,7 @@
 		type ScheduledReminderConfig
 	} from './types';
 	import WdgReminderRuleForm from './WdgReminderRuleForm.svelte';
+	import WdgReminderRulesList from './WdgReminderRulesList.svelte';
 
 	interface Props {
 		open: boolean;
@@ -141,14 +143,6 @@
 			busy = false;
 		}
 	}
-
-	function formatMinAmountDisplay(cents?: number): string {
-		if (!cents) return '';
-		return new Intl.NumberFormat(i18n.locale === 'pt-BR' ? 'pt-BR' : 'en-US', {
-			style: 'currency',
-			currency: 'BRL'
-		}).format(cents / 100);
-	}
 </script>
 
 {#snippet drawerBody()}
@@ -175,108 +169,18 @@
 				onCancel={() => (draft = null)}
 			/>
 		{:else}
-			<div class="flex items-center justify-between gap-2">
-				<span class="font-medium text-foreground">{t.rulesTitle}</span>
-				<button
-					type="button"
-					onclick={startCreate}
-					disabled={loading || busy || configs.length >= 50}
-					class="flex min-h-[36px] items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground hover:opacity-95 disabled:opacity-50"
-				>
-					<Plus class="h-3.5 w-3.5" />
-					<span>{t.addRule}</span>
-				</button>
-			</div>
-
-			{#if loading}
-				<div class="rounded-md border border-separator bg-field p-6 text-center text-secondary">
-					{t.loadingBills}
-				</div>
-			{:else if configs.length === 0}
-				<div class="flex flex-col items-center justify-center gap-2 rounded-md border border-dashed border-separator bg-field py-8 text-center">
-					<Bell class="h-6 w-6 text-secondary" />
-					<p class="text-xs text-secondary">{t.emptyRules}</p>
-				</div>
-			{:else}
-				<div class="flex flex-col gap-2">
-					{#each configs as cfg (cfg.id)}
-						<div
-							class="flex items-center justify-between gap-3 rounded-md border border-separator bg-field p-3"
-						>
-							<div class="flex min-w-0 items-center gap-2.5">
-								<button
-									type="button"
-									role="switch"
-									aria-checked={cfg.enabled}
-									aria-label={cfg.enabled ? t.enabled : t.disabled}
-									disabled={busy}
-									onclick={() => void toggleEnabled(cfg)}
-									class="min-h-[30px] shrink-0 rounded-md border border-separator px-2 py-0.5 font-mono text-[11px] font-medium transition-colors {cfg.enabled
-										? 'bg-selection-soft text-status-healthy'
-										: 'bg-surface text-secondary'}"
-								>
-									{cfg.enabled ? t.enabled : t.disabled}
-								</button>
-
-								<div class="min-w-0">
-									<div class="truncate font-medium text-foreground">{cfg.name}</div>
-									<div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-secondary">
-										{#if 'DueDate' in cfg.trigger}
-											<span>
-												{t.ruleSummaryDueDate(
-													cfg.trigger.DueDate.days_before,
-													cfg.trigger.DueDate.target_hour
-												)}
-											</span>
-											{#if cfg.trigger.DueDate.min_amount_cents}
-												<span aria-hidden="true">·</span>
-												<span>
-													{t.minAmountSummary(
-														formatMinAmountDisplay(cfg.trigger.DueDate.min_amount_cents)
-													)}
-												</span>
-											{/if}
-										{:else}
-											<span>{t.ruleSummaryUnread(cfg.trigger.UnreadInterval.interval_hours)}</span>
-											{#if cfg.trigger.UnreadInterval.min_amount_cents}
-												<span aria-hidden="true">·</span>
-												<span>
-													{t.minAmountSummary(
-														formatMinAmountDisplay(cfg.trigger.UnreadInterval.min_amount_cents)
-													)}
-												</span>
-											{/if}
-										{/if}
-									</div>
-								</div>
-							</div>
-
-							<div class="flex shrink-0 items-center gap-1.5">
-								<button
-									type="button"
-									onclick={() => {
-										error = '';
-										draft = structuredClone($state.snapshot(cfg));
-									}}
-									disabled={busy}
-									class="rounded-md border border-separator bg-surface px-2.5 py-1 text-xs font-medium text-foreground hover:bg-selection-soft"
-								>
-									{t.edit}
-								</button>
-								<button
-									type="button"
-									onclick={() => void handleDelete(cfg)}
-									disabled={busy}
-									aria-label={`${t.delete} ${cfg.name}`}
-									class="rounded-md border border-separator bg-surface p-1.5 text-status-danger hover:bg-status-danger/10"
-								>
-									<Trash2 class="h-3.5 w-3.5" />
-								</button>
-							</div>
-						</div>
-					{/each}
-				</div>
-			{/if}
+			<WdgReminderRulesList
+				{configs}
+				{loading}
+				{busy}
+				onCreate={startCreate}
+				onEdit={(cfg) => {
+					error = '';
+					draft = structuredClone($state.snapshot(cfg));
+				}}
+				onToggleEnabled={toggleEnabled}
+				onDelete={handleDelete}
+			/>
 		{/if}
 	</div>
 {/snippet}
@@ -291,7 +195,7 @@
 				<div class="mx-auto mb-3 h-1.5 w-10 rounded-full bg-separator"></div>
 				<div class="mb-3 flex items-center justify-between">
 					<Drawer.Title class="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
-						<Bell class="h-4 w-4 text-accent" />
+						<Bell class="h-4 w-4 text-accent" aria-hidden="true" />
 						<span>{t.configureSchedule}</span>
 					</Drawer.Title>
 					<button
@@ -302,7 +206,7 @@
 						}}
 						class="rounded-md p-1 text-secondary hover:text-foreground"
 					>
-						<X class="h-4 w-4" />
+						<X class="h-4 w-4" aria-hidden="true" />
 					</button>
 				</div>
 				{@render drawerBody()}
@@ -318,7 +222,7 @@
 			>
 				<div class="mb-4 flex items-center justify-between">
 					<Dialog.Title class="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
-						<Bell class="h-4 w-4 text-accent" />
+						<Bell class="h-4 w-4 text-accent" aria-hidden="true" />
 						<span>{t.configureSchedule}</span>
 					</Dialog.Title>
 					<button
@@ -329,7 +233,7 @@
 						}}
 						class="rounded-md p-1 text-secondary hover:text-foreground"
 					>
-						<X class="h-4 w-4" />
+						<X class="h-4 w-4" aria-hidden="true" />
 					</button>
 				</div>
 				{@render drawerBody()}

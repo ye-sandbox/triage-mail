@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { Layers } from 'lucide-svelte';
+	import Layers from '@lucide/svelte/icons/layers';
 	import { i18n } from '$lib/i18n/index.svelte';
 	import { labels } from '../conversations/labels';
 	import WdgConversationActions from '../conversations/WdgConversationActions.svelte';
@@ -75,7 +75,7 @@
 <div class="mx-4 mt-3 rounded-lg border border-separator bg-surface p-3 text-xs">
 	<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
 		<div class="flex items-center gap-2 font-medium text-foreground">
-			<Layers class="h-3.5 w-3.5 text-accent" />
+			<Layers class="h-3.5 w-3.5 text-accent" aria-hidden="true" />
 			<span>{accountLabel}</span>
 			<span class="font-mono text-[11px] tabular-nums text-secondary">
 				{tConv.matching}: {row.matching_count} · {tConv.cached}: {row.total_count} · {tConv.unread}: {row.unread_count}
@@ -100,7 +100,7 @@
 				<button
 					type="button"
 					onclick={() => onSelectMember(member.message)}
-					class="flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors {selected
+					class="flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left transition-colors {selected
 						? 'border-accent bg-selection-soft text-foreground'
 						: 'border-separator bg-field text-secondary hover:text-foreground'}"
 				>

@@ -1,14 +1,12 @@
 <script lang="ts">
-	import {
-		AlertCircle,
-		Archive,
-		CalendarClock,
-		Check,
-		Clock,
-		Copy,
-		ExternalLink,
-		XCircle
-	} from 'lucide-svelte';
+	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import Archive from '@lucide/svelte/icons/archive';
+	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
+	import Check from '@lucide/svelte/icons/check';
+	import Clock from '@lucide/svelte/icons/clock';
+	import Copy from '@lucide/svelte/icons/copy';
+	import ExternalLink from '@lucide/svelte/icons/external-link';
+	import XCircle from '@lucide/svelte/icons/circle-x';
 	import { toast } from 'svelte-sonner';
 	import { formatBrl } from '$lib/i18n';
 	import { i18n } from '$lib/i18n/index.svelte';
@@ -120,7 +118,7 @@
 					{sender.name || item.sender}
 				</h2>
 				<span
-					class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap {statusMeta.badgeClass}"
+					class="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium whitespace-nowrap {statusMeta.badgeClass}"
 				>
 					<statusMeta.icon class="h-3 w-3 shrink-0" />
 					<span>{statusMeta.label}</span>
@@ -131,7 +129,7 @@
 				{item.subject}
 			</p>
 
-			<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-secondary">
+			<div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-secondary">
 				<span class="font-mono text-[11px]">{sender.email || item.sender}</span>
 				<span aria-hidden="true">·</span>
 				<span>{accountLabel}</span>
@@ -164,13 +162,13 @@
 				type="button"
 				onclick={copyBarcode}
 				aria-label={t.copyLine}
-				class="flex min-h-[44px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium whitespace-nowrap text-foreground transition-transform duration-100 ease-out hover:bg-selection-soft focus-visible:outline-2 focus-visible:outline-accent active:scale-[0.98] md:min-h-[34px]"
+				class="flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-md border border-separator bg-surface px-3 py-2 text-xs font-medium whitespace-nowrap text-foreground transition-transform duration-100 ease-out hover:bg-selection-soft focus-visible:outline-2 focus-visible:outline-accent active:scale-[0.98] md:min-h-[34px]"
 			>
 				{#if copied}
-					<Check class="h-3.5 w-3.5 text-status-healthy" />
+					<Check class="h-3.5 w-3.5 text-status-healthy" aria-hidden="true" />
 					<span class="text-status-healthy">{t.copied}</span>
 				{:else}
-					<Copy class="h-3.5 w-3.5 text-secondary" />
+					<Copy class="h-3.5 w-3.5 text-secondary" aria-hidden="true" />
 					<span>{t.copyLine}</span>
 				{/if}
 			</button>
@@ -188,9 +186,9 @@
 					type="button"
 					onclick={() => onDismiss(item.message_id)}
 					aria-label={t.dismissAria}
-					class="flex min-h-[44px] items-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium whitespace-nowrap text-secondary transition-colors hover:bg-field hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent active:scale-[0.98] md:min-h-[34px]"
+					class="flex min-h-[44px] items-center gap-2 rounded-md border border-separator bg-surface px-3 py-2 text-xs font-medium whitespace-nowrap text-secondary transition-colors hover:bg-field hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent active:scale-[0.98] md:min-h-[34px]"
 				>
-					<XCircle class="h-3.5 w-3.5" />
+					<XCircle class="h-3.5 w-3.5" aria-hidden="true" />
 					<span>{t.dismiss}</span>
 				</button>
 			{/if}
@@ -198,9 +196,9 @@
 			<button
 				type="button"
 				onclick={() => onViewEmail(item)}
-				class="flex min-h-[44px] items-center gap-1.5 rounded-md border border-separator bg-surface px-3 py-1.5 text-xs font-medium whitespace-nowrap text-foreground transition-colors hover:bg-selection-soft focus-visible:outline-2 focus-visible:outline-accent active:scale-[0.98] md:min-h-[34px]"
+				class="flex min-h-[44px] items-center gap-2 rounded-md border border-separator bg-surface px-3 py-2 text-xs font-medium whitespace-nowrap text-foreground transition-colors hover:bg-selection-soft focus-visible:outline-2 focus-visible:outline-accent active:scale-[0.98] md:min-h-[34px]"
 			>
-				<ExternalLink class="h-3.5 w-3.5 text-accent" />
+				<ExternalLink class="h-3.5 w-3.5 text-accent" aria-hidden="true" />
 				<span>{t.viewEmail}</span>
 			</button>
 		</div>

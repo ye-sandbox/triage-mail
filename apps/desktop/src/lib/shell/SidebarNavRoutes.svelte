@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { CalendarClock, KeyRound, Settings, Workflow } from 'lucide-svelte';
+	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
+	import KeyRound from '@lucide/svelte/icons/key-round';
+	import Settings from '@lucide/svelte/icons/settings';
+	import Workflow from '@lucide/svelte/icons/workflow';
 	import { t } from '$lib/i18n';
 	import { appStore } from '$lib/stores/app.svelte';
 
@@ -27,17 +30,17 @@
 	<button
 		type="button"
 		onclick={() => void navigateRoute('/due-dates')}
-		class="flex min-h-11 w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-transform duration-100 ease-out active:scale-[0.98] md:min-h-0 {pathname ===
+		class="flex min-h-11 w-full items-center justify-between rounded-md px-2 py-2 text-left transition-transform duration-100 ease-out active:scale-[0.98] md:min-h-0 {pathname ===
 		'/due-dates'
 			? 'bg-selection font-medium text-foreground'
 			: 'text-secondary hover:bg-field hover:text-foreground'}"
 	>
 		<span class="flex items-center gap-2 truncate">
-			<CalendarClock class="h-3.5 w-3.5 shrink-0" />
+			<CalendarClock class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 			<span class="truncate">{t(appStore.locale, 'navDueDates')}</span>
 		</span>
 		<span
-			class="rounded-full bg-field px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums text-status-warning"
+			class="rounded-full bg-field px-2 py-1 font-mono text-[10px] font-medium tabular-nums text-status-warning"
 			title="Overdue + Due Today"
 		>
 			{appStore.overdueAndDueTodayCount}
@@ -46,34 +49,34 @@
 	<button
 		type="button"
 		onclick={() => void navigateRoute('/automation')}
-		class="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-transform duration-100 ease-out active:scale-[0.98] md:min-h-0 {pathname ===
+		class="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-transform duration-100 ease-out active:scale-[0.98] md:min-h-0 {pathname ===
 		'/automation'
 			? 'bg-selection font-medium text-foreground'
 			: 'text-secondary hover:bg-field hover:text-foreground'}"
 	>
-		<Workflow class="h-3.5 w-3.5 shrink-0" />
+		<Workflow class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 		<span class="truncate">{t(appStore.locale, 'navAutomation')}</span>
 	</button>
 	<button
 		type="button"
 		onclick={() => void navigateRoute('/onboarding')}
-		class="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-transform duration-100 ease-out active:scale-[0.98] md:min-h-0 {pathname ===
+		class="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-transform duration-100 ease-out active:scale-[0.98] md:min-h-0 {pathname ===
 		'/onboarding'
 			? 'bg-selection font-medium text-foreground'
 			: 'text-secondary hover:bg-field hover:text-foreground'}"
 	>
-		<KeyRound class="h-3.5 w-3.5 shrink-0" />
+		<KeyRound class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 		<span class="truncate">{t(appStore.locale, 'navOnboarding')}</span>
 	</button>
 	<button
 		type="button"
 		onclick={() => void navigateRoute('/settings')}
-		class="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-transform duration-100 ease-out active:scale-[0.98] md:min-h-0 {pathname ===
+		class="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-transform duration-100 ease-out active:scale-[0.98] md:min-h-0 {pathname ===
 		'/settings'
 			? 'bg-selection font-medium text-foreground'
 			: 'text-secondary hover:bg-field hover:text-foreground'}"
 	>
-		<Settings class="h-3.5 w-3.5 shrink-0" />
+		<Settings class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 		<span class="truncate">{t(appStore.locale, 'navSettings')}</span>
 	</button>
 </section>

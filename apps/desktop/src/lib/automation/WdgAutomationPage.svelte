@@ -180,19 +180,19 @@
 			>
 				<Tabs.Trigger
 					value="rules"
-					class="min-h-[44px] rounded-md px-3 py-1.5 text-xs font-medium whitespace-nowrap text-secondary transition-colors hover:text-foreground data-[state=active]:bg-selection data-[state=active]:text-foreground md:min-h-[36px]"
+					class="min-h-[44px] rounded-md px-3 py-2 text-xs font-medium whitespace-nowrap text-secondary transition-colors hover:text-foreground data-[state=active]:bg-selection data-[state=active]:text-foreground md:min-h-[36px]"
 				>
 					{t.tabs.rules} ({rulesList.length})
 				</Tabs.Trigger>
 				<Tabs.Trigger
 					value="alerts"
-					class="min-h-[44px] rounded-md px-3 py-1.5 text-xs font-medium whitespace-nowrap text-secondary transition-colors hover:text-foreground data-[state=active]:bg-selection data-[state=active]:text-foreground md:min-h-[36px]"
+					class="min-h-[44px] rounded-md px-3 py-2 text-xs font-medium whitespace-nowrap text-secondary transition-colors hover:text-foreground data-[state=active]:bg-selection data-[state=active]:text-foreground md:min-h-[36px]"
 				>
 					{t.tabs.alerts} ({destinationsList.length})
 				</Tabs.Trigger>
 				<Tabs.Trigger
 					value="governance"
-					class="min-h-[44px] rounded-md px-3 py-1.5 text-xs font-medium whitespace-nowrap text-secondary transition-colors hover:text-foreground data-[state=active]:bg-selection data-[state=active]:text-foreground md:min-h-[36px]"
+					class="min-h-[44px] rounded-md px-3 py-2 text-xs font-medium whitespace-nowrap text-secondary transition-colors hover:text-foreground data-[state=active]:bg-selection data-[state=active]:text-foreground md:min-h-[36px]"
 				>
 					{t.tabs.governance} ({queuedSendersCount})
 				</Tabs.Trigger>

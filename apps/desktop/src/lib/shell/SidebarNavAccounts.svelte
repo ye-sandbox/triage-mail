@@ -1,5 +1,8 @@
 <script lang="ts">
-	import { Archive, AtSign, Inbox, Trash2 } from 'lucide-svelte';
+	import Archive from '@lucide/svelte/icons/archive';
+	import AtSign from '@lucide/svelte/icons/at-sign';
+	import Inbox from '@lucide/svelte/icons/inbox';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import { t } from '$lib/i18n';
 	import { avatarFallback } from '$lib/onboarding/avatar-controller.svelte';
 	import { appStore } from '$lib/stores/app.svelte';
@@ -28,7 +31,7 @@
 		{#each appStore.accounts as account (account.account_id)}
 			{@const avatarSrc = appStore.accountAvatars[account.account_id] ?? ''}
 			{@const fallback = avatarFallback(account.account_id, account.address)}
-			<div class="flex flex-col gap-0.5">
+			<div class="flex flex-col gap-1">
 				<div class="flex items-center gap-2 px-2 py-1 text-[11px] font-medium text-foreground">
 					{#if avatarSrc}
 						<img
@@ -90,7 +93,7 @@
 							: 'text-secondary hover:bg-field hover:text-foreground'}"
 					>
 						<span class="flex items-center gap-2 truncate">
-							<AtSign class="h-3.5 w-3.5 shrink-0" />
+							<AtSign class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 							<span class="truncate">{alias.label || alias.address}</span>
 						</span>
 					</button>

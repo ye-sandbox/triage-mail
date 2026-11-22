@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { ImagePlus, Trash2 } from 'lucide-svelte';
+	import ImagePlus from '@lucide/svelte/icons/image-plus';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import { i18n } from '../i18n/index.svelte';
 	import { AvatarController, avatarFallback } from './avatar-controller.svelte';
 	import { nativeAvatarTransport } from './avatar-transport';
@@ -71,9 +72,9 @@
 				type="button"
 				onclick={() => fileInput?.click()}
 				disabled={!controller || controller.loading || controller.busy}
-				class="flex min-h-[34px] items-center gap-1 rounded-md border border-separator bg-field px-2.5 py-1 text-xs text-foreground whitespace-nowrap hover:bg-selection-soft disabled:opacity-50"
+				class="flex min-h-[34px] items-center gap-1 rounded-md border border-separator bg-field px-3 py-1 text-xs text-foreground whitespace-nowrap hover:bg-selection-soft disabled:opacity-50"
 			>
-				<ImagePlus class="h-3.5 w-3.5 text-secondary" />
+				<ImagePlus class="h-3.5 w-3.5 text-secondary" aria-hidden="true" />
 				<span>{controller?.src ? t.replace : t.choose}</span>
 			</button>
 
@@ -83,9 +84,9 @@
 					onclick={() => void controller?.remove()}
 					disabled={controller.busy}
 					aria-label={`${t.remove}: ${label}`}
-					class="flex min-h-[34px] items-center gap-1 rounded-md border border-separator bg-surface px-2.5 py-1 text-xs text-secondary whitespace-nowrap hover:text-status-danger disabled:opacity-50"
+					class="flex min-h-[34px] items-center gap-1 rounded-md border border-separator bg-surface px-3 py-1 text-xs text-secondary whitespace-nowrap hover:text-status-danger disabled:opacity-50"
 				>
-					<Trash2 class="h-3.5 w-3.5" />
+					<Trash2 class="h-3.5 w-3.5" aria-hidden="true" />
 					<span>{t.remove}</span>
 				</button>
 			{/if}

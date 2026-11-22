@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { ChevronDown, Info } from 'lucide-svelte';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import Info from '@lucide/svelte/icons/info';
 	import { i18n } from '../i18n/index.svelte';
 	import type { GuidePlaybook } from '../i18n/types';
 	import type { AuthMethod } from './types';
@@ -121,7 +122,7 @@
 {#snippet playbookCard(playbook: GuidePlaybook)}
 	<div class="space-y-2 rounded-md border border-separator bg-background p-3">
 		<h4 class="text-xs font-semibold text-foreground">{playbook.provider}</h4>
-		<ol class="list-decimal space-y-1.5 pl-4 text-xs text-secondary">
+		<ol class="list-decimal space-y-2 pl-4 text-xs text-secondary">
 			{#each playbook.steps as step}
 				<li class="leading-relaxed">{step}</li>
 			{/each}
@@ -138,12 +139,12 @@
 		class="flex w-full items-center justify-between px-4 py-3 text-left font-medium text-foreground transition-colors hover:bg-field"
 	>
 		<span class="flex items-center gap-2">
-			<Info class="h-4 w-4 shrink-0 text-accent" />
+			<Info class="h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
 			<span>{t.title}</span>
 		</span>
-		<span class="flex shrink-0 items-center gap-1.5 text-xs text-secondary">
+		<span class="flex shrink-0 items-center gap-2 text-xs text-secondary">
 			<span>{open ? t.toggleClose : t.toggleOpen}</span>
-			<ChevronDown class="h-3.5 w-3.5 transition-transform duration-150 {open ? 'rotate-180' : ''}" />
+			<ChevronDown class="h-3.5 w-3.5 transition-transform duration-150 {open ? 'rotate-180' : ''}" aria-hidden="true" />
 		</span>
 	</button>
 
@@ -156,7 +157,7 @@
 						role="tab"
 						aria-selected={activeTab === tab.id}
 						onclick={() => (activeTab = tab.id)}
-						class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors {activeTab ===
+						class="rounded-md px-3 py-1 text-xs font-medium transition-colors {activeTab ===
 						tab.id
 							? 'bg-accent text-accent-foreground'
 							: 'text-secondary hover:text-foreground'}"
@@ -168,7 +169,7 @@
 
 			<div class="space-y-3 text-xs leading-relaxed">
 				<p class="text-foreground">{activeContent.summary}</p>
-				<div class="space-y-1.5 rounded-md border border-separator bg-field p-3">
+				<div class="space-y-2 rounded-md border border-separator bg-field p-3">
 					<p>
 						<strong class="text-foreground">{t.requirementsLabel}</strong>
 						<span class="text-secondary">{activeContent.requirements}</span>
@@ -182,7 +183,7 @@
 					</p>
 				</div>
 
-				<div class="space-y-1.5 rounded-md border border-separator bg-field p-3">
+				<div class="space-y-2 rounded-md border border-separator bg-field p-3">
 					<h3 class="font-semibold text-foreground">{t.fieldsTitle}</h3>
 					<ul class="list-disc space-y-1 pl-4 text-secondary">
 						{#each activeContent.fields as field}
