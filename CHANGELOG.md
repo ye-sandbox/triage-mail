@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-21
+
+### Changed
+- **Sidebar Account Avatars:** Hydrated and rendered account avatars with initials fallbacks in the sidebar account list (`apps/desktop`).
+- **Onboarding Discovery & Alias Guide Polish:** Stacked email discovery actions, added collapsible secondary provider presets, and linked the Cloudflare Email Routing setup guide directly from the discovery form (`apps/desktop`).
+
 ## [0.2.3] - 2026-11-21
 
 ### Added
