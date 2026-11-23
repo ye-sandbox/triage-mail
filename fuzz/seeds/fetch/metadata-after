@@ -1,4 +1,0 @@
-* 1 FETCH (BODY[1] {1}
-x FLAGS (\Seen) UID 101 MODSEQ (99))
-A0001 OK complete
-A0002 OK next-command
